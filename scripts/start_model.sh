@@ -57,41 +57,57 @@ stop_server() {
     sleep 3
 }
 
+# Unsloth UD quants may be split GGUFs (e.g. 00001-of-00003.gguf).
+# llama.cpp needs only the first shard — it auto-discovers the rest.
+# Using 'sort | head -1' instead of a bare glob prevents passing
+# multiple filenames to --model when the model is split.
+first_shard() {
+    ls "$1/"*.gguf 2>/dev/null | sort | head -1
+}
+
 case $MODEL in
 M1)
-    echo "→ Starting gpt-oss-20b (port 8001)..."
+    MODEL_PATH=$(first_shard "$MODELS/gpt-oss-20b")
+    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/gpt-oss-20b/*.gguf"; exit 1; }
+    echo "→ Starting gpt-oss-20b (port 8001) — $MODEL_PATH"
     stop_server
     $LLAMA \
-        --model "$MODELS/gpt-oss-20b/"*.gguf \
+        --model "$MODEL_PATH" \
         --port 8001 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
         --jinja \
         --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
     ;;
 M2)
-    echo "→ Starting Qwen3-Coder-Next (port 8002)..."
+    MODEL_PATH=$(first_shard "$MODELS/qwen3-coder-next")
+    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/qwen3-coder-next/*.gguf"; exit 1; }
+    echo "→ Starting Qwen3-Coder-Next (port 8002) — $MODEL_PATH"
     stop_server
     $LLAMA \
-        --model "$MODELS/qwen3-coder-next/"*.gguf \
+        --model "$MODEL_PATH" \
         --port 8002 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
         --temp 1.0 --top-p 0.95 --min-p 0.01 --top-k 40
     ;;
 M3)
-    echo "→ Starting GLM-4.7-Flash (port 8003)..."
+    MODEL_PATH=$(first_shard "$MODELS/glm-4.7-flash")
+    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/glm-4.7-flash/*.gguf"; exit 1; }
+    echo "→ Starting GLM-4.7-Flash (port 8003) — $MODEL_PATH"
     stop_server
     $LLAMA \
-        --model "$MODELS/glm-4.7-flash/"*.gguf \
+        --model "$MODEL_PATH" \
         --port 8003 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
         --repeat-penalty 1.0 \
         --temp 1.0 --top-p 0.95 --min-p 0.01
     ;;
 QWEN)
-    echo "→ Starting Qwen3.5-35B-A3B (port 8004)..."
+    MODEL_PATH=$(first_shard "$MODELS/qwen3.5-35b")
+    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/qwen3.5-35b/*.gguf"; exit 1; }
+    echo "→ Starting Qwen3.5-35B-A3B (port 8004) — $MODEL_PATH"
     stop_server
     $LLAMA \
-        --model "$MODELS/qwen3.5-35b/"*.gguf \
+        --model "$MODEL_PATH" \
         --port 8004 --host 0.0.0.0 \
         --ctx-size 8192 --n-gpu-layers 99 \
         --temp 0.3 --top-p 0.95 --min-p 0.01

@@ -408,70 +408,18 @@ ls /workspace/models/qwen3.5-35b/*.gguf
 
 ### B8. Create scripts/start_model.sh
 
+The script is already in the repository — no need to recreate it on the cloud instance.
+Just make it executable after cloning:
+
 ```bash
-cat > /workspace/llm-code-refinement/scripts/start_model.sh << 'EOF'
-#!/bin/bash
-# Starts a single model — stops the previous one.
-# Usage: bash scripts/start_model.sh M1|M2|M3|QWEN
-
-set -e
-MODEL=${1:?"\nKullanım: $0 M1|M2|M3|QWEN"}
-LLAMA=/workspace/llama.cpp/llama-server
-MODELS=/workspace/models
-
-stop_server() {
-    pkill -f "llama-server" 2>/dev/null || true
-    sleep 3
-}
-
-case $MODEL in
-M1)
-    echo "→ gpt-oss-20b başlatılıyor (port 8001)..."
-    stop_server
-    $LLAMA \
-        --model $MODELS/gpt-oss-20b/*.gguf \
-        --port 8001 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
-        --jinja \
-        --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
-    ;;
-M2)
-    echo "→ Qwen3-Coder-Next başlatılıyor (port 8002)..."
-    stop_server
-    $LLAMA \
-        --model $MODELS/qwen3-coder-next/*.gguf \
-        --port 8002 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
-        --temp 1.0 --top-p 0.95 --min-p 0.01 --top-k 40
-    ;;
-M3)
-    echo "→ GLM-4.7-Flash başlatılıyor (port 8003)..."
-    stop_server
-    $LLAMA \
-        --model $MODELS/glm-4.7-flash/*.gguf \
-        --port 8003 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
-        --repeat-penalty 1.0 \
-        --temp 1.0 --top-p 0.95 --min-p 0.01
-    ;;
-QWEN)
-    echo "→ Qwen3.5-35B-A3B başlatılıyor (port 8004)..."
-    stop_server
-    $LLAMA \
-        --model $MODELS/qwen3.5-35b/*.gguf \
-        --port 8004 --host 0.0.0.0 \
-        --ctx-size 8192 --n-gpu-layers 99 \
-        --temp 0.3 --top-p 0.95 --min-p 0.01
-    ;;
-*)
-    echo "Geçersiz model: '$MODEL'. M1|M2|M3|QWEN olmalı."
-    exit 1
-    ;;
-esac
-EOF
-
 chmod +x /workspace/llm-code-refinement/scripts/start_model.sh
 ```
+
+Key behaviours built into the script:
+- Detects `ENV` from `.env` automatically (local vs cloud)
+- Uses `sort | head -1` to select only the first GGUF shard — Unsloth UD quants may be split across multiple files; llama.cpp discovers the remaining shards automatically
+- Prints the resolved model path before starting so you can verify which file was picked
+- Exits with a clear error if no `.gguf` file is found in the model directory
 
 ### B9. Cloud Verification
 
