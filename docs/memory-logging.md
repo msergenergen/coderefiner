@@ -157,7 +157,7 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
       "efficiency":      14,
       "code_quality":    12,
       "security":        10,
-      "originality":      8,
+      "algorithm_choice":      8,
       "error_handling":   9
     },
     "failure_reasons": [
@@ -657,7 +657,7 @@ def s(q='q_001', status_hint='loop', **kw):
         'node2_test_pass_rate': 0.65, 'node2_cpu_ms': 500.0, 'node2_ram_mb': 120.0,
         'node2_test_diversity_score': 0.6, 'node2_failed_cases': [{'input':'[]','expected':'0','got':'None'}],
         'node3_total_score': 62.0, 'node3_pass': False,
-        'node3_score_breakdown': {'correctness':10,'efficiency':12,'code_quality':10,'security':10,'originality':10,'error_handling':10},
+        'node3_score_breakdown': {'correctness':10,'efficiency':12,'code_quality':10,'security':10,'algorithm_choice':10,'error_handling':10},
         'node3_failure_reasons': ['pass_rate düşük'], 'node3_improved_prompt': 'Boş listeyi kontrol et.',
         'timing': {'codegen_ms': 3200, 'node1_ms': 45, 'node2_ms': 1200, 'node3_ms': 2800, 'total_ms': 7245},
         'tokens': {'codegen_prompt': 450, 'codegen_completion': 320, 'judgement_prompt': 1200, 'judgement_completion': 580, 'total': 2550},

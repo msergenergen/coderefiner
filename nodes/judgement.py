@@ -286,7 +286,7 @@ def _build_judgement_prompt(
 
     lines += [
         "",
-        "Evaluate originality (0–10) and error_handling (0–10).",
+        "Evaluate algorithm_choice (0–10) and error_handling (0–10).",
         "Write a NEW, COMPLETE improved_system_prompt addressing the specific issues above.",
         "Respond with JSON only.",
     ]

@@ -150,7 +150,7 @@ results (Node 1) and sandbox execution results (Node 2).
 {_THRESHOLD_CONTEXT}
 
 Your task:
-1. Assign "originality" (0–10): Is the algorithm approach clever and non-trivial?
+1. Assign "algorithm_choice" (0–10): Is the algorithm approach clever and non-trivial?
 2. Assign "error_handling" (0–10): Does the code handle exceptions and edge cases?
 3. List specific "failure_reasons" — reference actual metric values and failing test cases
 4. Write a NEW, COMPLETE "improved_system_prompt" that replaces the previous one entirely.
@@ -167,7 +167,7 @@ Respond ONLY with valid JSON. No text outside the JSON object.
 
 Schema:
 {{
-  "originality": <int 0-10>,
+  "algorithm_choice": <int 0-10>,
   "error_handling": <int 0-10>,
   "failure_reasons": ["<specific reason>", ...],
   "improved_system_prompt": "<complete self-contained instructions>"
@@ -204,7 +204,7 @@ def judgement_node(state: PipelineState) -> PipelineState:
 
     total = round(
         numeric["numeric_total"]
-        + llm_scores["originality"]
+        + llm_scores["algorithm_choice"]
         + llm_scores["error_handling"],
         2,
     )
@@ -255,7 +255,7 @@ def _get_llm_judgement(
     except Exception:
         # LLM error → do not stop pipeline, use rule-based fallback
         return {
-            "originality":            5,
+            "algorithm_choice":            5,
             "error_handling":         5,
             "failure_reasons":        ["judgement_llm_error"],
             "improved_system_prompt": _fallback_prompt(node1_issues, failed_cases),
@@ -324,7 +324,7 @@ def _build_judgement_prompt(
 
     lines += [
         "",
-        "Evaluate originality (0–10) and error_handling (0–10).",
+        "Evaluate algorithm_choice (0–10) and error_handling (0–10).",
         "Write a NEW, COMPLETE improved_system_prompt addressing the specific issues above.",
         "Respond with JSON only.",
     ]
@@ -378,14 +378,14 @@ def _parse_judgement(raw: str) -> dict:
     try:
         data = json.loads(json_str)
         return {
-            "originality":            max(0, min(10, int(data.get("originality", 5)))),
+            "algorithm_choice":            max(0, min(10, int(data.get("algorithm_choice", 5)))),
             "error_handling":         max(0, min(10, int(data.get("error_handling", 5)))),
             "failure_reasons":        data.get("failure_reasons", []),
             "improved_system_prompt": data.get("improved_system_prompt", ""),
         }
     except (json.JSONDecodeError, ValueError):
         return {
-            "originality":            5,
+            "algorithm_choice":            5,
             "error_handling":         5,
             "failure_reasons":        ["json_parse_error"],
             "improved_system_prompt": "",

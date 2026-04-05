@@ -69,7 +69,7 @@ Sadece public test'lerle cpu_ms ve ram_mb ölçer.
 | **efficiency** | cpu_ms + ram_mb | `(1 − cpu/5000 + 1 − ram/512) / 2 × 20` | **20p** | Deterministik |
 | **quality** | CC + MI | `(mi/100 + 1 − cc/20) / 2 × 20` | **20p** | Deterministik |
 | **security** | bandit | `15 − high×15 − medium×3` | **15p** | Deterministik |
-| **originality** | Qwen judgement | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
+| **algorithm_choice** | Qwen judgement | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
 | **error_handling** | Qwen judgement | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
 | **TOPLAM** | | | **100p** | %80 deterministik |
 
@@ -80,7 +80,7 @@ accuracy     ██████████████████████�
 efficiency   ████████████████████░░░░░░  20p  deterministik — runtime
 quality      ████████████████████░░░░░░  20p  deterministik — CC + MI
 security     ███████████████░░░░░░░░░░░  15p  deterministik — bandit
-originality  ██████████░░░░░░░░░░░░░░░░  10p  LLM — subjektif
+algorithm_choice  ██████████░░░░░░░░░░░░░░░░  10p  LLM — subjektif
 error_handl. ██████████░░░░░░░░░░░░░░░░  10p  LLM — subjektif
 ```
 
@@ -120,5 +120,5 @@ Aşağıdaki metrikler **skora girmez** ama Node 3'ün ürettiği `improved_prom
 | pass_rate | ✓ | ✗ | ✓ |
 | cpu_ms, ram_mb | ✓ | ✗ | ✓ |
 | failed_cases | ✓ | ✗ | ✓ |
-| originality, error_handling | ✓ | ✓ | ✓ |
+| algorithm_choice, error_handling | ✓ | ✓ | ✓ |
 | **PASS kriteri** | score ≥ threshold | score ≥ threshold | score ≥ threshold |

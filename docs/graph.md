@@ -479,7 +479,7 @@ def s(q='q001', **kw):
         'node2_failed_cases': [{'input':'[]','expected':'0','got':'None'}],
         'node3_total_score': 62.0, 'node3_pass': False,
         'node3_score_breakdown': {'correctness':10,'efficiency':10,'code_quality':10,
-                                   'security':10,'originality':10,'error_handling':12},
+                                   'security':10,'algorithm_choice':10,'error_handling':12},
         'node3_failure_reasons': ['pass_rate düşük'],
         'node3_improved_prompt': 'Boş liste kontrolü ekle.',
         'timing': {'codegen_ms':3200,'node1_ms':45,'node2_ms':1200,'node3_ms':2800,'total_ms':7245},
