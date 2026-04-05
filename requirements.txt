@@ -1,0 +1,29 @@
+# Core pipeline
+langgraph>=0.2.0
+openai>=1.0.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# Static analysis
+radon>=6.0.0
+bandit>=1.7.0
+lizard>=1.17.0
+mypy>=1.8.0
+ruff>=0.4.0
+
+# Runtime metrics
+psutil>=5.9.0
+
+# Dataset
+# datasets>=3.0 dropped trust_remote_code support required by livecodebench
+datasets>=2.20.0,<3.0.0
+huggingface_hub>=0.23.0
+
+# Stats analysis
+statsmodels>=0.14.0
+scipy>=1.11.0
+
+# Testing
+pytest>=7.4.0
+pytest-timeout>=2.1.0
+pytest-cov>=4.1.0
