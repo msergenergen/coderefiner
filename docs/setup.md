@@ -294,8 +294,8 @@ cp build/bin/llama-* .
 
 ```bash
 cd /workspace
-git clone https://github.com/<kullanici>/llm-judge-refinement.git
-cd llm-judge-refinement
+git clone git@github.com:msergenergen/llm-code-refinement.git
+cd llm-code-refinement
 
 # Python virtual environment
 python3.11 -m venv .venv
@@ -307,6 +307,8 @@ pip install -r requirements.txt
 # Verify
 python -c "import langgraph; print('LangGraph OK')"
 python -c "import radon, bandit, lizard; print('Metrics OK')"
+python -c "import mypy, ruff; print('Linting OK')" 2>/dev/null || \
+    python -c "import subprocess, sys; subprocess.run([sys.executable, '-m', 'mypy', '--version']); print('mypy OK')"
 ```
 
 ### B6. Create .env.cloud
@@ -325,6 +327,7 @@ LLAMA_API_KEY=local
 
 # ── Pipeline ──────────────────────────────────────────────────────
 MAX_ITERATIONS=10
+PIPELINE_MODELS=M1,M2,M3
 SANDBOX_TIMEOUT_SEC=10
 SANDBOX_MEMORY_LIMIT_MB=512
 SANDBOX_FLAKINESS_RUNS=5
@@ -357,7 +360,7 @@ grep -qxF '.env.cloud' .gitignore 2>/dev/null || echo '.env.cloud' >> .gitignore
 `huggingface-cli` is installed inside the venv — activate it first.
 
 ```bash
-source /workspace/llm-judge-refinement/.venv/bin/activate
+source /workspace/llm-code-refinement/.venv/bin/activate
 
 mkdir -p /workspace/models
 cd /workspace/models
@@ -406,7 +409,7 @@ ls /workspace/models/qwen3.5-35b/*.gguf
 ### B8. Create scripts/start_model.sh
 
 ```bash
-cat > /workspace/llm-judge-refinement/scripts/start_model.sh << 'EOF'
+cat > /workspace/llm-code-refinement/scripts/start_model.sh << 'EOF'
 #!/bin/bash
 # Starts a single model — stops the previous one.
 # Usage: bash scripts/start_model.sh M1|M2|M3|QWEN
@@ -467,7 +470,7 @@ QWEN)
 esac
 EOF
 
-chmod +x /workspace/llm-judge-refinement/scripts/start_model.sh
+chmod +x /workspace/llm-code-refinement/scripts/start_model.sh
 ```
 
 ### B9. Cloud Verification
@@ -475,34 +478,50 @@ chmod +x /workspace/llm-judge-refinement/scripts/start_model.sh
 Verify in order — each step must be green before proceeding to the next:
 
 ```bash
-cd /workspace/llm-judge-refinement
+cd /workspace/llm-code-refinement
 source .venv/bin/activate
 
 # 1. Python dependencies
 python -c "import langgraph, radon, bandit, lizard, openai; print('Deps OK')"
 
-# 2. ENV verification
-ENV=cloud python -c "
-from config import settings, model_registry
+# 2. Linting tools (mypy + ruff)
+python -m mypy --version && python -m ruff --version && echo 'Linting OK'
+
+# 3. ENV verification
+python -c "
+from config import settings, model_registry, thresholds
 assert settings.env == 'cloud', 'ENV hatalı!'
-assert model_registry.M1.model_name == 'gpt-oss-20b'
-assert model_registry.M2.model_name == 'qwen3-coder-next'
-assert model_registry.M3.model_name == 'glm-4.7-flash'
-assert model_registry.QWEN.model_name == 'qwen3.5-35b-a3b'
-print('Config OK — ENV=cloud, modeller doğru')
+assert model_registry.M1.model_name   == 'gpt-oss-20b',      'M1 model hatalı'
+assert model_registry.M2.model_name   == 'qwen3-coder-next',  'M2 model hatalı'
+assert model_registry.M3.model_name   == 'glm-4.7-flash',     'M3 model hatalı'
+assert model_registry.QWEN.model_name == 'qwen3.5-35b-a3b',   'QWEN model hatalı'
+assert thresholds.node3.easy   == 80,  'easy threshold hatalı'
+assert thresholds.node3.medium == 70,  'medium threshold hatalı'
+assert thresholds.node3.hard   == 60,  'hard threshold hatalı'
+assert thresholds.node2.cpu_limit_ms == 2000.0, 'cpu_limit_ms hatalı'
+print('Config OK — ENV=cloud, modeller ve eşikler doğru')
 "
 
-# 3. Dataset
+# 4. Ablation variant smoke-test (graph builds without error)
+python -c "
+from pipeline.graph import build_graph
+for v in ('V1', 'V2', 'V3'):
+    build_graph(v)
+    print(f'  {v} graph OK')
+print('Ablation variants OK')
+"
+
+# 5. Dataset
 python dataset/verify.py
 
-# 4. Are model files present?
+# 6. Are model files present?
 for d in gpt-oss-20b qwen3-coder-next glm-4.7-flash qwen3.5-35b; do
     count=$(ls /workspace/models/$d/*.gguf 2>/dev/null | wc -l)
     echo "$d: $count GGUF dosyası"
 done
 # Each line should show ≥ 1
 
-# 5. M1 server test (first start: run start_model.sh M1 in new tmux window)
+# 7. M1 server test (first start: run start_model.sh M1 in new tmux window)
 bash scripts/start_model.sh M1 &
 sleep 15   # server yüklensin
 

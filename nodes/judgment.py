@@ -244,7 +244,7 @@ def _build_judgment_prompt(
         "",
         "## Generated Code",
         "```python",
-        code[:2500],
+        code[:8000],
         "```",
         "",
         "## Node 1 — Static Analysis",

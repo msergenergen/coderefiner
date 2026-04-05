@@ -1,6 +1,7 @@
 .env
 .env.local
 .env.cloud
+.claude/
 .venv/
 __pycache__/
 *.pyc
