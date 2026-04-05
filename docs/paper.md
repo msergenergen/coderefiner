@@ -2,8 +2,7 @@
 
 **LLM-as-a-Judge for Iterative Code Refinement: A Multi-Stage Approach**
 
-> *SIU 2026 — 7–10 Temmuz 2026, Piri Reis Üniversitesi, İstanbul/Tuzla*
-> *IEEE iki sütun şablonuna aktarılacak — bu dosya taslak içeriktir.*
+> *IEEE iki sütun formatı — taslak içerik*
 
 ---
 
