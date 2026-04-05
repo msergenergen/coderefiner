@@ -8,7 +8,7 @@
 
 ## Özetçe
 
-Büyük dil modelleri (BDM) kod üretiminde kayda değer bir performans sergilemekle birlikte, tek-atışlı yaklaşımlar sistematik geri bildirim mekanizmalarından yoksun olduğu için pratik kullanımda sınırlı kalmaktadır. Bu çalışmada, statik kod analizi, izole çalışma ortamı ve BDM tabanlı yargılamayı bir araya getiren çok aşamalı, yinelemeli bir kod arıtım hattı önerilmektedir. Üç analiz düğümünden oluşan sistem; yapısal kalite metriklerini hesaplar, işlevsel doğruluğu ölçer ve bağımsız bir yargı modeli aracılığıyla kapsamlı geri bildirim üretir. Dört varyantlı ablasyon çalışmasıyla her düğümün katkısı izole biçimde değerlendirilmiş; sonuçlar Görev Başarı Oranı ve McNemar istatistiksel testi ile karşılaştırılmıştır. Elde edilen bulgular, çok kipli yinelemeli geri bildirimin tek-atışlı temel yaklaşıma kıyasla başarı oranını anlamlı biçimde artırdığına işaret etmektedir.
+Büyük dil modelleri (BDM, *large language model — LLM*) kod üretiminde (*code generation*) kayda değer bir performans sergilemekle birlikte, tek-atışlı yaklaşımlar (*single-shot approach*) sistematik geri bildirim (*feedback*) mekanizmalarından yoksun olduğu için pratik kullanımda sınırlı kalmaktadır. Bu çalışmada, statik kod analizi (*static code analysis*), izole çalışma ortamı (*sandboxed execution*) ve BDM tabanlı yargılamayı (*LLM-based judgement*) bir araya getiren çok aşamalı (*multi-stage*), yinelemeli (*iterative*) bir kod arıtım hattı (*code refinement pipeline*) önerilmektedir. Üç analiz düğümünden (*node*) oluşan sistem; yapısal kalite metriklerini (*structural quality metrics*) hesaplar, işlevsel doğruluğu (*functional correctness*) ölçer ve bağımsız bir yargı modeli (*judgement model*) aracılığıyla kapsamlı geri bildirim üretir. Dört varyantlı ablasyon (*ablation*) çalışmasıyla her düğümün katkısı izole biçimde değerlendirilmiş; sonuçlar Görev Başarı Oranı (*Task Success Rate — TSR*) ve McNemar istatistiksel testi ile karşılaştırılmıştır. Elde edilen bulgular, çok kipli (*multi-modal*) yinelemeli geri bildirimin tek-atışlı temel yaklaşıma (*baseline*) kıyasla başarı oranını anlamlı biçimde artırdığına işaret etmektedir.
 
 **Anahtar Kelimeler:** büyük dil modeli, kod arıtımı, yargıç olarak BDM, yinelemeli geri bildirim, statik analiz, LiveCodeBench
 
@@ -24,25 +24,25 @@ Large language models (LLMs) demonstrate strong performance in code generation; 
 
 ## I. Giriş
 
-Yazılım geliştirme süreçlerinde büyük dil modellerinin (BDM) rolü son birkaç yılda dramatik biçimde genişledi. HumanEval [1] ve MBPP [2] gibi gösterge tablolarında elde edilen yüksek başarı oranları, bu modellerin karmaşık algoritmik görevleri çözebildiğine dair güçlü kanıtlar sunmaktadır. Ne var ki gerçek dünya koşullarında tek-atışlı kod üretimi ciddi bir kırılganlık taşır: model, ürettiği kodun doğruluğunu bağımsız olarak doğrulayamaz ve üretimden sonra herhangi bir düzeltme mekanizmasına sahip değildir.
+Yazılım geliştirme süreçlerinde büyük dil modellerinin (BDM, *LLM*) rolü son birkaç yılda dramatik biçimde genişledi. HumanEval [1] ve MBPP [2] gibi gösterge tablolarında (*benchmark*) elde edilen yüksek başarı oranları, bu modellerin karmaşık algoritmik görevleri çözebildiğine dair güçlü kanıtlar sunmaktadır. Ne var ki gerçek dünya koşullarında tek-atışlı (*single-shot*) kod üretimi ciddi bir kırılganlık taşır: model, ürettiği kodun doğruluğunu bağımsız olarak doğrulayamaz ve üretimden sonra herhangi bir düzeltme mekanizmasına sahip değildir.
 
-Bu boşluğu kapatmaya yönelik çeşitli yaklaşımlar geliştirilmiştir. CodeRL [3] ve AlphaCode [4] gibi çalışmalar, test sonuçlarını geri bildirim sinyali olarak kullanmış; Chen ve diğerleri [5] ise modelin kendi çıktısını yeniden inceleyerek hatayı giderebildiğini göstermiştir. Öte yandan Olausson ve diğerleri [6], saf öz-onarım yaklaşımlarının beklentilerin oldukça altında kaldığını vurgulamış ve daha zengin geri bildirim mekanizmalarına duyulan ihtiyacı ortaya koymuştur.
+Bu boşluğu kapatmaya yönelik çeşitli yaklaşımlar geliştirilmiştir. CodeRL [3] ve AlphaCode [4] gibi çalışmalar, test sonuçlarını geri bildirim sinyali (*feedback signal*) olarak kullanmış; Chen ve diğerleri [5] ise modelin kendi çıktısını yeniden inceleyerek hatayı giderebildiğini göstermiştir. Öte yandan Olausson ve diğerleri [6], saf öz-onarım (*self-repair*) yaklaşımlarının beklentilerin oldukça altında kaldığını vurgulamış ve daha zengin geri bildirim mekanizmalarına duyulan ihtiyacı ortaya koymuştur.
 
-Bu çalışma, söz konusu ihtiyaca yanıt vermek amacıyla üç tamamlayıcı geri bildirim kaynağını tek bir yinelemeli döngüde birleştiren bir mimari önermektedir. Sistemin katkıları şu şekilde özetlenebilir:
+Bu çalışma, söz konusu ihtiyaca yanıt vermek amacıyla üç tamamlayıcı geri bildirim kaynağını tek bir yinelemeli döngüde (*iterative loop*) birleştiren bir mimari önermektedir. Sistemin katkıları şu şekilde özetlenebilir:
 
-- Statik analiz (döngüsel karmaşıklık, bakım kolaylığı indeksi, güvenlik taraması), çalışma ortamı ölçümleri (test geçiş oranı, CPU/bellek kullanımı) ve LLM tabanlı yargılamayı entegre eden uçtan uca bir hat.
-- Her bileşenin katkısını izole eden ve sayısal olarak karşılaştıran dört varyantlı ablasyon tasarımı.
-- Birden fazla açık ağırlıklı model üzerinde gerçekleştirilen kapsamlı deneyler ve McNemar testiyle desteklenen istatistiksel değerlendirme.
+- Statik analiz (*static analysis*) — döngüsel karmaşıklık (*cyclomatic complexity*), bakım kolaylığı indeksi (*maintainability index*), güvenlik taraması (*security scan*) —, çalışma ortamı ölçümleri (*runtime metrics*) — test geçiş oranı (*test pass rate*), CPU/bellek kullanımı — ve LLM tabanlı yargılamayı entegre eden uçtan uca bir hat.
+- Her bileşenin katkısını izole eden ve sayısal olarak karşılaştıran dört varyantlı ablasyon (*ablation*) tasarımı.
+- Birden fazla açık ağırlıklı (*open-weight*) model üzerinde gerçekleştirilen kapsamlı deneyler ve McNemar testiyle desteklenen istatistiksel değerlendirme.
 
 ---
 
 ## II. İlgili Çalışmalar
 
-**Yinelemeli Kod Arıtımı.** BDM çıktılarının döngüsel biçimde iyileştirilmesi fikri, CodeRL [3] ile birlikte programatik bir zemine oturmuştur. Bu çalışmada model, derleyici ve birim test geri bildirimlerine göre kodunu güncellemektedir. Benzer bir çerçevede Self-Debugging [5], kod üretimi sonrasında modelin kendi çıktısını izleme kaydıyla (execution trace) karşılaştırarak hata ayıklamasına olanak tanımaktadır. Reflexion [7], bu fikri daha ileri taşıyarak sözel düşünce izlerini belleğe kaydetmekte ve bu sayede çok adımlı görevlerde performansı artırmaktadır. Bununla birlikte bu yaklaşımların büyük çoğunluğu, geri bildirimi tek bir kaynakla sınırlı tutmakta; statik analiz veya bağımsız bir yargı modeli gibi ek bileşenlerden yararlanmamaktadır.
+**Yinelemeli Kod Arıtımı (*Iterative Code Refinement*).** BDM çıktılarının döngüsel biçimde iyileştirilmesi fikri, CodeRL [3] ile birlikte programatik bir zemine oturmuştur. Bu çalışmada model, derleyici (*compiler*) ve birim test (*unit test*) geri bildirimlerine göre kodunu güncellemektedir. Benzer bir çerçevede Self-Debugging [5], kod üretimi sonrasında modelin kendi çıktısını izleme kaydıyla (*execution trace*) karşılaştırarak hata ayıklamasına (*debugging*) olanak tanımaktadır. Reflexion [7], bu fikri daha ileri taşıyarak sözel düşünce izlerini (*verbal reasoning traces*) belleğe kaydetmekte ve bu sayede çok adımlı görevlerde performansı artırmaktadır. Bununla birlikte bu yaklaşımların büyük çoğunluğu, geri bildirimi tek bir kaynakla sınırlı tutmakta; statik analiz veya bağımsız bir yargı modeli gibi ek bileşenlerden yararlanmamaktadır.
 
-**LLM-as-a-Judge.** Zheng ve diğerleri [8] tarafından önerilen LLM-as-a-Judge çerçevesi, bir modelin başka bir modelin çıktısını değerlendirip puanlamasına dayanan bir yapıyı sistematik biçimde ortaya koymaktadır. MT-Bench ve Chatbot Arena üzerinde gerçekleştirilen kapsamlı deneyler, yargı modelinin insan değerlendirmesiyle yüksek korelasyon gösterdiğini kanıtlamıştır. CRITIC [9], bu fikri bir adım ileriye taşıyarak modelin kendi çıktısına yönelik eleştiri üretmesini ve ardından bu eleştiriyi düzeltme sürecinde kullanmasını sağlamaktadır. Söz konusu çalışmalardan farklı olarak, önerilen sistemde yargılama görevi tamamen bağımsız bir modele devredilmektedir; üretim ve değerlendirme rolleri kasıtlı olarak birbirinden ayrıştırılmıştır.
+**LLM-as-a-Judge (*Yargıç Olarak BDM*).** Zheng ve diğerleri [8] tarafından önerilen LLM-as-a-Judge çerçevesi, bir modelin başka bir modelin çıktısını değerlendirip puanlamasına dayanan bir yapıyı sistematik biçimde ortaya koymaktadır. MT-Bench ve Chatbot Arena üzerinde gerçekleştirilen kapsamlı deneyler, yargı modelinin insan değerlendirmesiyle yüksek korelasyon gösterdiğini kanıtlamıştır. CRITIC [9], bu fikri bir adım ileriye taşıyarak modelin kendi çıktısına yönelik eleştiri (*critique*) üretmesini ve ardından bu eleştiriyi düzeltme sürecinde kullanmasını sağlamaktadır. Söz konusu çalışmalardan farklı olarak, önerilen sistemde yargılama görevi tamamen bağımsız bir modele devredilmektedir; üretim ve değerlendirme rolleri kasıtlı olarak birbirinden ayrıştırılmıştır.
 
-**LiveCodeBench.** Jain ve diğerleri [10] tarafından sunulan LiveCodeBench (LCB), sürekli güncellenen ve gerçek programlama yarışmalarından derlenen görevleri içeren bir değerlendirme platformudur. Sabit veri kümesi tabanlı ölçütlerin aksine LCB, modellerin ezberleme yerine gerçek problem çözme kapasitesini ölçmeye çalışmaktadır. Bu çalışmada tüm deneyler LCB test kümesi üzerinde gerçekleştirilmekte, böylece elde edilen sonuçların güncel ve karşılaştırılabilir olması güvence altına alınmaktadır.
+**LiveCodeBench.** Jain ve diğerleri [10] tarafından sunulan LiveCodeBench (LCB), sürekli güncellenen ve gerçek programlama yarışmalarından derlenen görevleri içeren bir değerlendirme (*evaluation*) platformudur. Sabit veri kümesi tabanlı ölçütlerin aksine LCB, modellerin ezberleme (*memorisation*) yerine gerçek problem çözme kapasitesini ölçmeye çalışmaktadır. Bu çalışmada tüm deneyler LCB test kümesi üzerinde gerçekleştirilmekte, böylece elde edilen sonuçların güncel ve karşılaştırılabilir olması güvence altına alınmaktadır.
 
 ---
 
@@ -50,16 +50,18 @@ Bu çalışma, söz konusu ihtiyaca yanıt vermek amacıyla üç tamamlayıcı g
 
 ### A. Genel Mimari
 
-Sistem, LangGraph durum grafiği üzerine inşa edilmiş bir yinelemeli döngüden oluşmaktadır. Her problem için üç kod üretim modeli sıralı biçimde çalıştırılır (M1 → M2 → M3); her model, başarı eşiğini geçene ya da izin verilen maksimum yineleme sayısına ulaşana dek döngüde kalır.
+Sistem, LangGraph durum grafiği (*state graph*) üzerine inşa edilmiş bir yinelemeli döngüden oluşmaktadır. Her problem için üç kod üretim modeli sıralı biçimde çalıştırılır (M1 → M2 → M3); her model, başarı eşiğini (*pass threshold*) geçene ya da izin verilen maksimum yineleme sayısına ulaşana dek döngüde kalır.
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │                   YİNELEMELİ DÖNGÜ                  │
+│                  (Iterative Loop)                    │
 │                                                      │
 │   ┌──────────┐    ┌──────────┐    ┌──────────────┐  │
 │   │  Kod     │    │  Düğüm 1 │    │   Önem       │  │
 │   │  Üretimi │───▶│  Statik  │───▶│   Kapısı     │  │
-│   │  (M1/M2/ │    │  Analiz  │    │              │  │
+│   │(Codegen) │    │  Analiz  │    │(Severity Gate│  │
+│   │  M1/M2/  │    │ (Node 1) │    │              │  │
 │   │   M3)    │    └──────────┘    └──────┬───────┘  │
 │   └────▲─────┘                           │          │
 │        │                    ┌────────────┼──────┐   │
@@ -68,53 +70,56 @@ Sistem, LangGraph durum grafiği üzerine inşa edilmiş bir yinelemeli döngüd
 │        │                   ▼            ▼      ▼   │
 │   ┌────┴─────┐         ┌──────┐  ┌──────────────┐  │
 │   │ Yineleme │         │ DUR  │  │  Düğüm 2     │  │
-│   │  Kapısı  │         │      │  │  Sandbox     │  │
-│   └────┬─────┘         └──────┘  └──────┬───────┘  │
-│        │                                │           │
+│   │  Kapısı  │         │(STOP)│  │  Korumalı    │  │
+│   │(Iteration│         └──────┘  │  Yürütme     │  │
+│   │  Gate)   │                   │  (Sandbox    │  │
+│   └────┬─────┘                   │   Node 2)    │  │
+│        │                         └──────┬───────┘  │
 │   ┌────┴──────────────────────────┐     │           │
 │   │  GEÇ / DURDUR / YİNELE       │     ▼           │
-│   └───────────────────────────────┘ ┌──────────┐   │
-│                                     │  Düğüm 3 │   │
+│   │ (PASS / STOP_MAX / LOOP)      │ ┌──────────┐   │
+│   └───────────────────────────────┘ │  Düğüm 3 │   │
 │                                     │  Yargı   │   │
-│                                     │  LLM     │   │
+│                                     │  (Judge  │   │
+│                                     │  Node 3) │   │
 │                                     └──────────┘   │
 └──────────────────────────────────────────────────────┘
 ```
 
-**Şekil 1.** Pipeline mimarisi. Önem kapısı, Düğüm 1 çıktısına göre akışı HIGH/LOW/OK olmak üzere üç kola yönlendirir. Yineleme kapısı ise toplam puana ve yineleme sayacına göre GEÇ, YİNELE veya DURDUR kararı verir.
+**Şekil 1.** Pipeline mimarisi. Önem kapısı (*severity gate*), Düğüm 1 (*Node 1*) çıktısına göre akışı HIGH/LOW/OK olmak üzere üç kola yönlendirir. Yineleme kapısı (*iteration gate*) ise toplam puana ve yineleme sayacına (*iteration counter*) göre GEÇ (*PASS*), YİNELE (*LOOP*) veya DURDUR (*STOP*) kararı verir.
 
-### B. Düğüm 1 — Statik Analiz
+### B. Düğüm 1 — Statik Analiz (*Static Analysis Node*)
 
-Kod üretiminin hemen ardından devreye giren bu düğüm, yürütme öncesinde yapısal ve güvenlik sorunlarını tespit eder. Döngüsel Karmaşıklık (CC) ve Bakım Kolaylığı İndeksi (MI) hesaplamaları için `radon` [11, 12] kullanılırken güvenlik taraması `bandit` ile gerçekleştirilir. Ek olarak `mypy` ve `ruff` araçları aracılığıyla tip tutarlılığı ve sözdizimi denetimi yapılmaktadır.
+Kod üretiminin hemen ardından devreye giren bu düğüm, yürütme öncesinde yapısal ve güvenlik sorunlarını tespit eder. Döngüsel Karmaşıklık (*Cyclomatic Complexity — CC*) ve Bakım Kolaylığı İndeksi (*Maintainability Index — MI*) hesaplamaları için `radon` [11, 12] kullanılırken güvenlik taraması (*security scan*) `bandit` ile gerçekleştirilir. Ek olarak `mypy` ve `ruff` araçları aracılığıyla tip tutarlılığı (*type consistency*) ve sözdizimi (*syntax*) denetimi yapılmaktadır.
 
-Önem kararı şu öncelik sırasına göre verilir: CC > 20, Bandit HIGH bulgusu veya izin dışı bir içe aktarım tespit edildiğinde pipeline o noktada durdurulur (HIGH). MI < 40 ya da Halstead hacmi > 2000 koşullarında sandbox aşaması atlanarak doğrudan Düğüm 3'e geçilir (LOW). Bu tasarım sayesinde güvenlik açığı barındıran veya aşırı karmaşık kodların gereksiz yere çalıştırılmasının önüne geçilmektedir.
+Önem kararı (*severity decision*) şu öncelik sırasına göre verilir: CC > 20, Bandit HIGH bulgusu veya izin dışı bir içe aktarım (*forbidden import*) tespit edildiğinde pipeline o noktada durdurulur (HIGH). MI < 40 ya da Halstead hacmi (*Halstead volume*) > 2000 koşullarında korumalı yürütme aşaması atlanarak doğrudan Düğüm 3'e geçilir (LOW). Bu tasarım sayesinde güvenlik açığı (*security vulnerability*) barındıran veya aşırı karmaşık kodların gereksiz yere çalıştırılmasının önüne geçilmektedir.
 
-### C. Düğüm 2 — Korumalı Yürütme
+### C. Düğüm 2 — Korumalı Yürütme (*Sandboxed Execution Node*)
 
-Düğüm 2, iki paralel süreç yürütür. Birinci süreçte LCB'nin resmi değerlendirme aracı (`lcb_runner`) aracılığıyla tüm test senaryoları (genel, özel ve kenar durumlar) çalıştırılır; test geçiş oranı ile başarısız senaryolar kayıt altına alınır. İkinci süreçte yalnızca genel testler kullanılarak işlemci süresi (cpu_ms) ve bellek kullanımı (ram_mb) ölçülür.
+Düğüm 2, iki paralel süreç yürütür. Birinci süreçte LCB'nin resmi değerlendirme aracı (`lcb_runner`) aracılığıyla tüm test senaryoları (*test cases*) — genel (*public*), özel (*private*) ve kenar durumlar (*edge cases*) — çalıştırılır; test geçiş oranı (*test pass rate*) ile başarısız senaryolar kayıt altına alınır. İkinci süreçte yalnızca genel testler kullanılarak işlemci süresi (cpu_ms) ve bellek kullanımı (*memory usage*, ram_mb) ölçülür.
 
-Korumalı ortam, Linux `setrlimit` mekanizması aracılığıyla bellek kullanımını sınırlandırmaktadır. Süre aşımı durumunda (`timed_out = True`) bu bilgi doğrudan Düğüm 3'ün girişine iletilir.
+Korumalı ortam (*sandbox*), Linux `setrlimit` mekanizması aracılığıyla bellek kullanımını sınırlandırmaktadır. Süre aşımı (*timeout*) durumunda bu bilgi doğrudan Düğüm 3'ün girişine iletilir.
 
-### D. Düğüm 3 — Yargı ve Geri Bildirim
+### D. Düğüm 3 — Yargı ve Geri Bildirim (*Judgement and Feedback Node*)
 
-Değerlendirme aşamasının merkezinde, Düğüm 1 ve Düğüm 2 çıktılarını sentezleyerek 100 puanlık bir rubrik üzerinden bütüncül bir değerlendirme yapan yargı modeli yer almaktadır. Puan bileşenleri Tablo I'de özetlenmiştir.
+Değerlendirme aşamasının merkezinde, Düğüm 1 ve Düğüm 2 çıktılarını sentezleyerek 100 puanlık bir rubrik (*rubric*) üzerinden bütüncül bir değerlendirme yapan yargı modeli yer almaktadır. Puan bileşenleri Tablo I'de özetlenmiştir.
 
-**Tablo I.** 100 puanlık değerlendirme rubriği.
+**Tablo I.** 100 puanlık değerlendirme rubriği (*scoring rubric*).
 
 | Boyut | Kaynak | Ağırlık | Tür |
 |-------|--------|---------|-----|
-| Doğruluk | test geçiş oranı × 25 | 25p | Deterministik |
-| Verimlilik | cpu_ms + ram_mb | 20p | Deterministik |
-| Kalite | CC + MI | 20p | Deterministik |
-| Güvenlik | Bandit bulguları | 15p | Deterministik |
-| Algoritma seçimi | Yargı LLM (0–10) | 10p | LLM |
-| Hata yönetimi | Yargı LLM (0–10) | 10p | LLM |
+| Doğruluk (*Accuracy*) | test geçiş oranı × 25 | 25p | Deterministik |
+| Verimlilik (*Efficiency*) | cpu_ms + ram_mb | 20p | Deterministik |
+| Kalite (*Quality*) | CC + MI | 20p | Deterministik |
+| Güvenlik (*Security*) | Bandit bulguları | 15p | Deterministik |
+| Algoritma seçimi (*Algorithm Choice*) | Yargı LLM (0–10) | 10p | LLM |
+| Hata yönetimi (*Error Handling*) | Yargı LLM (0–10) | 10p | LLM |
 
-Toplam puanın %80'i deterministik metriklerden, %20'si ise yargı modelinin öznel değerlendirmesinden oluşmaktadır. Bu denge, tekrarlanabilirliği ön planda tutarken LLM'in kavramsal değerlendirme kapasitesinden de yararlanmayı mümkün kılmaktadır.
+Toplam puanın %80'i deterministik (*deterministic*) metriklerden, %20'si ise yargı modelinin öznel değerlendirmesinden oluşmaktadır. Bu denge, tekrarlanabilirliği (*reproducibility*) ön planda tutarken LLM'in kavramsal değerlendirme kapasitesinden de yararlanmayı mümkün kılmaktadır.
 
-Yargı modelinin çıktısının en kritik bileşeni `improved_prompt`'tur. Bu yönerge, bir önceki denemenin somut hatalarına ve metrik değerlerine doğrudan atıfta bulunarak üretim modelini bir sonraki yinelemede yönlendirmektedir. Önceki yinelemelerden bağımsız, kendi içinde tam ve tutarlı biçimde yazılan bu yönerge, model yanlılığını önlemeye yönelik özel bir tasarım kararının ürünüdür.
+Yargı modelinin çıktısının en kritik bileşeni `improved_prompt`'tur. Bu yönerge (*instruction*), bir önceki denemenin somut hatalarına ve metrik değerlerine doğrudan atıfta bulunarak üretim modelini bir sonraki yinelemede yönlendirmektedir. Önceki yinelemelerden bağımsız, kendi içinde tam ve tutarlı (*self-contained*) biçimde yazılan bu yönerge, model yanlılığını (*model bias*) önlemeye yönelik özel bir tasarım kararının ürünüdür.
 
-Yorum yorumu: Başarı eşikleri zorluk düzeyine göre ayarlanmıştır: kolay ≥ 80 puan, orta ≥ 70 puan, zor ≥ 60 puan.
+Başarı eşikleri (*pass thresholds*) zorluk düzeyine göre ayarlanmıştır: kolay ≥ 80 puan, orta ≥ 70 puan, zor ≥ 60 puan.
 
 ---
 
@@ -122,15 +127,15 @@ Yorum yorumu: Başarı eşikleri zorluk düzeyine göre ayarlanmıştır: kolay 
 
 ### A. Modeller
 
-Deneyler, hepsi Unsloth GGUF formatında UD-Q4_K_XL nicemleme ile dağıtılan dört açık ağırlıklı model üzerinde gerçekleştirilmiştir. M1 olarak kullanılan gpt-oss-20b modeli, Microsoft'un şeffaf mimarili 20B parametreli modeli olup özellikle yönlendirme şablonu desteği (`--jinja` bayrağı) gerektirmektedir. M2 konumundaki Qwen3-Coder-Next, yaklaşık 46 GB bellek gerektiren ve alanda güçlü kodlama performansıyla öne çıkan baskın modeldir. GLM-4.7-Flash ise M3 olarak görev yapmakta olup tekrar döngüsü sorununu önlemek amacıyla `--repeat-penalty 1.0` parametresiyle çalıştırılmaktadır. Tüm üretim modellerinden bağımsız olarak Qwen3.5-35B-A3B modeli yargı rolüne ayrılmıştır; bu ayrım, öz-değerlendirme yanlılığını ortadan kaldırmak için bilinçli alınan bir tasarım kararıdır.
+Deneyler, hepsi Unsloth GGUF formatında UD-Q4_K_XL nicemleme (*quantisation*) ile dağıtılan dört açık ağırlıklı (*open-weight*) model üzerinde gerçekleştirilmiştir. M1 olarak kullanılan gpt-oss-20b modeli, Microsoft'un şeffaf mimarili 20B parametreli modeli olup özellikle yönlendirme şablonu (*chat template*) desteği gerektirmektedir. M2 konumundaki Qwen3-Coder-Next, yaklaşık 46 GB bellek gerektiren ve alanda güçlü kodlama performansıyla öne çıkan baskın (*dominant*) modeldir. GLM-4.7-Flash ise M3 olarak görev yapmakta olup tekrar döngüsü (*repetition loop*) sorununu önlemek amacıyla `--repeat-penalty 1.0` parametresiyle çalıştırılmaktadır. Tüm üretim modellerinden bağımsız olarak Qwen3.5-35B-A3B modeli yargı rolüne ayrılmıştır; bu ayrım, öz-değerlendirme yanlılığını (*self-evaluation bias*) ortadan kaldırmak için bilinçli alınan bir tasarım kararıdır.
 
-Modeller, OpenAI uyumlu API sunan llama.cpp sunucuları aracılığıyla Vast.ai A100 80GB donanımında çalıştırılmıştır. Sıralı yürütme mimarisi sayesinde yalnızca bir model aynı anda belleğe yüklenmektedir.
+Modeller, OpenAI uyumlu API sunan llama.cpp sunucuları aracılığıyla Vast.ai A100 80GB donanımında çalıştırılmıştır. Sıralı yürütme (*sequential execution*) mimarisi sayesinde yalnızca bir model aynı anda belleğe yüklenmektedir.
 
-### B. Veri Kümesi
+### B. Veri Kümesi (*Dataset*)
 
-LiveCodeBench [10] test kümesinden rastgele örnekleme yöntemiyle (sabit tohum: 42) seçilen 50 problem kullanılmıştır. Problemler kolay, orta ve zor olmak üzere üç zorluk düzeyine dağılmakta olup her problem; genel testler, özel testler ve kural tabanlı üretilmiş kenar durumlardan oluşan genişletilmiş bir test paketine sahiptir.
+LiveCodeBench [10] test kümesinden rastgele örnekleme (*random sampling*) yöntemiyle (sabit tohum: *seed* 42) seçilen 50 problem kullanılmıştır. Problemler kolay (*easy*), orta (*medium*) ve zor (*hard*) olmak üzere üç zorluk düzeyine dağılmakta olup her problem; genel testler (*public tests*), özel testler (*private tests*) ve kural tabanlı üretilmiş kenar durumlardan (*edge cases*) oluşan genişletilmiş bir test paketine sahiptir.
 
-### C. Ablasyon Varyantları
+### C. Ablasyon Varyantları (*Ablation Variants*)
 
 Her varyant bağımsız olarak yürütülmüştür; bu sayede tekil bileşenlerin katkısı net biçimde ölçülebilmektedir.
 
@@ -138,16 +143,16 @@ Her varyant bağımsız olarak yürütülmüştür; bu sayede tekil bileşenleri
 
 | Varyant | Düğüm 1 | Düğüm 2 | Düğüm 3 | Açıklama |
 |---------|---------|---------|---------|---------|
-| V0 | — | — | — | Tek-atışlı temel |
-| V1 | — | ✓ | ✓ | Yürütme + Yargı |
-| V2 | ✓ | — | ✓ | Statik Analiz + Yargı |
-| V3 | ✓ | ✓ | ✓ | Tam pipeline |
+| V0 | — | — | — | Tek-atışlı temel (*single-shot baseline*) |
+| V1 | — | ✓ | ✓ | Yürütme + Yargı (*Execution + Judgement*) |
+| V2 | ✓ | — | ✓ | Statik Analiz + Yargı (*Static Analysis + Judgement*) |
+| V3 | ✓ | ✓ | ✓ | Tam pipeline (*Full Pipeline*) |
 
-V0 (temel), pipeline devre dışıyken her model için ayrı ayrı çalıştırılmıştır. V1, statik analizin yokluğunda yürütme geri bildiriminin tek başına ne kadar etkili olduğunu sorgulamaktadır. V2 ise korumalı yürütme olmaksızın statik analizin Görev Başarı Oranı'na katkısını ölçmektedir.
+V0 (temel, *baseline*), pipeline devre dışıyken her model için ayrı ayrı çalıştırılmıştır. V1, statik analizin yokluğunda yürütme geri bildiriminin tek başına ne kadar etkili olduğunu sorgulamaktadır. V2 ise korumalı yürütme olmaksızın statik analizin Görev Başarı Oranı'na katkısını ölçmektedir.
 
-### D. Değerlendirme Kriterleri
+### D. Değerlendirme Kriterleri (*Evaluation Metrics*)
 
-Temel ölçüt, Görev Başarı Oranı'dır (TSR): bir problem için M1, M2 veya M3 modellerinden herhangi birinin GEÇER eşiğini aşması yeterlidir. Güven aralıkları %95 Wilson yöntemiyle hesaplanmıştır. İstatistiksel anlamlılık ise ikili eşleştirilmiş sonuçlar için uygun olan McNemar testi [13] ile sınanmıştır.
+Temel ölçüt, Görev Başarı Oranı'dır (TSR, *Task Success Rate*): bir problem için M1, M2 veya M3 modellerinden herhangi birinin başarı eşiğini (*pass threshold*) aşması yeterlidir. Güven aralıkları (*confidence intervals*) %95 Wilson yöntemiyle hesaplanmıştır. İstatistiksel anlamlılık (*statistical significance*) ise ikili eşleştirilmiş (*paired binary*) sonuçlar için uygun olan McNemar testi [13] ile sınanmıştır.
 
 Dört hipotez çerçevesinde bulgular değerlendirilmektedir:
 
@@ -164,11 +169,11 @@ Dört hipotez çerçevesinde bulgular değerlendirilmektedir:
 
 ### A. Ana Ablasyon Tablosu
 
-**Tablo III.** Varyant × zorluk düzeyine göre Görev Başarı Oranı (TSR). Parantez içindeki değerler %95 Wilson güven aralığını göstermektedir.
+**Tablo III.** Varyant × zorluk düzeyine göre Görev Başarı Oranı (TSR, *Task Success Rate*). Parantez içindeki değerler %95 Wilson güven aralığını (*confidence interval*) göstermektedir.
 
-| Varyant | Kolay | Orta | Zor | Genel | ΔV0 |
-|---------|-------|------|-----|-------|-----|
-| V0 — Tek-atışlı | — | — | — | — | — |
+| Varyant | Kolay (*Easy*) | Orta (*Medium*) | Zor (*Hard*) | Genel (*Overall*) | ΔV0 |
+|---------|----------------|-----------------|--------------|-------------------|-----|
+| V0 — Tek-atışlı (*Single-shot*) | — | — | — | — | — |
 | V1 — Yürütme + Yargı | — | — | — | — | — |
 | V2 — Statik + Yargı | — | — | — | — | — |
 | V3 — Tam pipeline | — | — | — | — | — |
@@ -177,8 +182,8 @@ Dört hipotez çerçevesinde bulgular değerlendirilmektedir:
 
 **Tablo IV.** Her model için V0 ve V3 TSR karşılaştırması.
 
-| Model | V0 TSR | V3 TSR | Δ | Ort. Yineleme | DURDUR_Y% |
-|-------|--------|--------|---|---------------|-----------|
+| Model | V0 TSR | V3 TSR | Δ | Ort. Yineleme (*Avg. Iteration*) | DURDUR_Y% (*STOP_HIGH%*) |
+|-------|--------|--------|---|----------------------------------|--------------------------|
 | M1 — gpt-oss-20b | — | — | — | — | — |
 | M2 — Qwen3-Coder-Next | — | — | — | — | — |
 | M3 — GLM-4.7-Flash | — | — | — | — | — |
@@ -199,10 +204,11 @@ TSR
     │
 0.0 └─────────────────────────────────
         Kolay       Orta        Zor
+       (Easy)     (Medium)    (Hard)
         ──── V0   ──── V1   ──── V3
 ```
 
-**Şekil 2.** Zorluk düzeyi × varyanta göre TSR karşılaştırması. Kolay sorulardaki beklenen tavan etkisi grafikte görselleştirilecektir.
+**Şekil 2.** Zorluk düzeyi × varyanta göre TSR karşılaştırması. Kolay sorulardaki beklenen tavan etkisi (*ceiling effect*) grafikte görselleştirilecektir.
 
 ### D. Hipotez Sonuçları
 
@@ -217,11 +223,11 @@ TSR
 
 ## VI. Sonuç
 
-Bu çalışmada, açık ağırlıklı BDM'leri için tasarlanmış çok aşamalı yinelemeli bir kod arıtım hattı sunulmuştur. Önerilen sistem; statik analizi, korumalı yürütmeyi ve bağımsız LLM yargılamasını tek bir döngüde birleştirmekte, her bileşenin göreve özgü katkısını ablasyon çerçevesinde ölçmektedir.
+Bu çalışmada, açık ağırlıklı (*open-weight*) BDM'leri için tasarlanmış çok aşamalı yinelemeli bir kod arıtım hattı sunulmuştur. Önerilen sistem; statik analizi, korumalı yürütmeyi (*sandboxed execution*) ve bağımsız LLM yargılamasını tek bir döngüde birleştirmekte, her bileşenin göreve özgü katkısını ablasyon çerçevesinde ölçmektedir.
 
-Tasarım sürecinde öne çıkan başlıca gözlemler şunlardır: Yargı modelinin kod üretim modelinden tamamen ayrıştırılması, öz-değerlendirme yanlılığını azaltmakta ve geri bildirimin tutarlılığını artırmaktadır. Deterministik metriklerin puana ağırlıklı katkısı (%80), değerlendirme sürecinin tekrarlanabilirliğini güvence altına almaktadır. Şiddet kapısı aracılığıyla yapılan erken durdurma mekanizması ise hesaplama maliyetini ciddi ölçüde azaltmaktadır.
+Tasarım sürecinde öne çıkan başlıca gözlemler şunlardır: Yargı modelinin kod üretim modelinden tamamen ayrıştırılması, öz-değerlendirme yanlılığını (*self-evaluation bias*) azaltmakta ve geri bildirimin tutarlılığını artırmaktadır. Deterministik (*deterministic*) metriklerin puana ağırlıklı katkısı (%80), değerlendirme sürecinin tekrarlanabilirliğini (*reproducibility*) güvence altına almaktadır. Şiddet kapısı (*severity gate*) aracılığıyla yapılan erken durdurma (*early stopping*) mekanizması ise hesaplama maliyetini (*computational cost*) ciddi ölçüde azaltmaktadır.
 
-Çalışmanın sınırlılıkları arasında örneklem büyüklüğünün (50 problem) istatistiksel gücü kısıtlaması ve yargı modelinin kalibrasyonunun manuel doğrulama gerektirmesi sayılabilir. Gelecek çalışmalarda yargı modelinin ince ayarlanması, çoklu dil desteğinin genişletilmesi ve LCB'nin dışındaki değerlendirme platformlarında sistemin sınanması planlanmaktadır.
+Çalışmanın sınırlılıkları arasında örneklem büyüklüğünün (50 problem) istatistiksel gücü (*statistical power*) kısıtlaması ve yargı modelinin kalibrasyonunun (*calibration*) manuel doğrulama gerektirmesi sayılabilir. Gelecek çalışmalarda yargı modelinin ince ayarlanması (*fine-tuning*), çoklu dil desteğinin genişletilmesi ve LCB'nin dışındaki değerlendirme platformlarında sistemin sınanması planlanmaktadır.
 
 ---
 
