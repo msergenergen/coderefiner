@@ -42,11 +42,10 @@ The pipeline:
 
 | Variant | Nodes Active | Description |
 |---------|-------------|-------------|
-| V0 | None | Single-shot baseline (no pipeline) |
-| V1 | Node 2 | Execution feedback only |
-| V2 | Node 1 + Node 2 | Static + Execution feedback |
-| V3 | Node 2 + Node 3 | Execution + Judgement |
-| V4 | All | Full pipeline |
+| V0 | — | Single-shot baseline (no pipeline) |
+| V1 | Node 2 + Node 3 | Execution + Judgement (no static analysis) |
+| V2 | Node 1 + Node 3 | Static Analysis + Judgement (no execution) |
+| V3 | Node 1 + Node 2 + Node 3 | Full pipeline |
 
 ---
 
@@ -162,7 +161,7 @@ cp build/bin/llama-* .
 #### 3. Clone project and create virtual environment
 
 ```bash
-git clone <your-repo-url>
+git clone git@github.com:msergenergen/llm-code-refinement.git
 cd llm-code-refinement
 
 python3.11 -m venv .venv
@@ -287,17 +286,36 @@ cp build/bin/llama-* .
 
 ```bash
 cd /workspace
-git clone <your-repo-url>
+git clone git@github.com:msergenergen/llm-code-refinement.git
 cd llm-code-refinement
 
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
+cat > .env.cloud << 'EOF'
+ENV=cloud
+M1_BASE_URL=http://localhost:8001/v1
+M2_BASE_URL=http://localhost:8002/v1
+M3_BASE_URL=http://localhost:8003/v1
+QWEN_BASE_URL=http://localhost:8004/v1
+LLAMA_API_KEY=local
+MAX_ITERATIONS=10
+PIPELINE_MODELS=M1,M2,M3
+SANDBOX_TIMEOUT_SEC=10
+SANDBOX_MEMORY_LIMIT_MB=512
+SANDBOX_FLAKINESS_RUNS=5
+SANDBOX_MAX_FAILED_CASES=5
+LCB_SPLIT=test
+LCB_DIFFICULTY=all
+LCB_SAMPLE_SIZE=50
+OUTPUT_DIR=outputs/results
+MEMORY_LOG_PATH=outputs/memory.md
+PIPELINE_LOG_PATH=outputs/pipeline.log
+EOF
+
 ln -sf .env.cloud .env
 mkdir -p outputs/results
 ```
-
-> `.env.cloud` sets individual ports for M1/M2/M3/QWEN and `MAX_ITERATIONS=10`.
 
 #### 6. Download models (run in parallel tmux windows)
 
@@ -415,12 +433,12 @@ Output: `outputs/results/baseline_<tag>_<timestamp>.json`
 Runs V1–V4 ablation variants of the full pipeline.
 
 ```bash
-python -m benchmark.evaluator --variant V4 --sample 50 --tag v4_full
+python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_full
 python -m benchmark.evaluator --variant V1 --sample 50 --tag v1
-python -m benchmark.evaluator --variant V3 --difficulty easy --sample 25
+python -m benchmark.evaluator --variant V2 --difficulty easy --sample 25
 
 # Options:
-#   --variant    V1 | V2 | V3 | V4  (default: V4)
+#   --variant    V1 | V2 | V3  (default: V3)
 #   --difficulty easy | medium | hard | all  (default: all)
 #   --sample     N problems
 #   --tag        filename suffix
@@ -497,7 +515,7 @@ pytest tests/ --cov=. --cov-report=term-missing \
 ### Recommended run order
 
 ```bash
-# 1. V0 Baseline (one per model, run before pipeline)
+# 1. V0 Baseline — separately for each model (always run first)
 python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
 python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
 python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
@@ -505,13 +523,12 @@ python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
 # 2. Ablation variants
 python -m benchmark.evaluator --variant V1 --sample 50 --tag v1
 python -m benchmark.evaluator --variant V2 --sample 50 --tag v2
-python -m benchmark.evaluator --variant V3 --sample 50 --tag v3
-python -m benchmark.evaluator --variant V4 --sample 50 --tag v4_full
+python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_full
 
-# 3. Difficulty breakdown (V4 full pipeline)
-python -m benchmark.evaluator --variant V4 --difficulty easy   --sample 25 --tag v4_easy
-python -m benchmark.evaluator --variant V4 --difficulty medium --sample 15 --tag v4_medium
-python -m benchmark.evaluator --variant V4 --difficulty hard   --sample 10 --tag v4_hard
+# 3. Difficulty breakdown (V3 full pipeline)
+python -m benchmark.evaluator --variant V3 --difficulty easy   --sample 25 --tag v3_easy
+python -m benchmark.evaluator --variant V3 --difficulty medium --sample 15 --tag v3_medium
+python -m benchmark.evaluator --variant V3 --difficulty hard   --sample 10 --tag v3_hard
 ```
 
 > Reset `outputs/memory.md` or set a different `MEMORY_LOG_PATH` before each variant run.

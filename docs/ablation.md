@@ -34,25 +34,24 @@ Baseline TSR = (Questions correct in single-shot) / (Total questions)
 Each variant runs independently. Separate results are obtained for each model per variant.
 
 | Variant | Node 1 | Node 2 | Node 3 | Description |
-|---------|--------|--------|--------|----------|
+|---------|--------|--------|--------|-------------|
 | **V0** — Single-shot baseline | ✗ | ✗ | ✗ | Pipeline yok, tek deneme |
-| **V1** — +Execution | ✗ | ✓ | ✗ | Feedback from test results only |
-| **V2** — +Static+Execution | ✓ | ✓ | ✗ | Statik analiz + test, judgement yok |
-| **V3** — +Execution+Judgement | ✗ | ✓ | ✓ | Test + judgement, statik analiz yok |
-| **V4** — Full Pipeline | ✓ | ✓ | ✓ | Tam sistem |
+| **V1** — Execution + Judgement | ✗ | ✓ | ✓ | Test sonuçları + Judgement LLM, statik analiz yok |
+| **V2** — Static Analysis + Judgement | ✓ | ✗ | ✓ | Statik analiz + Judgement LLM, execution yok |
+| **V3** — Full Pipeline | ✓ | ✓ | ✓ | Tam sistem |
 
 ### What Each Variant Answers
 
 ```
-V0 → Modelin doğal yeteneği nedir? (tavan referansı)
-V1 → Sadece "doğru cevap bu" bilgisi yeterli mi?
-V2 → Statik analiz feedback'e ek katkı sağlıyor mu?
-V3 → Judgement LLM olmadan execution yeterli mi?
-V4 → Tüm bileşenler birlikte ne kadar katkı sağlıyor?
+V0 → Modelin doğal yeteneği nedir? (referans taban)
+V1 → Execution feedback + Judgement yeterli mi? (Node 1 olmadan)
+V2 → Statik analiz + Judgement yeterli mi? (Node 2 olmadan)
+V3 → Tüm bileşenler birlikte ne kadar katkı sağlıyor?
 
-V2 - V1 farkı → Node 1'in marjinal katkısı
-V4 - V3 farkı → Node 1'in V4 içindeki katkısı
-V3 - V1 farkı → Node 3'ün (Judgement) marjinal katkısı
+V3 - V1 farkı → Node 1'in (statik analiz) marjinal katkısı
+V3 - V2 farkı → Node 2'nin (execution) marjinal katkısı
+V1 - V0 farkı → Execution + Judgement'ın baseline'a katkısı
+V2 - V0 farkı → Static + Judgement'ın baseline'a katkısı
 ```
 
 ---
@@ -60,17 +59,20 @@ V3 - V1 farkı → Node 3'ün (Judgement) marjinal katkısı
 ## 3. Hipotezler
 
 ```
-H1: V4 TSR ≥ V0 TSR + 15 puan (easy sorularda)
-    Gerekçe: Execution feedback en az 2 iterasyonda yanlış kodu düzeltir
+H1: V3 easy TSR ≥ V0 easy TSR + 15 puan
+    Gerekçe: Execution + statik analiz + Judgement feedback
+             en az 2 iterasyonda yanlış kodu düzeltir
 
-H2: V3 TSR > V2 TSR (Judgement katkısı > Statik analiz katkısı)
-    Gerekçe: failed_cases + improved_prompt daha actionable
+H2: V1 TSR > V0 TSR  (Execution + Judgement baseline'ı geçiyor)
+    Gerekçe: failed_cases + improved_prompt, kör yeniden denemeden
+             daha fazla bilgi taşır
 
-H3: Easy sorularda pipeline katkısı < Hard sorularda katkı
-    Gerekçe: Easy'de modeller zaten yüksek başarıya yakın (tavan etkisi)
+H3: V2 TSR > V0 TSR  (Static Analysis + Judgement baseline'ı geçiyor)
+    Gerekçe: Statik sorunlar düzeltildiğinde kod kalitesi artar
+             ve Judgement daha iyi improved_prompt üretir
 
-H4: STOP_HIGH oranı yüksek modellerde pipeline TSR katkısı düşer
-    Gerekçe: Node 1'de çok soru ellenirse iterasyon şansı kalmaz
+H4: V3 TSR > V1 TSR  ve  V3 TSR > V2 TSR  (tam pipeline ablasyonları geçiyor)
+    Gerekçe: Her iki node'un birlikte çalışması daha zengin feedback sağlar
 ```
 
 ### Statistical Test
@@ -299,21 +301,19 @@ if __name__ == "__main__":
 
 ## 5. benchmark/evaluator.py — Variant Support
 
-Mevcut `evaluator.py`'e `--variant` flag'i eklenir.
-The difference between V1–V4 is managed via the `build_graph(variant=...)` call:
+The difference between V1–V3 is managed via the `build_graph(variant=...)` call.
 
 ```python
-# benchmark/evaluator.py — additional arguments
+# benchmark/evaluator.py — CLI argument
 
 parser.add_argument(
     "--variant",
-    default="V4",
-    choices=["V1", "V2", "V3", "V4"],
+    default="V3",
+    choices=["V1", "V2", "V3"],
     help=(
-        "V1: sadece Node 2  |  "
-        "V2: Node 1 + Node 2  |  "
-        "V3: Node 2 + Node 3  |  "
-        "V4: tam pipeline"
+        "V1: Execution + Judgement (Node 2 + Node 3)  |  "
+        "V2: Static Analysis + Judgement (Node 1 + Node 3)  |  "
+        "V3: Full pipeline (Node 1 + Node 2 + Node 3)"
     ),
 )
 ```
@@ -321,74 +321,26 @@ parser.add_argument(
 ```python
 # pipeline/graph.py — build_graph() variant support
 
-def build_graph(variant: str = "V4") -> StateGraph:
+def build_graph(variant: str = "V3") -> StateGraph:
     """
     variant:
-        V1 — Node 1 yok, Node 3 yok; sadece execution feedback
-        V2 — Node 1 var, Node 3 yok
-        V3 — Node 1 yok, Node 3 var
-        V4 — tam pipeline (varsayılan)
+        V1 — Node 2 + Node 3  (Execution + Judgement, no static analysis)
+        V2 — Node 1 + Node 3  (Static Analysis + Judgement, no execution)
+        V3 — Full pipeline     (Node 1 + Node 2 + Node 3)
     """
-    use_node1 = variant in ("V2", "V4")
-    use_node3 = variant in ("V3", "V4")
+    use_node1 = variant in ("V2", "V3")
+    use_node2 = variant in ("V1", "V3")
 
-    g = StateGraph(PipelineState)
-
-    g.add_node("codegen",           codegen_node)
-    g.add_node("static_analysis",   static_analysis_node)
-    g.add_node("sandbox",           sandbox_node)
-    g.add_node("strip_comments",    strip_comments_node)
-    g.add_node("judgement",          judgement_node)
-    g.add_node("log_iteration",     log_iteration_node)
-    g.add_node("log_severity_stop", log_severity_stop_node)
-    g.add_node("write_memory_final",_write_memory_final_node)
-    g.add_node("stop_max",          _stop_max_node)
-    g.add_node("next_model",        _next_model_node)
-
-    g.set_entry_point("codegen")
-
-    # Node 1 yok → codegen'den direkt sandbox'a git
-    if use_node1:
-        g.add_edge("codegen", "static_analysis")
-        g.add_conditional_edges(
-            "static_analysis", severity_gate,
-            {"to_node2": "sandbox", "to_node3": "judgement",
-             "stop_high": "log_severity_stop"},
-        )
-    else:
-        # severity_gate olmadan direkt sandbox
-        g.add_edge("codegen", "sandbox")
-
-    g.add_edge("sandbox", "strip_comments")
-
-    # Node 3 yok → execution sonucu direkt log'a git
-    if use_node3:
-        g.add_edge("strip_comments", "judgement")
-        g.add_edge("judgement",       "log_iteration")
-    else:
-        # without judgement: PASS if pass_rate meets threshold
-        # Handle this via _no_judgement_gate inside log_iteration_node
-        g.add_edge("strip_comments", "log_iteration")
-
-    g.add_conditional_edges(
-        "log_iteration", iteration_gate,
-        {"write_memory_final": "write_memory_final",
-         "stop_max":           "stop_max",
-         "loop_to_codegen":    "codegen"},
-    )
-
-    g.add_edge("write_memory_final", "next_model")
-    g.add_edge("log_severity_stop",  END)
-    g.add_edge("stop_max",           END)
-    g.add_edge("next_model",         END)
-
-    return g.compile()
+    # Core nodes always present: codegen, judgement, log_iteration, etc.
+    # Node 1 (static_analysis, severity_gate) added if use_node1
+    # Node 2 (sandbox, strip_comments)        added if use_node2
+    # V2 routing: codegen → static_analysis → strip_before_judge → judgement
+    # V1 routing: codegen → sandbox → strip_comments → judgement
+    # V3 routing: codegen → static_analysis → sandbox/strip_before_judge → judgement
 ```
 
-> **Note:** When Node 3 is absent in V1 and V3, `iteration_gate` uses only
-> `node2_pass_rate` as the threshold. `node3_total_score` and `node3_pass`
-> remain 0/False in state; `iteration_gate` evaluates this via `node2_pass_rate`.
-> This behavior should be documented in `gates.py`.
+PASS criterion is identical across all variants: `node3_total_score ≥ threshold`
+(Judgement always runs — V0 is the only variant without it, and V0 uses `baseline.py`).
 
 ---
 
@@ -397,33 +349,36 @@ def build_graph(variant: str = "V4") -> StateGraph:
 ### Order Matters: Baseline First, Then Pipeline
 
 ```bash
-# ── V0 Baseline — separately for each model ────────────────────────────
-ENV=cloud python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
-ENV=cloud python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
-ENV=cloud python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
+# ── V0 Baseline — separately for each model ───────────────────────────
+python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
+python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
+python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
 
-# ── Ablation Variants ───────────────────────────────────────────────
-ENV=cloud python -m benchmark.evaluator --variant V1 --sample 50 --tag v1
-ENV=cloud python -m benchmark.evaluator --variant V2 --sample 50 --tag v2
-ENV=cloud python -m benchmark.evaluator --variant V3 --sample 50 --tag v3
-ENV=cloud python -m benchmark.evaluator --variant V4 --sample 50 --tag v4_full
+# ── Ablation Variants ──────────────────────────────────────────────────
+python -m benchmark.evaluator --variant V1 --sample 50 --tag v1
+python -m benchmark.evaluator --variant V2 --sample 50 --tag v2
+python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_full
 
-# ── Difficulty-Based (V4 full pipeline) ───────────────────────────────────
-ENV=cloud python -m benchmark.evaluator --variant V4 --difficulty easy   --sample 25 --tag v4_easy
-ENV=cloud python -m benchmark.evaluator --variant V4 --difficulty medium --sample 15 --tag v4_medium
-ENV=cloud python -m benchmark.evaluator --variant V4 --difficulty hard   --sample 10 --tag v4_hard
+# ── Difficulty breakdown (V3 full pipeline) ────────────────────────────
+python -m benchmark.evaluator --variant V3 --difficulty easy   --sample 25 --tag v3_easy
+python -m benchmark.evaluator --variant V3 --difficulty medium --sample 15 --tag v3_medium
+python -m benchmark.evaluator --variant V3 --difficulty hard   --sample 10 --tag v3_hard
 ```
+
+> `.env` symlink → `.env.cloud` olduğu için `ENV=cloud` prefix'i gerekmez.
 
 ### Check Before Each Run
 
 ```bash
-# Were the previous run's outputs copied to local machine?
+# Previous outputs saved to local machine?
 ls outputs/results/
 
-# Is the server running?
-curl -s http://localhost:8001/v1/models | python -m json.tool
+# All 4 servers running?
+for port in 8001 8002 8003 8004; do
+    curl -s http://localhost:$port/v1/models | python -m json.tool | grep '"id"' || echo "port $port: NOT running"
+done
 
-# Disk dolu mu? (100GB+ model var)
+# Disk dolu mu? (~99 GB model + outputs)
 df -h /workspace
 ```
 
@@ -431,20 +386,20 @@ df -h /workspace
 
 ```
 outputs/
-├── run_info.json                    ← Her run için ortam bilgisi
-├── memory.md                        ← Tüm iterasyonlar (append)
-├── results/
-│   ├── baseline_v0_M1_20250115.json
-│   ├── baseline_v0_M2_20250115.json
-│   ├── baseline_v0_M3_20250115.json
-│   ├── benchmark_v1_20250116.json
-│   ├── benchmark_v2_20250116.json
-│   ├── benchmark_v3_20250116.json
-│   └── benchmark_v4_full_20250117.json
-└── iterations/
-    └── q_xxx/
-        └── M1_iter1.json
+├── run_info.json                        ← Her run için ortam bilgisi
+├── memory.md                            ← Tüm iterasyonlar (append)
+└── results/
+    └── YYYY-MM-DD/
+        ├── baseline_v0_M1_<ts>.json
+        ├── baseline_v0_M2_<ts>.json
+        ├── baseline_v0_M3_<ts>.json
+        ├── benchmark_V1_v1_<ts>.json
+        ├── benchmark_V2_v2_<ts>.json
+        ├── benchmark_V3_v3_full_<ts>.json
+        └── iterations/
+            └── <question_id>/
+                └── M1_iter1.json
 ```
 
-> Before each variant starts, `outputs/memory.md` must be reset
-> or redirected to a separate file such as `MEMORY_LOG_PATH=outputs/memory_v1.md`.
+> Her variant başlamadan önce `outputs/memory.md` sıfırlanmalı
+> ya da `MEMORY_LOG_PATH=outputs/memory_v1.md` şeklinde yönlendirilmeli.
