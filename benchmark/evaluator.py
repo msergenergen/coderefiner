@@ -1,12 +1,12 @@
 """
-Ablation variant runner — V1/V2/V3/V4.
+Ablation variant runner — V1/V2/V3.
 
 Runs the full pipeline for multiple LCB problems with a given variant.
 Results are written to outputs/results/benchmark_<variant>_<tag>_<ts>.json.
 
 Usage:
-    python -m benchmark.evaluator --variant V4 --sample 50 --tag v4_full
-    python -m benchmark.evaluator --variant V3 --sample 50 --tag v3
+    python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_full
+    python -m benchmark.evaluator --variant V2 --sample 50 --tag v2
     python -m benchmark.evaluator --variant V1 --difficulty easy --sample 25
 """
 import argparse
@@ -119,7 +119,7 @@ def run_variant_for_problem(
 
 
 def run_evaluator(
-    variant: str = "V4",
+    variant: str = "V3",
     difficulty: str = "all",
     sample_size: int = 50,
     output_tag: str = "",
