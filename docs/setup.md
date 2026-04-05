@@ -104,7 +104,7 @@ ENV=local
 # ── Single server — all roles go here ────────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
 LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b
-LOCAL_JUDGMENT_MODEL=qwen2.5-coder-7b
+LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b
 LLAMA_API_KEY=local
 
 # ── Pipeline — keep short for debug ──────────────────────────────
@@ -143,7 +143,7 @@ grep -qxF '.env.cloud' .gitignore 2>/dev/null || echo '.env.cloud' >> .gitignore
 mkdir -p models
 cd models
 
-# Qwen2.5-Coder-7B — for both codegen and judgment (~4 GB)
+# Qwen2.5-Coder-7B — for both codegen and judgement (~4 GB)
 huggingface-cli download bartowski/Qwen2.5-Coder-7B-Instruct-GGUF \
     --include "*Q4_K_M.gguf" \
     --local-dir ./qwen2.5-coder-7b
@@ -387,7 +387,7 @@ huggingface-cli download unsloth/GLM-4.7-Flash-GGUF \
     --include "*UD-Q4_K_XL*" \
     --local-dir ./glm-4.7-flash
 
-# Judgment — Qwen3.5-35B-A3B (~24 GB)
+# Judgement — Qwen3.5-35B-A3B (~24 GB)
 tmux new-window -n "dl-qwen"
 huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
     --include "*UD-Q4_K_XL*" \
@@ -569,4 +569,4 @@ curl -s http://localhost:8001/v1/chat/completions \
 - **Stop** the instance when not in use — billed hourly
 - Instance may freeze when disk is full: monitor with `df -h`
 - If download is interrupted, the same `huggingface-cli download` command resumes it
-- `QWEN_BASE_URL` points to the judgment model — must not be the same port as the M1 server
+- `QWEN_BASE_URL` points to the judgement model — must not be the same port as the M1 server

@@ -254,7 +254,7 @@ def _write_iteration_json(state: PipelineState, status: str,
 
 def log_iteration_node(state: PipelineState) -> PipelineState:
     """
-    LangGraph node: logs each iteration after judgment.
+    LangGraph node: logs each iteration after judgement.
     Writes LOOP / PASS / STOP_MAX statuses.
     """
     from config import thresholds
@@ -272,7 +272,7 @@ def log_iteration_node(state: PipelineState) -> PipelineState:
     timing  = state.get("timing", {"codegen_ms": 0, "node1_ms": 0,
                                     "node2_ms": 0, "node3_ms": 0, "total_ms": 0})
     tokens  = state.get("tokens", {"codegen_prompt": 0, "codegen_completion": 0,
-                                    "judgment_prompt": 0, "judgment_completion": 0,
+                                    "judgement_prompt": 0, "judgement_completion": 0,
                                     "total": 0})
 
     json_path  = _write_iteration_json(state, status, run_id, timing, tokens)
@@ -293,7 +293,7 @@ def log_severity_stop_node(state: PipelineState) -> PipelineState:
     timing = state.get("timing", {"codegen_ms": 0, "node1_ms": 0,
                                    "node2_ms": 0, "node3_ms": 0, "total_ms": 0})
     tokens = state.get("tokens", {"codegen_prompt": 0, "codegen_completion": 0,
-                                   "judgment_prompt": 0, "judgment_completion": 0,
+                                   "judgement_prompt": 0, "judgement_completion": 0,
                                    "total": 0})
 
     json_path = _write_iteration_json(state, "STOP_HIGH", run_id, timing, tokens)

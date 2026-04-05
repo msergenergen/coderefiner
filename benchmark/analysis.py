@@ -160,8 +160,8 @@ def print_ablation_table(comparison: dict) -> None:
 
     descriptions = {
         "V0": "Single-shot baseline",
-        "V1": "Execution + Judgment",
-        "V2": "Static Analysis + Judgment",
+        "V1": "Execution + Judgement",
+        "V2": "Static Analysis + Judgement",
         "V3": "Full pipeline",
     }
 
@@ -223,19 +223,19 @@ def evaluate_hypotheses(comparison: dict, mcnemar_result: dict,
         "note":       f"Actual delta: {h1_delta:+.3f}",
     }
 
-    # H2: V1 TSR > V0 TSR (execution + judgment improves baseline)
+    # H2: V1 TSR > V0 TSR (execution + judgement improves baseline)
     h2_delta = v1_tsr - v0_tsr
     results["H2"] = {
-        "hypothesis": "V1 TSR > V0 TSR (Execution+Judgment improves baseline)",
+        "hypothesis": "V1 TSR > V0 TSR (Execution+Judgement improves baseline)",
         "result":     h2_delta,
         "supported":  h2_delta > 0,
         "note":       f"V1-V0 delta: {h2_delta:+.3f}",
     }
 
-    # H3: V2 TSR > V0 TSR (static analysis + judgment improves baseline)
+    # H3: V2 TSR > V0 TSR (static analysis + judgement improves baseline)
     h3_delta = v2_tsr - v0_tsr
     results["H3"] = {
-        "hypothesis": "V2 TSR > V0 TSR (Static+Judgment improves baseline)",
+        "hypothesis": "V2 TSR > V0 TSR (Static+Judgement improves baseline)",
         "result":     h3_delta,
         "supported":  h3_delta > 0,
         "note":       f"V2-V0 delta: {h3_delta:+.3f}",

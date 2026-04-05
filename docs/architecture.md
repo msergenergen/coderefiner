@@ -47,7 +47,7 @@ START
                      │
                      ▼
           ┌──────────────────────┐
-          │  NODE 3: Judgment LLM│
+          │  NODE 3: Judgement LLM│
           │  100-puan rubric     │
           └──────────┬───────────┘
                      │
@@ -128,7 +128,7 @@ Purpose: Execute the code in an isolated environment and measure correctness and
 
 ---
 
-### Node 3 — Judgment LLM
+### Node 3 — Judgement LLM
 
 Purpose: Synthesize Node 1 and Node 2 metrics to produce a 100-point score
 and write an improved system prompt on failure.
@@ -141,7 +141,7 @@ and write an improved system prompt on failure.
 | Verimlilik | 20p | Node 2: CPU + Memory composite |
 | Kod Kalitesi | 20p | Node 1: MI + CC composite |
 | Security | 15p | Node 1: Bandit severity weighted |
-| Solution Originality | 10p | Judgment LLM semantic evaluation |
+| Solution Originality | 10p | Judgement LLM semantic evaluation |
 | Error Handling | 10p | Node 2: exception coverage |
 
 **Node 3 Output Schema (JSON)**
@@ -251,7 +251,7 @@ The three models are not held in memory simultaneously; they are loaded and run 
 | gpt-oss-20b (M1) | ~11 GB | 24 GB | Runs even on RTX 4090 |
 | Qwen3-Coder-Next (M2) | ~46 GB | **80 GB** | Dominant; requires A100 80GB |
 | GLM-4.7-Flash (M3) | ~18 GB | 24 GB | RTX 4090'da 110 tok/s |
-| Qwen3.5-35B-A3B (Judgment) | ~24 GB | 24 GB | Independent; runs every iteration |
+| Qwen3.5-35B-A3B (Judgement) | ~24 GB | 24 GB | Independent; runs every iteration |
 
 **Vast.ai instance selection:** A100 80GB, 64 GB RAM, 300 GB SSD — ~$0.80/hr.
 50 soru benchmark tahmini: ~$11 toplam.
@@ -268,7 +268,7 @@ The three models are not held in memory simultaneously; they are loaded and run 
 | Codegen M1 | gpt-oss-20b Unsloth GGUF (Apache 2.0) |
 | Codegen M2 | Qwen3-Coder-Next Unsloth GGUF |
 | Codegen M3 | GLM-4.7-Flash Unsloth GGUF |
-| Judgment | Qwen3.5-35B-A3B Unsloth GGUF |
+| Judgement | Qwen3.5-35B-A3B Unsloth GGUF |
 | Statik Analiz | radon, lizard, bandit |
 | Execution | subprocess + tracemalloc + psutil |
 | Test Runner | pytest |

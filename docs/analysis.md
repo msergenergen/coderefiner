@@ -180,7 +180,7 @@ def print_ablation_table(comparison: dict) -> None:
         "V0": "Single-shot baseline",
         "V1": "+Execution feedback",
         "V2": "+Static+Execution",
-        "V3": "+Execution+Judgment",
+        "V3": "+Execution+Judgement",
         "V4": "Full pipeline",
     }
 
@@ -209,7 +209,7 @@ def print_ablation_table(comparison: dict) -> None:
 | V0      | Single-shot baseline  | 0.720    | 0.410   | 0.180    | 0.540   | +0.000 |
 | V1      | +Execution feedback   | 0.760    | 0.450   | 0.220    | 0.580   | +0.040 |
 | V2      | +Static+Execution     | 0.780    | 0.460   | 0.230    | 0.595   | +0.055 |
-| V3      | +Execution+Judgment   | 0.800    | 0.490   | 0.250    | 0.625   | +0.085 |
+| V3      | +Execution+Judgement   | 0.800    | 0.490   | 0.250    | 0.625   | +0.085 |
 | V4      | Full pipeline         | 0.820    | 0.510   | 0.270    | 0.645   | +0.105 |
 ```
 
@@ -260,10 +260,10 @@ def evaluate_hypotheses(comparison: dict, mcnemar_result: dict,
         "note":       f"Gerçekleşen delta: {h1_delta:+.3f}",
     }
 
-    # H2: V3 > V2 (Judgment > Statik analiz)
+    # H2: V3 > V2 (Judgement > Statik analiz)
     h2_delta = v3_tsr - v2_tsr
     results["H2"] = {
-        "hypothesis": "V3 TSR > V2 TSR (Judgment > Static)",
+        "hypothesis": "V3 TSR > V2 TSR (Judgement > Static)",
         "result":     h2_delta,
         "supported":  h2_delta > 0,
         "note":       f"V3-V2 delta: {h2_delta:+.3f}",

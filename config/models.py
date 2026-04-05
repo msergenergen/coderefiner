@@ -35,7 +35,7 @@ class ModelConfig:
     model_name:  str    # Model name sent to llama.cpp
     temperature: float
     port:        int    # Reference for start_model.sh
-    role:        str    # "codegen" | "judgment"
+    role:        str    # "codegen" | "judgement"
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class ModelRegistry:
         """Sequential execution order: [M1, M2, M3]."""
         return [self.M1, self.M2, self.M3]
 
-    def judgment_model(self) -> ModelConfig:
+    def judgement_model(self) -> ModelConfig:
         return self.QWEN
 
     def api_key(self) -> str:
@@ -101,9 +101,9 @@ def _cloud_registry() -> ModelRegistry:
             model_id="QWEN",
             base_url=os.getenv("QWEN_BASE_URL", "http://localhost:8004/v1"),
             model_name="qwen3.5-35b-a3b",
-            temperature=0.3,   # Low temperature for judgment consistency
+            temperature=0.3,   # Low temperature for judgement consistency
             port=8004,
-            role="judgment",
+            role="judgement",
         ),
     )
 
@@ -115,7 +115,7 @@ def _local_registry() -> ModelRegistry:
     All codegen roles (M1/M2/M3) route to the same small model:
         Qwen2.5-Coder-7B  — Q4_K_M ~4 GB  — fits easily in 16 GB
 
-    Judgment also uses the same model on the same port.
+    Judgement also uses the same model on the same port.
     Single llama.cpp server (port 8001) handles all roles.
     Pipeline logic (ordering, gates, iterations) is identical to cloud.
     """
@@ -130,20 +130,20 @@ def _local_registry() -> ModelRegistry:
         role="codegen",
     )
 
-    judgment_slot = ModelConfig(
-        model_id="LOCAL_JUDGMENT",
+    judgement_slot = ModelConfig(
+        model_id="LOCAL_JUDGEMENT",
         base_url=local_url,
-        model_name=os.getenv("LOCAL_JUDGMENT_MODEL", "qwen2.5-coder-7b"),
+        model_name=os.getenv("LOCAL_JUDGEMENT_MODEL", "qwen2.5-coder-7b"),
         temperature=0.3,
         port=8001,
-        role="judgment",
+        role="judgement",
     )
 
     return ModelRegistry(
         M1=codegen_slot,
         M2=codegen_slot,
         M3=codegen_slot,
-        QWEN=judgment_slot,
+        QWEN=judgement_slot,
     )
 
 

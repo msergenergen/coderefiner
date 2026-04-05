@@ -9,7 +9,7 @@
 | Typed `frozen=True` dataclasses | IDE autocomplete + prevents accidental value mutation |
 | **`ENV=local|cloud` flag** | Model set is selected automatically per environment — no model config changes needed |z |
 | **`build_registry(env)` factory** | `local` → Mac Mini models, `cloud` → production models |
-| Threshold values centralized in `thresholds.py` | Node 1/2/3 and judgment prompt all read from the same source |
+| Threshold values centralized in `thresholds.py` | Node 1/2/3 and judgement prompt all read from the same source |
 
 ### Environment Selection: `ENV` Flag
 
@@ -23,14 +23,14 @@ ENV=cloud python main.py
 
 The `ENV` flag changes the entire model set **with a single parameter**:
 
-| ENV | M1 | M2 | M3 | Judgment | Toplam Bellek |
+| ENV | M1 | M2 | M3 | Judgement | Toplam Bellek |
 |-----|----|----|----|----------|--------------|
 | `local` | Qwen2.5-Coder-7B | Qwen2.5-Coder-7B | Qwen2.5-Coder-7B | Qwen2.5-Coder-3B | ~6 GB |
 | `cloud` | gpt-oss-20b | Qwen3-Coder-Next | GLM-4.7-Flash | Qwen3.5-35B-A3B | ~99 GB |
 
 In local mode all codegen models (M1/M2/M3) route to the same small model;
 pipeline flow, gates, and iteration logic run identically.
-A slightly smaller model (3B) is used for judgment — sufficiently consistent.
+A slightly smaller model (3B) is used for judgement — sufficiently consistent.
 
 ### Sequential Model Architecture and Memory
 
@@ -129,7 +129,7 @@ settings = PipelineSettings()
 ```python
 """
 Tüm metrik eşikleri tek yerde.
-Node 1, Node 2, Node 3 ve judgment prompt bu modülden okur.
+Node 1, Node 2, Node 3 ve judgement prompt bu modülden okur.
 """
 from dataclasses import dataclass, field
 
@@ -179,7 +179,7 @@ class AllThresholds:
     node2: Node2Thresholds = field(default_factory=Node2Thresholds)
     node3: Node3Thresholds = field(default_factory=Node3Thresholds)
 
-    def judgment_context_table(self) -> str:
+    def judgement_context_table(self) -> str:
         """
         Qwen 3.5'e gönderilecek threshold tablosunu config'ten üretir.
         Hardcode markdown string yok — değer değişirse tablo otomatik güncellenir.
@@ -247,7 +247,7 @@ class ModelConfig:
     model_name:  str    # Model name sent to llama.cpp
     temperature: float
     port:        int    # Reference for start_model.sh
-    role:        str    # "codegen" | "judgment"
+    role:        str    # "codegen" | "judgement"
 
 
 @dataclass(frozen=True)
@@ -267,7 +267,7 @@ class ModelRegistry:
         """Sıralı çalışma sırası: [M1, M2, M3]."""
         return [self.M1, self.M2, self.M3]
 
-    def judgment_model(self) -> ModelConfig:
+    def judgement_model(self) -> ModelConfig:
         return self.QWEN
 
     def api_key(self) -> str:
@@ -313,9 +313,9 @@ def _cloud_registry() -> ModelRegistry:
             model_id="QWEN",
             base_url=os.getenv("QWEN_BASE_URL", "http://localhost:8004/v1"),
             model_name="qwen3.5-35b-a3b",
-            temperature=0.3,   # Low temperature for judgment consistency
+            temperature=0.3,   # Low temperature for judgement consistency
             port=8004,
-            role="judgment",
+            role="judgement",
         ),
     )
 
@@ -327,7 +327,7 @@ def _local_registry() -> ModelRegistry:
     Tüm codegen rolleri (M1/M2/M3) aynı küçük modele yönlenir:
         Qwen2.5-Coder-7B  — Q4_K_M ~4 GB  — 16 GB'a rahatça sığar
 
-    Judgment için biraz daha küçük:
+    Judgement için biraz daha küçük:
         Qwen2.5-Coder-3B  — Q4_K_M ~2 GB
 
     Tek llama.cpp server (port 8001) tüm roller için yeterli.
@@ -344,20 +344,20 @@ def _local_registry() -> ModelRegistry:
         role="codegen",
     )
 
-    judgment_slot = ModelConfig(
-        model_id="LOCAL_JUDGMENT",
+    judgement_slot = ModelConfig(
+        model_id="LOCAL_JUDGEMENT",
         base_url=local_url,
-        model_name=os.getenv("LOCAL_JUDGMENT_MODEL", "qwen2.5-coder-7b"),
+        model_name=os.getenv("LOCAL_JUDGEMENT_MODEL", "qwen2.5-coder-7b"),
         temperature=0.3,
         port=8001,
-        role="judgment",
+        role="judgement",
     )
 
     return ModelRegistry(
         M1=codegen_slot,
         M2=codegen_slot,
         M3=codegen_slot,
-        QWEN=judgment_slot,
+        QWEN=judgement_slot,
     )
 
 
@@ -421,7 +421,7 @@ ENV=local
 # ── Single server (all roles go here) ──────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
 LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b   # Q4_K_M ~4 GB
-LOCAL_JUDGMENT_MODEL=qwen2.5-coder-7b  # Q4_K_M ~4 GB (codegen ile aynı model)
+LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b  # Q4_K_M ~4 GB (codegen ile aynı model)
 LLAMA_API_KEY=local
 
 # ── Pipeline — keep short ───────────────────────────────────────────
@@ -472,7 +472,7 @@ huggingface-cli download bartowski/Qwen2.5-Coder-7B-Instruct-GGUF \
     --include "*Q4_K_M*" \
     --local-dir ./models/qwen2.5-coder-7b
 
-# Judgment — ~2 GB
+# Judgement — ~2 GB
 huggingface-cli download bartowski/Qwen2.5-Coder-3B-Instruct-GGUF \
     --include "*Q4_K_M*" \
     --local-dir ./models/qwen2.5-coder-7b
@@ -489,10 +489,10 @@ cmake --build llama.cpp/build \
     --config Release -j$(sysctl -n hw.logicalcpu)
 ```
 
-### Start Single Server (codegen and judgment share the same server)
+### Start Single Server (codegen and judgement share the same server)
 
 ```bash
-# Codegen and judgment both go to port 8001
+# Codegen and judgement both go to port 8001
 # Start codegen model on first run:
 ./llama.cpp/llama-server \
     --model ./models/qwen2.5-coder-7b/*.gguf \
@@ -501,10 +501,10 @@ cmake --build llama.cpp/build \
     --temp 0.7
 ```
 
-> In local mode, judgment calls also go to port 8001. llama.cpp
+> In local mode, judgement calls also go to port 8001. llama.cpp
 > handles both over the same port.
-> If you want to run the judgment model (3B) separately, open a different port,
-> but overriding the model name via `LOCAL_JUDGMENT_MODEL` is sufficient.
+> If you want to run the judgement model (3B) separately, open a different port,
+> but overriding the model name via `LOCAL_JUDGEMENT_MODEL` is sufficient.
 
 ### Run Pipeline
 
@@ -537,7 +537,7 @@ huggingface-cli download unsloth/Qwen3-Coder-Next-GGUF \
 huggingface-cli download unsloth/GLM-4.7-Flash-GGUF \
     --include "*UD-Q4_K_XL*" --local-dir ./glm-4.7-flash
 
-# QWEN — Judgment (~24 GB)
+# QWEN — Judgement (~24 GB)
 huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
     --include "*UD-Q4_K_XL*" --local-dir ./qwen3.5-35b
 ```
@@ -621,9 +621,9 @@ from config import model_registry
 MODEL_SEQUENCE = [m.model_id for m in model_registry.codegen_models()]
 # → ["M1", "M2", "M3"] her iki ortamda da
 
-# nodes/judgment.py — unchanged
+# nodes/judgement.py — unchanged
 from config import thresholds
-JUDGMENT_SYSTEM_PROMPT = f"""...\n{thresholds.judgment_context_table()}\n..."""
+JUDGEMENT_SYSTEM_PROMPT = f"""...\n{thresholds.judgement_context_table()}\n..."""
 ```
 
 ---

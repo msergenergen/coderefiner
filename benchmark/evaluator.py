@@ -33,7 +33,7 @@ _EMPTY_TIMING = {
 }
 _EMPTY_TOKENS = {
     "codegen_prompt": 0, "codegen_completion": 0,
-    "judgment_prompt": 0, "judgment_completion": 0, "total": 0,
+    "judgement_prompt": 0, "judgement_completion": 0, "total": 0,
 }
 
 
@@ -190,8 +190,8 @@ if __name__ == "__main__":
         default="V3",
         choices=["V1", "V2", "V3"],
         help=(
-            "V1: Execution + Judgment (Node 2 + Node 3)  |  "
-            "V2: Static Analysis + Judgment (Node 1 + Node 3)  |  "
+            "V1: Execution + Judgement (Node 2 + Node 3)  |  "
+            "V2: Static Analysis + Judgement (Node 1 + Node 3)  |  "
             "V3: Full pipeline (Node 1 + Node 2 + Node 3)"
         ),
     )

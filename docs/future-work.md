@@ -47,7 +47,7 @@ Connects to the test-time compute vs. model scale debate
 **Core idea:**
 Replace fixed, hand-tuned thresholds (CC ≤ 10, MI ≥ 65, pass_rate ≥ 0.90)
 with a learned gating model that predicts whether the current iteration will
-pass judgment — before calling the expensive judgment LLM.
+pass judgement — before calling the expensive judgement LLM.
 
 **Model formulation:**
 
@@ -68,7 +68,7 @@ Training signal:
 **Two usage modes:**
 
 *Early termination:* If P(PASS) is high, skip Node 3 entirely.
-Reduces judgment LLM calls, lowers cost per benchmark run.
+Reduces judgement LLM calls, lowers cost per benchmark run.
 
 *Threshold adaptation:* Replace fixed pass thresholds with
 difficulty-aware and iteration-aware dynamic thresholds.
@@ -82,8 +82,8 @@ to guard against overfitting.
 
 **Academic novelty:**
 Existing LLM-as-a-Judge work delegates all evaluation to the LLM.
-A learned intermediate layer between numeric metrics and LLM judgment —
-"learned metric gating for LLM judgment" — has no direct precedent in the literature.
+A learned intermediate layer between numeric metrics and LLM judgement —
+"learned metric gating for LLM judgement" — has no direct precedent in the literature.
 
 **Ablation opportunity:**
 Compare three configurations: (a) fixed thresholds only, (b) logistic gate only,
@@ -110,7 +110,7 @@ initial_state["node3_improved_prompt"] = summarize_failures(m1_iterations)
 ```
 
 The summarization can be rule-based (top-N failure reasons by frequency)
-or LLM-based (judgment model summarizes M1's trajectory).
+or LLM-based (judgement model summarizes M1's trajectory).
 
 **Academic framing:**
 "Cross-model knowledge transfer via structured feedback" —
@@ -173,7 +173,7 @@ of problem difficulty. Easy problems may benefit from short, direct feedback
 ("replace the O(n²) nested loop with a hash map approach").
 
 **Proposed extension:**
-Add a difficulty conditioning signal to the judgment system prompt.
+Add a difficulty conditioning signal to the judgement system prompt.
 Provide the judge with explicit instructions on feedback granularity
 per difficulty tier:
 

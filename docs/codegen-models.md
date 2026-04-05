@@ -122,7 +122,7 @@ def health_check(model_id: str) -> bool:
 
 ```python
 """
-System prompt şablonları — codegen ve judgment modelleri için.
+System prompt şablonları — codegen ve judgement modelleri için.
 
 Codegen prompt dört katmandan oluşur:
   1. CODEGEN_IDENTITY        — kim olduğu

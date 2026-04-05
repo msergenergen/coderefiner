@@ -1,4 +1,4 @@
-# node3.md — Judgment LLM (Node 3)
+# node3.md — Judgement LLM (Node 3)
 
 ## 1. Purpose
 
@@ -10,9 +10,9 @@ write a **fully self-contained** improved system prompt for the next iteration.
 
 | Decision | Rationale |
 |-------|---------|
-| Judgment model = Qwen 3.5 (independent of M1/M2/M3) | Reduces self-enhancement bias risk [Zheng et al., 2023] |
+| Judgement model = Qwen 3.5 (independent of M1/M2/M3) | Reduces self-enhancement bias risk [Zheng et al., 2023] |
 | `improved_prompt` is **completely rewritten** every iteration | Accumulated prompts produce contradictory instructions (semantic drift) |
-| Threshold table is **embedded** in the judgment prompt | So Qwen 3.5 understands why `mi=48` is poor |
+| Threshold table is **embedded** in the judgement prompt | So Qwen 3.5 understands why `mi=48` is poor |
 | Failing test cases (input/expected/got) are **included verbatim** | Answers "why did it fail?" far better than numeric metrics alone |
 | Fallback mechanism | Rule-based prompt is generated on LLM error — pipeline keeps running |
 
@@ -104,11 +104,11 @@ def compute_numeric_scores(
 
 ---
 
-## 4. nodes/judgment.py
+## 4. nodes/judgement.py
 
 ```python
 """
-LangGraph Node 3: Judgment LLM (Qwen 3.5)
+LangGraph Node 3: Judgement LLM (Qwen 3.5)
 
 Kritik tasarım kararları:
   1. Her iterasyonda improved_prompt TAMAMEN YENİDEN YAZILIR — birikim yok.
@@ -122,7 +122,7 @@ from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
 from models.client import generate
 
-JUDGMENT_MODEL = "QWEN"
+JUDGEMENT_MODEL = "QWEN"
 
 # ── Threshold table — embedded context for Qwen 3.5 ────────────────────────
 _THRESHOLD_CONTEXT = """
@@ -142,7 +142,7 @@ MI < 65 means the code is hard to maintain and likely poorly structured.
 CC > 10 means the function has too many branches and is hard to test.
 """
 
-JUDGMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
+JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
 
 You evaluate Python solutions to competitive programming problems using static analysis
 results (Node 1) and sandbox execution results (Node 2).
@@ -174,7 +174,7 @@ Schema:
 }}"""
 
 
-def judgment_node(state: PipelineState) -> PipelineState:
+def judgement_node(state: PipelineState) -> PipelineState:
     """
     Node 3: Metrikleri ve başarısız test case'leri değerlendirir.
 
@@ -192,7 +192,7 @@ def judgment_node(state: PipelineState) -> PipelineState:
         bandit_high=state.get("node1_bandit_high", False),
     )
 
-    llm_scores = _get_llm_judgment(
+    llm_scores = _get_llm_judgement(
         numeric_scores=numeric,
         code=state["stripped_code"],   # comments stripped — prevents bias
         problem=state["problem"],
@@ -225,7 +225,7 @@ def judgment_node(state: PipelineState) -> PipelineState:
 
 # ── Prompt construction ─────────────────────────────────────────────────────
 
-def _get_llm_judgment(
+def _get_llm_judgement(
     numeric_scores: dict,
     code: str,
     problem: str,
@@ -234,7 +234,7 @@ def _get_llm_judgment(
     difficulty: str,
     iteration: int,
 ) -> dict:
-    user_prompt = _build_judgment_prompt(
+    user_prompt = _build_judgement_prompt(
         numeric_scores=numeric_scores,
         code=code,
         problem=problem,
@@ -246,23 +246,23 @@ def _get_llm_judgment(
 
     try:
         raw = generate(
-            model_id=JUDGMENT_MODEL,
-            system_prompt=JUDGMENT_SYSTEM_PROMPT,
+            model_id=JUDGEMENT_MODEL,
+            system_prompt=JUDGEMENT_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             max_tokens=1024,
         )
-        return _parse_judgment(raw)
+        return _parse_judgement(raw)
     except Exception:
         # LLM error → do not stop pipeline, use rule-based fallback
         return {
             "originality":            5,
             "error_handling":         5,
-            "failure_reasons":        ["judgment_llm_error"],
+            "failure_reasons":        ["judgement_llm_error"],
             "improved_system_prompt": _fallback_prompt(node1_issues, failed_cases),
         }
 
 
-def _build_judgment_prompt(
+def _build_judgement_prompt(
     numeric_scores: dict,
     code: str,
     problem: str,
@@ -370,7 +370,7 @@ def _fallback_prompt(
     return "\n".join(parts)
 
 
-def _parse_judgment(raw: str) -> dict:
+def _parse_judgement(raw: str) -> dict:
     """LLM yanıtından JSON çıkarır."""
     match = re.search(r"```(?:json)?\s*(.*?)```", raw, re.DOTALL)
     json_str = match.group(1).strip() if match else raw.strip()
@@ -405,7 +405,7 @@ _MODEL_CONFIG: dict[str, tuple[str, str, float]] = {
     "M3":   (os.getenv("M3_BASE_URL",   "http://localhost:8003/v1"), "minimax-m2.5",  0.7),
     "QWEN": (os.getenv("QWEN_BASE_URL", "http://localhost:8004/v1"), "qwen3.5",       0.3),
     #                                                                              ↑
-    #                              Low temperature for judgment → consistent scores
+    #                              Low temperature for judgement → consistent scores
 }
 ```
 
@@ -461,7 +461,7 @@ def build_system_prompt(improved_prompt: str | None = None) -> str:
 ```bash
 python -c "
 from pipeline.state import PipelineState
-from nodes.judgment import judgment_node
+from nodes.judgement import judgement_node
 
 state: PipelineState = {
     'active_model': 'M1', 'iteration': 2, 'max_iterations': 10,
@@ -490,7 +490,7 @@ def two_sum(nums, target):
     'memory_log': [], 'final_status': 'PENDING',
 }
 
-result = judgment_node(state)
+result = judgement_node(state)
 print('Total score:    ', result['node3_total_score'])
 print('Pass:           ', result['node3_pass'])
 print('Failure reasons:', result['node3_failure_reasons'])

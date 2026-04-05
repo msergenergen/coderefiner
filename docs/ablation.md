@@ -5,7 +5,7 @@
 ### Research Question
 
 > Can a multi-stage iterative refinement pipeline that integrates static code analysis,
-> sandboxed execution, and LLM-based judgment mechanisms
+> sandboxed execution, and LLM-based judgement mechanisms
 > meaningfully improve the LiveCodeBench task success rate of
 > selected open-weight models compared to a single-shot baseline?
 
@@ -37,8 +37,8 @@ Each variant runs independently. Separate results are obtained for each model pe
 |---------|--------|--------|--------|----------|
 | **V0** — Single-shot baseline | ✗ | ✗ | ✗ | Pipeline yok, tek deneme |
 | **V1** — +Execution | ✗ | ✓ | ✗ | Feedback from test results only |
-| **V2** — +Static+Execution | ✓ | ✓ | ✗ | Statik analiz + test, judgment yok |
-| **V3** — +Execution+Judgment | ✗ | ✓ | ✓ | Test + judgment, statik analiz yok |
+| **V2** — +Static+Execution | ✓ | ✓ | ✗ | Statik analiz + test, judgement yok |
+| **V3** — +Execution+Judgement | ✗ | ✓ | ✓ | Test + judgement, statik analiz yok |
 | **V4** — Full Pipeline | ✓ | ✓ | ✓ | Tam sistem |
 
 ### What Each Variant Answers
@@ -47,12 +47,12 @@ Each variant runs independently. Separate results are obtained for each model pe
 V0 → Modelin doğal yeteneği nedir? (tavan referansı)
 V1 → Sadece "doğru cevap bu" bilgisi yeterli mi?
 V2 → Statik analiz feedback'e ek katkı sağlıyor mu?
-V3 → Judgment LLM olmadan execution yeterli mi?
+V3 → Judgement LLM olmadan execution yeterli mi?
 V4 → Tüm bileşenler birlikte ne kadar katkı sağlıyor?
 
 V2 - V1 farkı → Node 1'in marjinal katkısı
 V4 - V3 farkı → Node 1'in V4 içindeki katkısı
-V3 - V1 farkı → Node 3'ün (Judgment) marjinal katkısı
+V3 - V1 farkı → Node 3'ün (Judgement) marjinal katkısı
 ```
 
 ---
@@ -63,7 +63,7 @@ V3 - V1 farkı → Node 3'ün (Judgment) marjinal katkısı
 H1: V4 TSR ≥ V0 TSR + 15 puan (easy sorularda)
     Gerekçe: Execution feedback en az 2 iterasyonda yanlış kodu düzeltir
 
-H2: V3 TSR > V2 TSR (Judgment katkısı > Statik analiz katkısı)
+H2: V3 TSR > V2 TSR (Judgement katkısı > Statik analiz katkısı)
     Gerekçe: failed_cases + improved_prompt daha actionable
 
 H3: Easy sorularda pipeline katkısı < Hard sorularda katkı
@@ -338,7 +338,7 @@ def build_graph(variant: str = "V4") -> StateGraph:
     g.add_node("static_analysis",   static_analysis_node)
     g.add_node("sandbox",           sandbox_node)
     g.add_node("strip_comments",    strip_comments_node)
-    g.add_node("judgment",          judgment_node)
+    g.add_node("judgement",          judgement_node)
     g.add_node("log_iteration",     log_iteration_node)
     g.add_node("log_severity_stop", log_severity_stop_node)
     g.add_node("write_memory_final",_write_memory_final_node)
@@ -352,7 +352,7 @@ def build_graph(variant: str = "V4") -> StateGraph:
         g.add_edge("codegen", "static_analysis")
         g.add_conditional_edges(
             "static_analysis", severity_gate,
-            {"to_node2": "sandbox", "to_node3": "judgment",
+            {"to_node2": "sandbox", "to_node3": "judgement",
              "stop_high": "log_severity_stop"},
         )
     else:
@@ -363,11 +363,11 @@ def build_graph(variant: str = "V4") -> StateGraph:
 
     # Node 3 yok → execution sonucu direkt log'a git
     if use_node3:
-        g.add_edge("strip_comments", "judgment")
-        g.add_edge("judgment",       "log_iteration")
+        g.add_edge("strip_comments", "judgement")
+        g.add_edge("judgement",       "log_iteration")
     else:
-        # without judgment: PASS if pass_rate meets threshold
-        # Handle this via _no_judgment_gate inside log_iteration_node
+        # without judgement: PASS if pass_rate meets threshold
+        # Handle this via _no_judgement_gate inside log_iteration_node
         g.add_edge("strip_comments", "log_iteration")
 
     g.add_conditional_edges(

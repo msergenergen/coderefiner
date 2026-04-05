@@ -25,8 +25,8 @@ _EMPTY_TIMING = {
 _EMPTY_TOKENS = {
     "codegen_prompt":      0,
     "codegen_completion":  0,
-    "judgment_prompt":     0,
-    "judgment_completion": 0,
+    "judgement_prompt":     0,
+    "judgement_completion": 0,
     "total":               0,
 }
 

@@ -158,7 +158,7 @@ def base_state():
             },
             "tokens": {
                 "codegen_prompt": 0, "codegen_completion": 0,
-                "judgment_prompt": 0, "judgment_completion": 0, "total": 0
+                "judgement_prompt": 0, "judgement_completion": 0, "total": 0
             },
             "memory_log":   [],
             "final_status": "PENDING",

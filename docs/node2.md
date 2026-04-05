@@ -532,7 +532,7 @@ def run_pipeline_for_problem(problem_row: dict, run_id: str) -> dict:
 Node 2 outputs are passed to Node 3 as follows:
 
 ```python
-# In node3's user prompt (nodes/judgment.py):
+# In node3's user prompt (nodes/judgement.py):
 
 ## Node 2 — Execution Results
 

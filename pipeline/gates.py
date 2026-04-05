@@ -14,7 +14,7 @@ def severity_gate(state: PipelineState) -> str:
     Routing after Node 1.
 
     "to_node2"  → OK  — run sandbox
-    "to_node3"  → LOW — skip sandbox, go directly to judgment
+    "to_node3"  → LOW — skip sandbox, go directly to judgement
     "stop_high" → HIGH — go to log_severity_stop_node
     """
     sev = state["node1_severity"]

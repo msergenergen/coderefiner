@@ -59,7 +59,7 @@ Sadece public test'lerle cpu_ms ve ram_mb ölçer.
 
 ---
 
-## Node 3 — Judgment LLM (Qwen3.5-35B)
+## Node 3 — Judgement LLM (Qwen3.5-35B)
 
 ### Puanlama Rubric'i (toplam 100p)
 
@@ -69,8 +69,8 @@ Sadece public test'lerle cpu_ms ve ram_mb ölçer.
 | **efficiency** | cpu_ms + ram_mb | `(1 − cpu/5000 + 1 − ram/512) / 2 × 20` | **20p** | Deterministik |
 | **quality** | CC + MI | `(mi/100 + 1 − cc/20) / 2 × 20` | **20p** | Deterministik |
 | **security** | bandit | `15 − high×15 − medium×3` | **15p** | Deterministik |
-| **originality** | Qwen judgment | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
-| **error_handling** | Qwen judgment | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
+| **originality** | Qwen judgement | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
+| **error_handling** | Qwen judgement | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |
 | **TOPLAM** | | | **100p** | %80 deterministik |
 
 ### Puan Dağılımı

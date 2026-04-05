@@ -86,7 +86,7 @@ def _collect_issues(
 ) -> list:
     """
     Produces human-readable issue sentences from numeric metrics.
-    These are added directly to the Node 3 judgment prompt.
+    These are added directly to the Node 3 judgement prompt.
     """
     issues = []
 

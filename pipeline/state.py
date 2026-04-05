@@ -24,7 +24,7 @@ class PipelineState(TypedDict):
 
     # ── Code generation ───────────────────────────────────────────────
     generated_code: str   # LLM output — used by sandbox and log
-    stripped_code:  str   # Comment-stripped version — only judgment sees this
+    stripped_code:  str   # Comment-stripped version — only judgement sees this
 
     # ── Node 1 outputs ──────────────────────────────────────────────
     node1_cc:                float
@@ -62,7 +62,7 @@ class PipelineState(TypedDict):
     #   "codegen_ms": 0,   ← written by codegen_node
     #   "node1_ms":   0,   ← written by static_analysis_node
     #   "node2_ms":   0,   ← written by sandbox_node (stays 0 when LOW)
-    #   "node3_ms":   0,   ← written by judgment_node
+    #   "node3_ms":   0,   ← written by judgement_node
     #   "total_ms":   0    ← computed by log_iteration_node
     # }
 
@@ -70,8 +70,8 @@ class PipelineState(TypedDict):
     # {
     #   "codegen_prompt":      0,   ← written by codegen_node
     #   "codegen_completion":  0,   ← written by codegen_node
-    #   "judgment_prompt":     0,   ← written by judgment_node (0 on STOP_HIGH)
-    #   "judgment_completion": 0,   ← written by judgment_node (0 on STOP_HIGH)
+    #   "judgement_prompt":     0,   ← written by judgement_node (0 on STOP_HIGH)
+    #   "judgement_completion": 0,   ← written by judgement_node (0 on STOP_HIGH)
     #   "total":               0    ← computed by log_iteration_node
     # }
 

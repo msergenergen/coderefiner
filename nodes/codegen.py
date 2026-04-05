@@ -69,7 +69,7 @@ def codegen_node(state: PipelineState) -> PipelineState:
         tokens["codegen_completion"] = response.usage.completion_tokens
         tokens["total"] = (
             tokens.get("codegen_prompt", 0) + tokens.get("codegen_completion", 0) +
-            tokens.get("judgment_prompt", 0) + tokens.get("judgment_completion", 0)
+            tokens.get("judgement_prompt", 0) + tokens.get("judgement_completion", 0)
         )
 
     return {

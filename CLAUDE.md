@@ -27,7 +27,7 @@ Active environment is determined by the `.env` symlink in the project root.
 | `local` | Mac Mini M4 16GB | Apple Metal | `ln -sf .env.local .env` |
 | `cloud` | Vast.ai A100 80GB | CUDA | `ln -sf .env.cloud .env` |
 
-**Local** (ENV=local): Qwen2.5-Coder-7B on port 8001 — used for all roles (M1/M2/M3 + judgment).
+**Local** (ENV=local): Qwen2.5-Coder-7B on port 8001 — used for all roles (M1/M2/M3 + judgement).
 **Cloud** (ENV=cloud): Full model set on separate ports (see Models section).
 
 The `.env` file is never committed to git. Create the appropriate env file and symlink
@@ -42,11 +42,11 @@ as the first setup step (see `docs/setup.md` section A6 for local, B6 for cloud)
 | M1 | gpt-oss-20b (Unsloth GGUF) | GGUF | 8001 | ~11 GB | Apache 2.0; `--jinja` required |
 | M2 | Qwen3-Coder-Next (Unsloth GGUF) | GGUF | 8002 | ~46 GB | Dominant model; determines hardware |
 | M3 | GLM-4.7-Flash (Unsloth GGUF) | GGUF | 8003 | ~18 GB | `--repeat-penalty 1.0` required |
-| QWEN | Qwen3.5-35B-A3B (Unsloth GGUF) | GGUF | 8004 | ~24 GB | Judgment only; independent model |
+| QWEN | Qwen3.5-35B-A3B (Unsloth GGUF) | GGUF | 8004 | ~24 GB | Judgement only; independent model |
 
 All models expose an **OpenAI-compatible API** (`/v1/chat/completions`).
 The pipeline connects to all via the `openai` Python library.
-Codegen order is fixed: M1 → M2 → M3. Judgment calls QWEN every iteration.
+Codegen order is fixed: M1 → M2 → M3. Judgement calls QWEN every iteration.
 
 In local mode, all roles (M1/M2/M3/QWEN) route to port 8001 (Qwen2.5-Coder-7B).
 
@@ -69,9 +69,9 @@ Severity Gate
   └─ OK    ↓
 Node 2: Sandbox & Execution  (lcb_runner correctness + cpu_ms · ram_mb)
   ↓
-strip_comments          ← removes comments before judgment (bias prevention)
+strip_comments          ← removes comments before judgement (bias prevention)
   ↓
-Node 3: Judgment LLM  (100-point rubric + improved_prompt)
+Node 3: Judgement LLM  (100-point rubric + improved_prompt)
   ↓
 log_iteration           ← writes to memory.md + iterations/JSON
   ↓
@@ -97,7 +97,7 @@ project/
 │   ├── codegen-models.md      ← models/client.py, prompts.py
 │   ├── node1.md               ← static analysis: CC, MI, Halstead, Bandit
 │   ├── node2.md               ← two-phase sandbox: lcb_runner + runtime
-│   ├── node3.md               ← judgment LLM, rubric, improved_prompt
+│   ├── node3.md               ← judgement LLM, rubric, improved_prompt
 │   ├── graph.md               ← LangGraph graph, PipelineState, gates, cleaner
 │   ├── memory-logging.md      ← run_info.json, memory.md, iteration JSON
 │   ├── testing.md             ← 10 test files, pilot checklist, benchmark
@@ -116,7 +116,7 @@ project/
 │   ├── static_analysis.py     ← Node 1
 │   ├── cleaner.py             ← strip_comments_node
 │   ├── sandbox.py             ← Node 2
-│   └── judgment.py            ← Node 3
+│   └── judgement.py            ← Node 3
 ├── metrics/
 │   ├── complexity.py          ← radon + lizard
 │   ├── security.py            ← bandit

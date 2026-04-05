@@ -10,15 +10,15 @@ codegen             ← timing["codegen_ms"] + tokens["codegen_*"] yazılır
 static_analysis     ← timing["node1_ms"] yazılır
   ↓
 severity_gate ──── HIGH ──→ log_severity_stop_node → END
-  │                              (STOP_HIGH: kısmi timing, sıfır token[judgment])
+  │                              (STOP_HIGH: kısmi timing, sıfır token[judgement])
   │ LOW / OK
   ↓
 sandbox             ← timing["node2_ms"] yazılır  (LOW → atlanır, 0 kalır)
   ↓
 strip_comments      ← generated_code → stripped_code (yorumlar kaldırılır)
   ↓                   generated_code değişmez (sandbox + log bu kodu kullandı)
-judgment            ← stripped_code üzerinden değerlendirir
-  ↓                   timing["node3_ms"] + tokens["judgment_*"] yazılır
+judgement            ← stripped_code üzerinden değerlendirir
+  ↓                   timing["node3_ms"] + tokens["judgement_*"] yazılır
 log_iteration_node  ← Her iterasyon: memory.md + JSON yazılır
   ↓                   timing["total_ms"] hesaplanır
 iteration_gate
@@ -29,8 +29,8 @@ iteration_gate
 
 **`strip_comments` neden burada?**
 - Sandbox already ran `generated_code` — test results belong to the real code, must not change
-- Judgment LLM must not be biased by comments: lines like `# This is very efficient` inflate scores
-- `stripped_code` is for judgment only; log, memory.md, and JSON always store `generated_code`
+- Judgement LLM must not be biased by comments: lines like `# This is very efficient` inflate scores
+- `stripped_code` is for judgement only; log, memory.md, and JSON always store `generated_code`
 
 ---
 
@@ -62,7 +62,7 @@ class PipelineState(TypedDict):
 
     # ── Code generation ───────────────────────────────────────────────────
     generated_code: str   # LLM output — used by sandbox and log
-    stripped_code:  str   # Comment-stripped version — only judgment sees this
+    stripped_code:  str   # Comment-stripped version — only judgement sees this
 
     # ── Node 1 outputs ──────────────────────────────────────────────
     node1_cc:          float
@@ -98,7 +98,7 @@ class PipelineState(TypedDict):
     #   "codegen_ms": 0,   ← codegen_node yazar
     #   "node1_ms":   0,   ← static_analysis_node yazar
     #   "node2_ms":   0,   ← written by sandbox_node (stays 0 when LOW)
-    #   "node3_ms":   0,   ← judgment_node yazar
+    #   "node3_ms":   0,   ← judgement_node yazar
     #   "total_ms":   0    ← log_iteration_node hesaplar
     # }
 
@@ -106,8 +106,8 @@ class PipelineState(TypedDict):
     # {
     #   "codegen_prompt":      0,   ← codegen_node yazar
     #   "codegen_completion":  0,   ← codegen_node yazar
-    #   "judgment_prompt":     0,   ← judgment_node yazar (STOP_HIGH'da 0)
-    #   "judgment_completion": 0,   ← judgment_node yazar (STOP_HIGH'da 0)
+    #   "judgement_prompt":     0,   ← judgement_node yazar (STOP_HIGH'da 0)
+    #   "judgement_completion": 0,   ← judgement_node yazar (STOP_HIGH'da 0)
     #   "total":               0    ← log_iteration_node hesaplar
     # }
 
@@ -137,7 +137,7 @@ def severity_gate(state: PipelineState) -> str:
     Node 1 sonrası yönlendirme.
 
     "to_node2"  → OK  — sandbox çalışsın
-    "to_node3"  → LOW — sandbox atla, direkt judgment
+    "to_node3"  → LOW — sandbox atla, direkt judgement
     "stop_high" → HIGH — log_severity_stop_node'a git
     """
     sev = state["node1_severity"]
@@ -176,13 +176,13 @@ def iteration_gate(state: PipelineState) -> str:
 LangGraph StateGraph tanımı.
 
 Her iterasyon log_iteration_node üzerinden memory.md + JSON'a yazılır:
-  LOOP      — judgment sonrası, eşik geçilemedi
-  PASS      — judgment sonrası, eşik geçildi
-  STOP_MAX  — judgment sonrası, max_iter doldu
+  LOOP      — judgement sonrası, eşik geçilemedi
+  PASS      — judgement sonrası, eşik geçildi
+  STOP_MAX  — judgement sonrası, max_iter doldu
   STOP_HIGH — severity HIGH, Node 2/3 çalışmadı
 
 Her node kendi timing'ini state["timing"]'e yazar.
-Codegen ve judgment node'ları token sayılarını state["tokens"]'a yazar.
+Codegen ve judgement node'ları token sayılarını state["tokens"]'a yazar.
 """
 from langgraph.graph import StateGraph, END
 
@@ -194,7 +194,7 @@ from nodes.codegen         import codegen_node
 from nodes.static_analysis import static_analysis_node
 from nodes.sandbox         import sandbox_node
 from nodes.cleaner         import strip_comments_node   # ← yeni
-from nodes.judgment        import judgment_node
+from nodes.judgement        import judgement_node
 from memory.logger         import log_iteration_node, log_severity_stop_node
 
 
@@ -221,7 +221,7 @@ def build_graph() -> StateGraph:
     g.add_node("static_analysis",     static_analysis_node)
     g.add_node("sandbox",             sandbox_node)
     g.add_node("strip_comments",      strip_comments_node)      # ← yeni
-    g.add_node("judgment",            judgment_node)
+    g.add_node("judgement",            judgement_node)
     g.add_node("log_iteration",       log_iteration_node)
     g.add_node("log_severity_stop",   log_severity_stop_node)
     g.add_node("write_memory_final",  _write_memory_final_node)
@@ -232,9 +232,9 @@ def build_graph() -> StateGraph:
     g.set_entry_point("codegen")
 
     g.add_edge("codegen",            "static_analysis")
-    g.add_edge("sandbox",            "strip_comments")    # sandbox → strip → judgment
-    g.add_edge("strip_comments",     "judgment")          # ← yeni
-    g.add_edge("judgment",           "log_iteration")
+    g.add_edge("sandbox",            "strip_comments")    # sandbox → strip → judgement
+    g.add_edge("strip_comments",     "judgement")          # ← yeni
+    g.add_edge("judgement",           "log_iteration")
     g.add_edge("write_memory_final", "next_model")
 
     # ── Conditional: Severity Gate ────────────────────────────────────
@@ -243,7 +243,7 @@ def build_graph() -> StateGraph:
         severity_gate,
         {
             "to_node2":  "sandbox",
-            "to_node3":  "judgment",
+            "to_node3":  "judgement",
             "stop_high": "log_severity_stop",
         },
     )
@@ -291,7 +291,7 @@ load_dotenv()
 # Initial timing/token values that persist across iterations
 _EMPTY_TIMING = {"codegen_ms": 0, "node1_ms": 0, "node2_ms": 0, "node3_ms": 0, "total_ms": 0}
 _EMPTY_TOKENS = {"codegen_prompt": 0, "codegen_completion": 0,
-                 "judgment_prompt": 0, "judgment_completion": 0, "total": 0}
+                 "judgement_prompt": 0, "judgement_completion": 0, "total": 0}
 
 
 def run_pipeline_for_problem(problem_row: dict, run_id: str) -> dict:
@@ -391,7 +391,7 @@ from pipeline.graph import build_graph
 g = build_graph()
 print('Graf derlendi.')
 # 10 node beklenir:
-# codegen, static_analysis, sandbox, strip_comments, judgment,
+# codegen, static_analysis, sandbox, strip_comments, judgement,
 # log_iteration, log_severity_stop,
 # write_memory_final, stop_max, next_model
 "
@@ -484,7 +484,7 @@ def s(q='q001', **kw):
         'node3_improved_prompt': 'Boş liste kontrolü ekle.',
         'timing': {'codegen_ms':3200,'node1_ms':45,'node2_ms':1200,'node3_ms':2800,'total_ms':7245},
         'tokens': {'codegen_prompt':450,'codegen_completion':320,
-                   'judgment_prompt':1200,'judgment_completion':580,'total':2550},
+                   'judgement_prompt':1200,'judgement_completion':580,'total':2550},
         'memory_log': [], 'final_status': 'PENDING',
     }
     base.update(kw)
@@ -500,7 +500,7 @@ log_iteration_node(s('q001', iteration=10, node3_total_score=55, node3_pass=Fals
 log_severity_stop_node(s('q002', node1_severity='HIGH',
                           timing={'codegen_ms':3100,'node1_ms':42,'node2_ms':0,'node3_ms':0,'total_ms':3142},
                           tokens={'codegen_prompt':420,'codegen_completion':310,
-                                  'judgment_prompt':0,'judgment_completion':0,'total':730}))
+                                  'judgement_prompt':0,'judgement_completion':0,'total':730}))
 
 rows = read_memory()
 print('Satır sayısı:', len(rows))
@@ -541,14 +541,14 @@ Models:  {'M1': 'gpt-oss-20b', 'M2': 'qwen3-coder-next', ...}
 
 ```python
 """
-Judgment öncesi yorum temizleyici.
+Judgement öncesi yorum temizleyici.
 
 Neden burada:
   - Sandbox generated_code'u çalıştırdı — test sonuçları gerçek koda ait
-  - Judgment LLM yorumlardan bias almasın:
+  - Judgement LLM yorumlardan bias almasın:
       # This is a very efficient algorithm → misleads scoring
       # TODO: can be improved → unnecessary noise
-  - stripped_code sadece judgment için; log ve memory.md generated_code'u saklar
+  - stripped_code sadece judgement için; log ve memory.md generated_code'u saklar
 
 Yöntem:
   Python'un tokenize modülü kullanılır.
@@ -615,10 +615,10 @@ def strip_comments(code: str) -> str:
 
 def strip_comments_node(state: PipelineState) -> PipelineState:
     """
-    LangGraph node: sandbox → judgment arasında çalışır.
+    LangGraph node: sandbox → judgement arasında çalışır.
 
     generated_code  → değişmez (sandbox çalıştırdı, log bu kodu saklar)
-    stripped_code   → judgment LLM'e bu gönderilir
+    stripped_code   → judgement LLM'e bu gönderilir
     """
     cleaned = strip_comments(state["generated_code"])
     return {**state, "stripped_code": cleaned}
@@ -648,12 +648,12 @@ strip_comments("def f(\n    # missing closing paren")
 
 ### Connection to node3.md
 
-`judgment_node` now uses `state["stripped_code"]`
+`judgement_node` now uses `state["stripped_code"]`
 instead of `state["generated_code"]`:
 
 ```python
-# nodes/judgment.py — relevant line
-llm_scores = _get_llm_judgment(
+# nodes/judgement.py — relevant line
+llm_scores = _get_llm_judgement(
     code=state["stripped_code"],    # ← not generated_code
     ...
 )

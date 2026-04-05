@@ -1,12 +1,12 @@
 """
-Comment stripper before judgment.
+Comment stripper before judgement.
 
 Why here:
   - Sandbox already ran generated_code — test results belong to the real code
-  - Judgment LLM must not be biased by comments:
+  - Judgement LLM must not be biased by comments:
       # This is a very efficient algorithm → misleads scoring
       # TODO: can be improved → unnecessary noise
-  - stripped_code is only for judgment; log and memory.md always store generated_code
+  - stripped_code is only for judgement; log and memory.md always store generated_code
 
 Method:
   Python's tokenize module is used instead of AST parsing because:
@@ -72,10 +72,10 @@ def strip_comments(code: str) -> str:
 
 def strip_comments_node(state: PipelineState) -> PipelineState:
     """
-    LangGraph node: runs between sandbox and judgment.
+    LangGraph node: runs between sandbox and judgement.
 
     generated_code  → unchanged (sandbox ran it; log stores this code)
-    stripped_code   → sent to judgment LLM
+    stripped_code   → sent to judgement LLM
     """
     cleaned = strip_comments(state["generated_code"])
     return {**state, "stripped_code": cleaned}

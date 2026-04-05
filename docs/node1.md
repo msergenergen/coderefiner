@@ -341,7 +341,7 @@ def _collect_issues(
 ) -> list[str]:
     """
     Sayısal metriklerden okunabilir bulgu cümleleri üretir.
-    Node 3 judgment prompt'una doğrudan eklenir.
+    Node 3 judgement prompt'una doğrudan eklenir.
     """
     issues = []
 

@@ -20,7 +20,7 @@
 ## Research Question
 
 > Can a multi-stage iterative refinement pipeline integrating static code analysis,
-> sandboxed execution, and LLM-based judgment mechanisms
+> sandboxed execution, and LLM-based judgement mechanisms
 > meaningfully improve the LiveCodeBench task success rate of
 > selected open-weight models compared to a single-shot baseline?
 
@@ -47,8 +47,8 @@ Run the following 5 variants separately for each model:
 |---------|--------|--------|--------|----------|
 | V0 — Single-shot | ✗ | ✗ | ✗ | Vanilla baseline, tek deneme |
 | V1 — +Execution | ✗ | ✓ | ✗ | Feedback from test results only |
-| V2 — +Static | ✓ | ✓ | ✗ | Test + statik analiz, judgment yok |
-| V3 — +Judgment | ✗ | ✓ | ✓ | Test + judgment, statik analiz yok |
+| V2 — +Static | ✓ | ✓ | ✗ | Test + statik analiz, judgement yok |
+| V3 — +Judgement | ✗ | ✓ | ✓ | Test + judgement, statik analiz yok |
 | V4 — Full Pipeline | ✓ | ✓ | ✓ | Tam sistem |
 
 **0.3 Hipotezler**
@@ -164,19 +164,19 @@ Checkpoint:
 pytest tests/test_lcb_eval.py tests/test_runtime.py -v
 ```
 
-### 2.4 Node 3 — Judgment ✅
+### 2.4 Node 3 — Judgement ✅
 
 > `docs/node3.md`
 
 ```
 [ ] metrics/scoring.py    — compute_numeric_scores(), rubric
-[ ] nodes/judgment.py     — judgment_node(), JUDGMENT_SYSTEM_PROMPT
-                            _get_llm_judgment(), fallback
+[ ] nodes/judgement.py     — judgement_node(), JUDGEMENT_SYSTEM_PROMPT
+                            _get_llm_judgement(), fallback
 ```
 
 Checkpoint:
 ```bash
-ENV=local python -c "from nodes.judgment import judgment_node; print('OK')"
+ENV=local python -c "from nodes.judgement import judgement_node; print('OK')"
 ```
 
 ### 2.5 Pipeline Orkestrasyonu ✅
@@ -265,7 +265,7 @@ ENV=local LCB_SAMPLE_SIZE=1 LCB_DIFFICULTY=easy python main.py
 [ ] max_iterations ayarı — 10 mu fazla?
 [ ] PASS threshold'ları — 80/70/60 doğru mu?
 [ ] Edge case threshold — 8 mi yoksa 5 mi?
-[ ] Judgment prompt kalitesi — improved_prompt actionable mı?
+[ ] Judgement prompt kalitesi — improved_prompt actionable mı?
 ```
 
 ---
@@ -328,7 +328,7 @@ ENV=local LCB_SAMPLE_SIZE=1 LCB_DIFFICULTY=easy python main.py
 
 ```
 [ ] H1: McNemar testi — V4 vs V0 (p < 0.05?)
-[ ] H2: V3 TSR vs V2 TSR — Judgment > Static?
+[ ] H2: V3 TSR vs V2 TSR — Judgement > Static?
 [ ] H3: Easy/Hard kazanım grafiği — tavan etkisi var mı?
 [ ] H4: STOP_HIGH oranı yüksek modelde pipeline katkısı düşük mü?
 ```
@@ -398,7 +398,7 @@ Büyük dil modelleri (BDM) kod üretiminde güçlü performans sergilemekle bir
 
 **Abstract (English — exact translation of Özetçe):**
 
-Large language models (LLMs) demonstrate strong performance in code generation; however, single-shot approaches remain limited due to the absence of systematic feedback mechanisms. This study proposes a multi-stage iterative code refinement approach that integrates static code analysis, sandboxed execution, and LLM-based judgment. The three-node system computes structural quality metrics, evaluates functional correctness, and generates comprehensive feedback through a dedicated judgment model. The contribution of each node is isolated through a five-variant ablation study; results are assessed using Task Success Rate and the McNemar test. Findings indicate that multi-modal iterative feedback significantly improves success rates over single-shot baselines.
+Large language models (LLMs) demonstrate strong performance in code generation; however, single-shot approaches remain limited due to the absence of systematic feedback mechanisms. This study proposes a multi-stage iterative code refinement approach that integrates static code analysis, sandboxed execution, and LLM-based judgement. The three-node system computes structural quality metrics, evaluates functional correctness, and generates comprehensive feedback through a dedicated judgement model. The contribution of each node is isolated through a five-variant ablation study; results are assessed using Task Success Rate and the McNemar test. Findings indicate that multi-modal iterative feedback significantly improves success rates over single-shot baselines.
 
 ---
 
@@ -420,12 +420,12 @@ Estimated space allocation per section within the 4-page limit.
 - General pipeline architecture — 1 figure (flow diagram)
 - Node 1: Statik analiz (CC, MI, Halstead, Bandit)
 - Node 2: Two-phase sandbox (lcb_runner + runtime)
-- Node 3: Judgment LLM + rubric + improved_prompt
+- Node 3: Judgement LLM + rubric + improved_prompt
 - Severity gate and iteration gate design decisions
 
 **4. Experimental Setup (~0.4 pages)**
 - Modeller: gpt-oss-20b, Qwen3-Coder-Next, GLM-4.7-Flash
-- Judgment: Qwen3.5-35B-A3B
+- Judgement: Qwen3.5-35B-A3B
 - LCB dataset: N questions, easy/medium/hard distribution
 - Ablation variants V0–V4 (compact table)
 - Evaluation: TSR, McNemar, 95% Wilson CI
@@ -438,7 +438,7 @@ Estimated space allocation per section within the 4-page limit.
 
 **6. Conclusion (~0.2 pages)**
 - Summary of key findings
-- Limitations (sample size, judgment calibration)
+- Limitations (sample size, judgement calibration)
 - Future work
 
 **References (~0.2 pages)**
@@ -498,7 +498,7 @@ Grouped bar chart: V0–V4 × easy/medium/hard TSR comparison.
 
 | Risk | Likelihood | Mitigation |
 |------|----------|-------|
-| Judgment model miscalibrated | Medium | Manual quality check: 20 samples |
+| Judgement model miscalibrated | Medium | Manual quality check: 20 samples |
 | Ceiling effect on easy questions | High | Focus on Medium/Hard results |
 | lcb_runner API change | Low | Pin version, fallback ready |
 | Vast.ai instance instability | Medium | Filter Reliability > 0.95 |

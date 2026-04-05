@@ -13,7 +13,7 @@
 | **Kimi K2.5** (M1) | UD-IQ1_S 1-bit | ~1T (MoE) | 32B | **~85%** | 240 GB (1-bit) | 256 GB RAM + 1×A100 | ~$2.00/sa |
 | **GLM-4.7-Flash** (M2) | GGUF Q4 | ~14B (Flash) | ~14B | ~65–70%¹ | ~9 GB | 1×RTX 4090 | ~$0.50/sa |
 | **MiniMax M2.5** (M3) | GGUF Q4 | 230B (MoE) | 46B | **65%** | ~130 GB | 2×A100 80GB | ~$1.40/sa |
-| **Qwen3.5-35B-A3B** (Judgment) | GGUF Q4 | 35B (MoE) | 3B | ~62%² | ~24 GB | 1×RTX 4090 | ~$0.50/sa |
+| **Qwen3.5-35B-A3B** (Judgement) | GGUF Q4 | 35B (MoE) | 3B | ~62%² | ~24 GB | 1×RTX 4090 | ~$0.50/sa |
 
 > ¹ GLM-4.7-Flash LCB score not separately reported; GLM-4.7 (358B) scores 84.9%, Flash version is much smaller.  
 > ² Qwen3.5-35B-A3B general coding benchmark; no official LCB-specific data.
@@ -53,11 +53,11 @@ Models that could be alternatives to or outperform the current pipeline models.
 
 ---
 
-## 4. Efficient / Small Models (for Judgment or Dummy Testing)
+## 4. Efficient / Small Models (for Judgement or Dummy Testing)
 
 | Model | Params | LCB pass@1 | Min. Memory (Q4) | Vast.ai Hardware | Est. Cost/hr | Notes |
 |-------|-------|------------|-----------------|-----------------|-------------------|--------|
-| **gpt-oss-20B** | 20B | ~45%⁶ | ~11 GB | 1×RTX 4090 | ~$0.50/hr | Sufficient for judgment; small and fast |
+| **gpt-oss-20B** | 20B | ~45%⁶ | ~11 GB | 1×RTX 4090 | ~$0.50/hr | Sufficient for judgement; small and fast |
 | **Qwen3-32B** | 32B | ~55% | ~18 GB | 1×RTX 4090 | ~$0.50/hr | Dense; strong reasoning |
 | **Llama 3.3-70B** | 70B | ~50% | ~39 GB | 1×A6000 48GB | ~$1.10/hr | Mature ecosystem; easy to fine-tune |
 | **Llama 4 Scout** (17B-16E) | ~280B (MoE) | ~52% | ~18 GB (4-bit) | 1×RTX 4090 | ~$0.50/hr | Active 17B; 1M context; fast |
@@ -104,7 +104,7 @@ This is active GPU time; model switching durations (~5–20 min/model) are inclu
 | M1 (ilk deneme) | **Kimi K2.5** | 85% | 240 GB | LCB ve HumanEval'de zirve |
 | M2 (second attempt) | **GLM-4.7-Flash** | ~68% | 9 GB | Fast and small; where Kimi doesn't fit |
 | M3 (third attempt) | **Qwen3-Coder-Next** | ~78% | 46 GB | Best efficiency/memory after Kimi K2.5 |
-| Judgment | **Qwen3.5-35B-A3B** | — | 24 GB | Independent judge; low self-enhancement risk |
+| Judgement | **Qwen3.5-35B-A3B** | — | 24 GB | Independent judge; low self-enhancement risk |
 
 ### Cost-First (budget-constrained thesis work)
 | Role | Recommendation | LCB | Memory | Rationale |
@@ -112,7 +112,7 @@ This is active GPU time; model switching durations (~5–20 min/model) are inclu
 | M1 | **Qwen3-Coder-Next** | ~78% | 46 GB | Near Kimi K2.5 performance at ~30% of the cost |
 | M2 | **GLM-4.7-Flash** | ~68% | 9 GB | Cheapest strong option |
 | M3 | **gpt-oss-20B** | ~45% | 11 GB | Sufficient for ablation testing |
-| Judgment | **gpt-oss-20B** | — | 11 GB | Fast and cheap; runs on the same hardware |
+| Judgement | **gpt-oss-20B** | — | 11 GB | Fast and cheap; runs on the same hardware |
 
 ---
 

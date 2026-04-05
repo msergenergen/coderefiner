@@ -15,7 +15,7 @@ and the next one starts. Memory requirement is determined by the **largest singl
 | gpt-oss-20b (M1) | UD-Q4_K_XL | ~11 GB | Small; runs even on RTX 4090 |
 | Qwen3-Coder-Next (M2) | UD-Q4_K_XL | ~46 GB | **Dominant model** |
 | GLM-4.7-Flash (M3) | UD-Q4_K_XL | ~18 GB | Smaller than Qwen |
-| Qwen3.5-35B-A3B (Judgment) | UD-Q4_K_XL | ~24 GB | Runs after each model |
+| Qwen3.5-35B-A3B (Judgement) | UD-Q4_K_XL | ~24 GB | Runs after each model |
 
 **Practical requirement:** A100 80GB VRAM alone is sufficient — 256 GB RAM is **not required**.
 
@@ -163,7 +163,7 @@ Dominant model Qwen3-Coder-Next (~46 GB) → minimum A100 80GB (~$0.80/hr).
 
 ```
 1. Mac Mini M4 (Ortam 1 — Local Debug)
-   ENV=local, Qwen2.5-Coder-7B (codegen) + Qwen2.5-Coder-3B (judgment), 5 easy soru
+   ENV=local, Qwen2.5-Coder-7B (codegen) + Qwen2.5-Coder-3B (judgement), 5 easy soru
    → Pipeline akışı, gate'ler, memory.md doğrulandı
 
 2. Vast.ai (Ortam 2 — GLM-4.7-Flash ile başla)

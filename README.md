@@ -34,7 +34,7 @@ The pipeline:
 3. For each model, iteratively refines the generated code (up to 10 iterations) using feedback from:
    - **Node 1 – Static Analysis**: Cyclomatic complexity, Maintainability Index, Halstead volume, Bandit security scan
    - **Node 2 – Sandbox Execution**: Runs test cases via lcb_runner, measures CPU/RAM usage
-   - **Node 3 – Judgment LLM**: Scores code on a 100-point rubric, produces an `improved_prompt`
+   - **Node 3 – Judgement LLM**: Scores code on a 100-point rubric, produces an `improved_prompt`
 4. Writes iteration results to `outputs/memory.md` and per-iteration JSON files
 5. Compares against a single-shot baseline (V0) for ablation analysis
 
@@ -45,7 +45,7 @@ The pipeline:
 | V0 | None | Single-shot baseline (no pipeline) |
 | V1 | Node 2 | Execution feedback only |
 | V2 | Node 1 + Node 2 | Static + Execution feedback |
-| V3 | Node 2 + Node 3 | Execution + Judgment |
+| V3 | Node 2 + Node 3 | Execution + Judgement |
 | V4 | All | Full pipeline |
 
 ---
@@ -65,9 +65,9 @@ Severity Gate
   └─ OK    ↓
 Node 2: Sandbox           (lcb_runner correctness + cpu_ms · ram_mb)
   ↓
-strip_comments            (removes comments before judgment — bias prevention)
+strip_comments            (removes comments before judgement — bias prevention)
   ↓
-Node 3: Judgment LLM      (100-point rubric → improved_prompt)
+Node 3: Judgement LLM      (100-point rubric → improved_prompt)
   ↓
 log_iteration             (writes to memory.md + JSON)
   ↓
@@ -178,7 +178,7 @@ cat > .env.local << 'EOF'
 ENV=local
 LOCAL_BASE_URL=http://localhost:8001/v1
 LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b
-LOCAL_JUDGMENT_MODEL=qwen2.5-coder-7b
+LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b
 LLAMA_API_KEY=local
 MAX_ITERATIONS=3
 SANDBOX_TIMEOUT_SEC=15
@@ -311,7 +311,7 @@ huggingface-cli download unsloth/Qwen3-Coder-Next-GGUF --include "*UD-Q4_K_XL*" 
 # M3 (~18 GB)
 huggingface-cli download unsloth/GLM-4.7-Flash-GGUF --include "*UD-Q4_K_XL*" --local-dir /workspace/models/glm-4.7-flash
 
-# Judgment (~24 GB)
+# Judgement (~24 GB)
 huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF --include "*UD-Q4_K_XL*" --local-dir /workspace/models/qwen3.5-35b
 ```
 
@@ -548,7 +548,7 @@ outputs/
 **`memory.md` columns:** `iter | model | model_name | q_id | difficulty | cc | mi | severity | pass_rate | score | status | total_ms | total_tok | json_path`
 
 **Status values:**
-- `LOOP` — judgment threshold not met, will retry
+- `LOOP` — judgement threshold not met, will retry
 - `PASS` — threshold met, moving to next model
 - `STOP_MAX` — max iterations reached
 - `STOP_HIGH` — Node 1 HIGH severity, pipeline stopped early
@@ -567,7 +567,7 @@ llm-code-refinement/
 │   └── start_model.sh         ← Model server launcher
 ├── config/                    ← Settings, thresholds, model registry
 ├── pipeline/                  ← LangGraph graph, state, gates, router
-├── nodes/                     ← codegen, static_analysis, sandbox, cleaner, judgment
+├── nodes/                     ← codegen, static_analysis, sandbox, cleaner, judgement
 ├── metrics/                   ← CC/MI/Halstead (radon), security (bandit)
 ├── sandbox/                   ← lcb_runner wrapper, runtime measurer, import whitelist
 ├── models/                    ← OpenAI-compatible client, codegen prompts

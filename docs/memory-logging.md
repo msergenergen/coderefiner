@@ -93,7 +93,7 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
 - `score` — Node 3 total score (out of 100), 0.0 on STOP_HIGH
 - `status` — LOOP / PASS / STOP_HIGH / STOP_MAX
 - `total_ms` — total duration of the iteration (all nodes)
-- `total_tok` — total tokens consumed in iteration (codegen + judgment)
+- `total_tok` — total tokens consumed in iteration (codegen + judgement)
 - `json` — relative path to the detail file
 
 ---
@@ -121,8 +121,8 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
   "tokens": {
     "codegen_prompt":      450,
     "codegen_completion":  320,
-    "judgment_prompt":    1200,
-    "judgment_completion": 580,
+    "judgement_prompt":    1200,
+    "judgement_completion": 580,
     "total":              2550
   },
 
@@ -177,7 +177,7 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
   "question_id": "q_002", "difficulty": "hard", "status": "STOP_HIGH",
 
   "timing": { "codegen_ms": 3100, "node1_ms": 42, "node2_ms": 0, "node3_ms": 0, "total_ms": 3142 },
-  "tokens": { "codegen_prompt": 420, "codegen_completion": 310, "judgment_prompt": 0, "judgment_completion": 0, "total": 730 },
+  "tokens": { "codegen_prompt": 420, "codegen_completion": 310, "judgement_prompt": 0, "judgement_completion": 0, "total": 730 },
 
   "node1": {
     "cc": 24.0, "mi": 35.0, "halstead": 2400.0,
@@ -395,7 +395,7 @@ def _write_iteration_json(state: PipelineState, status: str,
         "timing": timing,   # codegen_ms, node1_ms, node2_ms, node3_ms, total_ms
 
         "tokens": tokens,   # codegen_prompt, codegen_completion,
-                            # judgment_prompt, judgment_completion, total
+                            # judgement_prompt, judgement_completion, total
 
         "node1": {
             "cc":          state.get("node1_cc", 0.0),
@@ -433,7 +433,7 @@ def _write_iteration_json(state: PipelineState, status: str,
 
 def log_iteration_node(state: PipelineState) -> PipelineState:
     """
-    LangGraph node: judgment sonrası her iterasyonu loglar.
+    LangGraph node: judgement sonrası her iterasyonu loglar.
     LOOP / PASS / STOP_MAX durumlarını yazar.
     """
     from config import thresholds
@@ -451,7 +451,7 @@ def log_iteration_node(state: PipelineState) -> PipelineState:
     timing  = state.get("timing", {"codegen_ms": 0, "node1_ms": 0,
                                     "node2_ms": 0, "node3_ms": 0, "total_ms": 0})
     tokens  = state.get("tokens", {"codegen_prompt": 0, "codegen_completion": 0,
-                                    "judgment_prompt": 0, "judgment_completion": 0,
+                                    "judgement_prompt": 0, "judgement_completion": 0,
                                     "total": 0})
 
     json_path  = _write_iteration_json(state, status, run_id, timing, tokens)
@@ -472,7 +472,7 @@ def log_severity_stop_node(state: PipelineState) -> PipelineState:
     timing = state.get("timing", {"codegen_ms": 0, "node1_ms": 0,
                                    "node2_ms": 0, "node3_ms": 0, "total_ms": 0})
     tokens = state.get("tokens", {"codegen_prompt": 0, "codegen_completion": 0,
-                                   "judgment_prompt": 0, "judgment_completion": 0,
+                                   "judgement_prompt": 0, "judgement_completion": 0,
                                    "total": 0})
 
     json_path = _write_iteration_json(state, "STOP_HIGH", run_id, timing, tokens)
@@ -559,7 +559,7 @@ class PipelineState(TypedDict):
 
     # ── Token consumption ────────────────────────────────────────────────
     tokens: dict   # {"codegen_prompt": 0, "codegen_completion": 0,
-                   #  "judgment_prompt": 0, "judgment_completion": 0,
+                   #  "judgement_prompt": 0, "judgement_completion": 0,
                    #  "total": 0}
 
     # ── Node 3 score breakdown ────────────────────────────────────────────
@@ -603,13 +603,13 @@ def codegen_node(state: PipelineState) -> PipelineState:
     )
     tokens["total"] = (
         tokens.get("codegen_prompt", 0) + tokens.get("codegen_completion", 0) +
-        tokens.get("judgment_prompt", 0) + tokens.get("judgment_completion", 0)
+        tokens.get("judgement_prompt", 0) + tokens.get("judgement_completion", 0)
     )
 
     return {**state, "generated_code": code, "timing": timing, "tokens": tokens}
 ```
 
-The judgment node follows the same pattern and fills `judgment_prompt` and `judgment_completion`.
+The judgement node follows the same pattern and fills `judgement_prompt` and `judgement_completion`.
 Node 1 and Node 2 write timing but do not consume tokens (no LLM call).
 
 ---
@@ -660,7 +660,7 @@ def s(q='q_001', status_hint='loop', **kw):
         'node3_score_breakdown': {'correctness':10,'efficiency':12,'code_quality':10,'security':10,'originality':10,'error_handling':10},
         'node3_failure_reasons': ['pass_rate düşük'], 'node3_improved_prompt': 'Boş listeyi kontrol et.',
         'timing': {'codegen_ms': 3200, 'node1_ms': 45, 'node2_ms': 1200, 'node3_ms': 2800, 'total_ms': 7245},
-        'tokens': {'codegen_prompt': 450, 'codegen_completion': 320, 'judgment_prompt': 1200, 'judgment_completion': 580, 'total': 2550},
+        'tokens': {'codegen_prompt': 450, 'codegen_completion': 320, 'judgement_prompt': 1200, 'judgement_completion': 580, 'total': 2550},
         'memory_log': [], 'final_status': 'PENDING',
     }
     base.update(kw)

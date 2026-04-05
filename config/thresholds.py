@@ -1,6 +1,6 @@
 """
 All metric thresholds in one place.
-Node 1, Node 2, Node 3, and the judgment prompt all read from this module.
+Node 1, Node 2, Node 3, and the judgement prompt all read from this module.
 """
 from dataclasses import dataclass, field
 
@@ -50,9 +50,9 @@ class AllThresholds:
     node2: Node2Thresholds = field(default_factory=Node2Thresholds)
     node3: Node3Thresholds = field(default_factory=Node3Thresholds)
 
-    def judgment_context_table(self) -> str:
+    def judgement_context_table(self) -> str:
         """
-        Generates the threshold table embedded in the judgment prompt.
+        Generates the threshold table embedded in the judgement prompt.
         Hardcoded markdown string avoided — if values change, table updates automatically.
         """
         n1 = self.node1

@@ -1,5 +1,5 @@
 """
-System prompt templates for codegen and judgment models.
+System prompt templates for codegen and judgement models.
 
 Codegen prompt consists of four layers:
   1. CODEGEN_IDENTITY        — who it is

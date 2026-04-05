@@ -1,11 +1,11 @@
 """
-LangGraph Node 3: Judgment LLM (Qwen 3.5)
+LangGraph Node 3: Judgement LLM (Qwen 3.5)
 
 Critical design decisions:
   1. improved_prompt is COMPLETELY REWRITTEN every iteration — no accumulation.
   2. Threshold table is embedded in the system prompt.
   3. Failing test cases (input/expected/got) are included verbatim in the prompt.
-  4. Judgment model (Qwen 3.5) is independent of the code generation models.
+  4. Judgement model (Qwen 3.5) is independent of the code generation models.
 """
 import json
 import re
@@ -14,7 +14,7 @@ from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
 from models.client import generate
 
-JUDGMENT_MODEL = "QWEN"
+JUDGEMENT_MODEL = "QWEN"
 
 # ── Threshold table — embedded context for Qwen 3.5 ──────────────────────────
 _THRESHOLD_CONTEXT = """
@@ -34,7 +34,7 @@ MI < 65 means the code is hard to maintain and likely poorly structured.
 CC > 10 means the function has too many branches and is hard to test.
 """
 
-JUDGMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
+JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
 
 You evaluate Python solutions to competitive programming problems using static analysis
 results (Node 1) and sandbox execution results (Node 2).
@@ -69,7 +69,7 @@ Schema:
 }}"""
 
 
-def judgment_node(state: PipelineState) -> PipelineState:
+def judgement_node(state: PipelineState) -> PipelineState:
     """
     Node 3: Evaluates metrics and failing test cases.
 
@@ -90,7 +90,7 @@ def judgment_node(state: PipelineState) -> PipelineState:
         bandit_medium_count=state.get("node1_bandit_medium_count", 0),
     )
 
-    llm_scores = _get_llm_judgment(
+    llm_scores = _get_llm_judgement(
         numeric_scores=numeric,
         code=state.get("stripped_code", state.get("generated_code", "")),
         problem=state["problem"],
@@ -121,15 +121,15 @@ def judgment_node(state: PipelineState) -> PipelineState:
         for k in ("codegen_ms", "node1_ms", "node2_ms", "node3_ms")
     )
 
-    # Write judgment token counts to state
+    # Write judgement token counts to state
     tokens = dict(state.get("tokens", {}))
-    tokens["judgment_prompt"]     = llm_scores.pop("_judgment_prompt_tokens",     0)
-    tokens["judgment_completion"] = llm_scores.pop("_judgment_completion_tokens", 0)
+    tokens["judgement_prompt"]     = llm_scores.pop("_judgement_prompt_tokens",     0)
+    tokens["judgement_completion"] = llm_scores.pop("_judgement_completion_tokens", 0)
     tokens["total"] = (
         tokens.get("codegen_prompt", 0)
         + tokens.get("codegen_completion", 0)
-        + tokens["judgment_prompt"]
-        + tokens["judgment_completion"]
+        + tokens["judgement_prompt"]
+        + tokens["judgement_completion"]
     )
 
     # Build score breakdown for logging
@@ -157,7 +157,7 @@ def judgment_node(state: PipelineState) -> PipelineState:
 
 # ── Prompt construction ───────────────────────────────────────────────────────
 
-def _get_llm_judgment(
+def _get_llm_judgement(
     numeric_scores: dict,
     code: str,
     problem: str,
@@ -168,7 +168,7 @@ def _get_llm_judgment(
     difficulty: str,
     iteration: int,
 ) -> dict:
-    user_prompt = _build_judgment_prompt(
+    user_prompt = _build_judgement_prompt(
         numeric_scores=numeric_scores,
         code=code,
         problem=problem,
@@ -184,28 +184,28 @@ def _get_llm_judgment(
         # Track token usage
         from models.client import get_client, get_model_name, get_temperature
         from config import model_registry
-        cfg    = model_registry.get(JUDGMENT_MODEL)
-        client = get_client(JUDGMENT_MODEL)
+        cfg    = model_registry.get(JUDGEMENT_MODEL)
+        client = get_client(JUDGEMENT_MODEL)
 
         response = client.chat.completions.create(
             model=cfg.model_name,
             messages=[
-                {"role": "system", "content": JUDGMENT_SYSTEM_PROMPT},
+                {"role": "system", "content": JUDGEMENT_SYSTEM_PROMPT},
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=cfg.temperature,
             max_tokens=1024,
         )
         raw = response.choices[0].message.content
-        result = _parse_judgment(raw)
+        result = _parse_judgement(raw)
 
-        # Store token counts so judgment_node can write them to state
+        # Store token counts so judgement_node can write them to state
         if hasattr(response, "usage") and response.usage:
-            result["_judgment_prompt_tokens"]     = response.usage.prompt_tokens
-            result["_judgment_completion_tokens"] = response.usage.completion_tokens
+            result["_judgement_prompt_tokens"]     = response.usage.prompt_tokens
+            result["_judgement_completion_tokens"] = response.usage.completion_tokens
         else:
-            result.setdefault("_judgment_prompt_tokens",     0)
-            result.setdefault("_judgment_completion_tokens", 0)
+            result.setdefault("_judgement_prompt_tokens",     0)
+            result.setdefault("_judgement_completion_tokens", 0)
 
         return result
 
@@ -214,12 +214,12 @@ def _get_llm_judgment(
         return {
             "algorithm_choice":       5,
             "error_handling":         5,
-            "failure_reasons":        ["judgment_llm_error"],
+            "failure_reasons":        ["judgement_llm_error"],
             "improved_system_prompt": _fallback_prompt(node1_issues, failed_cases, timed_out),
         }
 
 
-def _build_judgment_prompt(
+def _build_judgement_prompt(
     numeric_scores: dict,
     code: str,
     problem: str,
@@ -338,7 +338,7 @@ def _fallback_prompt(
     return "\n".join(parts)
 
 
-def _parse_judgment(raw: str) -> dict:
+def _parse_judgement(raw: str) -> dict:
     """
     Extracts JSON from the LLM response.
 

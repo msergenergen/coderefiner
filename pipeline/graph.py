@@ -2,13 +2,13 @@
 LangGraph StateGraph definition.
 
 Each iteration is logged via log_iteration_node → memory.md + JSON:
-  LOOP      — after judgment, threshold not met
-  PASS      — after judgment, threshold met
-  STOP_MAX  — after judgment, max_iter reached
+  LOOP      — after judgement, threshold not met
+  PASS      — after judgement, threshold met
+  STOP_MAX  — after judgement, max_iter reached
   STOP_HIGH — severity HIGH, pipeline stopped early
 
 Each node writes its own timing to state["timing"].
-Codegen and judgment nodes write token counts to state["tokens"].
+Codegen and judgement nodes write token counts to state["tokens"].
 """
 from langgraph.graph import StateGraph, END
 
@@ -20,7 +20,7 @@ from nodes.codegen         import codegen_node
 from nodes.static_analysis import static_analysis_node
 from nodes.sandbox         import sandbox_node
 from nodes.cleaner         import strip_comments_node
-from nodes.judgment        import judgment_node
+from nodes.judgement        import judgement_node
 from memory.logger         import log_iteration_node, log_severity_stop_node
 
 
@@ -39,7 +39,7 @@ def _next_model_node(state: PipelineState) -> PipelineState:
     return advance_model(state)
 
 
-def _strip_before_judgment(state: PipelineState) -> PipelineState:
+def _strip_before_judgement(state: PipelineState) -> PipelineState:
     """
     Used when sandbox is skipped (LOW severity in V3, or entire V2 variant).
     Initializes node2 fields to safe defaults then strips comments.
@@ -65,8 +65,8 @@ def build_graph(variant: str = "V3"):
     Builds and compiles the LangGraph state graph.
 
     Variant matrix:
-        V1 — Node 2 + Node 3        (Execution + Judgment, no static analysis)
-        V2 — Node 1 + Node 3        (Static Analysis + Judgment, no execution)
+        V1 — Node 2 + Node 3        (Execution + Judgement, no static analysis)
+        V2 — Node 1 + Node 3        (Static Analysis + Judgement, no execution)
         V3 — Node 1 + Node 2 + Node 3  (Full pipeline)
 
     PASS criterion (all variants):
@@ -79,7 +79,7 @@ def build_graph(variant: str = "V3"):
 
     # ── Core nodes — always present ───────────────────────────────────
     g.add_node("codegen",            codegen_node)
-    g.add_node("judgment",           judgment_node)
+    g.add_node("judgement",           judgement_node)
     g.add_node("log_iteration",      log_iteration_node)
     g.add_node("write_memory_final", _write_memory_final_node)
     g.add_node("stop_max",           _stop_max_node)
@@ -88,7 +88,7 @@ def build_graph(variant: str = "V3"):
     # ── Conditional nodes ─────────────────────────────────────────────
     if use_node1:
         g.add_node("static_analysis",    static_analysis_node)
-        g.add_node("strip_before_judge", _strip_before_judgment)
+        g.add_node("strip_before_judge", _strip_before_judgement)
         g.add_node("log_severity_stop",  log_severity_stop_node)
 
     if use_node2:
@@ -114,7 +114,7 @@ def build_graph(variant: str = "V3"):
                 },
             )
             g.add_edge("sandbox",            "strip_comments")
-            g.add_edge("strip_comments",     "judgment")
+            g.add_edge("strip_comments",     "judgement")
         else:
             # V2: OK and LOW both → strip_before_judge (no sandbox)
             g.add_conditional_edges(
@@ -127,16 +127,16 @@ def build_graph(variant: str = "V3"):
                 },
             )
 
-        g.add_edge("strip_before_judge", "judgment")
+        g.add_edge("strip_before_judge", "judgement")
 
     else:
-        # V1: codegen → sandbox → strip_comments → judgment
+        # V1: codegen → sandbox → strip_comments → judgement
         g.add_edge("codegen",        "sandbox")
         g.add_edge("sandbox",        "strip_comments")
-        g.add_edge("strip_comments", "judgment")
+        g.add_edge("strip_comments", "judgement")
 
-    # ── Judgment → iteration gate ────────────────────────────────────
-    g.add_edge("judgment", "log_iteration")
+    # ── Judgement → iteration gate ────────────────────────────────────
+    g.add_edge("judgement", "log_iteration")
 
     g.add_conditional_edges(
         "log_iteration",
