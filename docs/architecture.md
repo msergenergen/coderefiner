@@ -137,27 +137,33 @@ and write an improved system prompt on failure.
 
 | Dimension | Weight | Source |
 |-------|---------|--------|
-| Correctness | 25p | Node 2: test pass rate normalized |
-| Verimlilik | 20p | Node 2: CPU + Memory composite |
-| Kod Kalitesi | 20p | Node 1: MI + CC composite |
+| Accuracy | 25p | Node 2: test pass rate normalized |
+| Efficiency | 20p | Node 2: CPU + Memory composite |
+| Quality | 20p | Node 1: MI + CC composite |
 | Security | 15p | Node 1: Bandit severity weighted |
-| Solution Originality | 10p | Judgement LLM semantic evaluation |
-| Error Handling | 10p | Node 2: exception coverage |
+| Algorithm Choice | 10p | Judgement LLM evaluation |
+| Error Handling | 10p | Judgement LLM evaluation |
 
 **Node 3 Output Schema (JSON)**
 
 ```json
 {
-  "total_score": 74,
+  "total_score": 74.5,
   "pass": false,
-  "failure_reasons": ["memory_exceeded", "low_edge_case_coverage"],
-  "improved_system_prompt": "...",
-  "target_model": "M1",
-  "iteration": 3
+  "score_breakdown": {
+    "accuracy": 18.75,
+    "efficiency": 16.0,
+    "quality": 14.0,
+    "security": 15.0,
+    "algorithm_choice": 6,
+    "error_handling": 5
+  },
+  "failure_reasons": ["low_pass_rate", "cc_too_high"],
+  "improved_system_prompt": "..."
 }
 ```
 
-`improved_system_prompt` is appended to the system prompt in the next codegen call.
+`improved_system_prompt` completely replaces the previous system prompt — no accumulation.
 The model does not change; the same active model runs again.
 
 ---
@@ -230,11 +236,11 @@ def iteration_gate(state) -> str:
 ## 6. memory.md Format
 
 ```markdown
-| iter | model | difficulty | node1_mi | test_pass | cpu_ms | ram_mb | judge_score | status |
-|------|-------|------------|----------|-----------|--------|--------|-------------|--------|
-| 1    | M1    | easy       | 72.1     | 0.85      | 340    | 128    | 68          | LOOP   |
-| 2    | M1    | easy       | 81.4     | 0.95      | 290    | 110    | 84          | PASS   |
-| 1    | M2    | easy       | 79.2     | 0.97      | 210    | 98     | 88          | PASS   |
+| iter | model | model_name | q_id | diff | cc  | mi   | severity | pass_rt | score | status    | total_ms | total_tok | json |
+|------|-------|------------|------|------|-----|------|----------|---------|-------|-----------|----------|-----------|------|
+|    1 | M1    | gpt-oss-20b | q001 | easy | 3.0 | 72.1 | OK       |    0.85 |  68.0 | LOOP      |     7245 |      2550 | ...  |
+|    2 | M1    | gpt-oss-20b | q001 | easy | 2.0 | 81.4 | OK       |    1.00 |  84.0 | PASS      |     6100 |      2300 | ...  |
+|    1 | M1    | gpt-oss-20b | q002 | hard | 8.0 | 45.0 | HIGH     |    0.00 |   0.0 | STOP_HIGH |     3142 |       730 | ...  |
 ```
 
 Rows are independent per model. The iteration counter resets at the start of each model.

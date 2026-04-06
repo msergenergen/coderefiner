@@ -296,6 +296,9 @@ def static_analysis_node(state: PipelineState) -> PipelineState:
                               node1_bandit_high, node1_severity,
                               node1_issues  ← Node 3 için okunabilir bulgular
     """
+    import time
+    t0 = time.perf_counter()
+
     code = state["generated_code"]
 
     # Metrik hesaplama
@@ -305,6 +308,8 @@ def static_analysis_node(state: PipelineState) -> PipelineState:
     cognitive = cognitive_complexity(code)
     bandit    = bandit_scan(code)
     forbidden = check_imports(code)
+    mypy      = mypy_check(code)
+    ruff      = ruff_check(code)
 
     # Severity decision
     severity = _decide_severity(
@@ -319,16 +324,23 @@ def static_analysis_node(state: PipelineState) -> PipelineState:
     issues = _collect_issues(
         cc=cc, mi=mi, halstead=halstead,
         bandit=bandit, forbidden=forbidden,
+        mypy=mypy, ruff=ruff,
     )
+
+    node1_ms = int((time.perf_counter() - t0) * 1000)
+    timing = dict(state.get("timing", {}))
+    timing["node1_ms"] = node1_ms
 
     return {
         **state,
-        "node1_cc":          cc,
-        "node1_mi":          mi,
-        "node1_halstead":    halstead,
-        "node1_bandit_high": bandit["high_count"] > 0,
-        "node1_severity":    severity,
-        "node1_issues":      issues,
+        "node1_cc":                  cc,
+        "node1_mi":                  mi,
+        "node1_halstead":            halstead,
+        "node1_bandit_high":         bandit["high_count"] > 0,
+        "node1_bandit_medium_count": bandit["medium_count"],
+        "node1_severity":            severity,
+        "node1_issues":              issues,
+        "timing":                    timing,
     }
 
 
@@ -338,6 +350,8 @@ def _collect_issues(
     halstead: float,
     bandit: dict,
     forbidden: list[str],
+    mypy: dict,
+    ruff: dict,
 ) -> list[str]:
     """
     Sayısal metriklerden okunabilir bulgu cümleleri üretir.
@@ -348,25 +362,29 @@ def _collect_issues(
     if cc > 10:
         issues.append(
             f"Cyclomatic Complexity {cc:.0f} — threshold 10. "
-            "Fonksiyon çok fazla dal içeriyor; daha küçük parçalara bölünmeli."
+            "Function has too many branches; should be split into smaller parts."
         )
     if mi < 65:
         issues.append(
             f"Maintainability Index {mi:.1f} — threshold 65. "
-            "Kod bakımı zor; değişken isimlendirmesi veya yapı iyileştirilmeli."
+            "Code is hard to maintain; improve variable naming or structure."
         )
     if halstead > 1000:
         issues.append(
             f"Halstead Volume {halstead:.0f} — threshold 1000. "
-            "Operatör/operand sayısı yüksek; ifadeler sadeleştirilmeli."
+            "High operator/operand count; simplify expressions."
         )
     for issue in bandit.get("issues", []):
         sev  = issue.get("issue_severity", "")
         text = issue.get("issue_text", "")
         line = issue.get("line_number", "?")
-        issues.append(f"Güvenlik [{sev}] satır {line}: {text}")
+        issues.append(f"Security [{sev}] line {line}: {text}")
     for imp in forbidden:
-        issues.append(f"Yasak import: `{imp}` — whitelist dışı.")
+        issues.append(f"Forbidden import: `{imp}` — not in whitelist.")
+    for err in mypy.get("errors", []):
+        issues.append(f"Type error (mypy): {err}")
+    for issue in ruff.get("issues", []):
+        issues.append(f"Lint (ruff): {issue}")
 
     return issues
 

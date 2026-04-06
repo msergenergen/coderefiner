@@ -66,7 +66,7 @@ Sadece public test'lerle cpu_ms ve ram_mb ölçer.
 | Boyut | Kaynak | Formül | Ağırlık | Tür |
 |-------|--------|--------|---------|-----|
 | **accuracy** | node2_pass_rate | `pass_rate × 25` | **25p** | Deterministik |
-| **efficiency** | cpu_ms + ram_mb | `(1 − cpu/5000 + 1 − ram/512) / 2 × 20` | **20p** | Deterministik |
+| **efficiency** | cpu_ms + ram_mb | `(1 − cpu/2000 + 1 − ram/512) / 2 × 20` | **20p** | Deterministik |
 | **quality** | CC + MI | `(mi/100 + 1 − cc/20) / 2 × 20` | **20p** | Deterministik |
 | **security** | bandit | `15 − high×15 − medium×3` | **15p** | Deterministik |
 | **algorithm_choice** | Qwen judgement | LLM değerlendirmesi (0–10) | **10p** | LLM subjektif |

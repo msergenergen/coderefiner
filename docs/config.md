@@ -11,17 +11,22 @@
 | **`build_registry(env)` factory** | `local` → Mac Mini models, `cloud` → production models |
 | Threshold values centralized in `thresholds.py` | Node 1/2/3 and judgement prompt all read from the same source |
 
-### Environment Selection: `ENV` Flag
+### Environment Selection: `.env` Symlink
+
+The environment is selected **once** via a symlink — no flag needed at runtime:
 
 ```bash
-# Mac Mini M4 16GB — local debug
-ENV=local python main.py
+# Mac Mini M4 16GB — local debug (done once)
+ln -sf .env.local .env
 
-# Vast.ai A100 80GB — cloud production
-ENV=cloud python main.py
+# Vast.ai A100 80GB — cloud production (done once)
+ln -sf .env.cloud .env
+
+# Then just run:
+python main.py
 ```
 
-The `ENV` flag changes the entire model set **with a single parameter**:
+The active `.env` file controls the entire model set:
 
 | ENV | M1 | M2 | M3 | Judgement | Toplam Bellek |
 |-----|----|----|----|----------|--------------|
@@ -548,9 +553,16 @@ huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
 #!/bin/bash
 # Usage: bash scripts/start_model.sh M1|M2|M3|QWEN
 # Stops previous server, starts new model.
+# Unsloth split GGUFs: first_shard() picks the first shard;
+# llama.cpp auto-discovers the rest.
 
 set -e
 MODEL=${1:?"\nKullanım: $0 M1|M2|M3|QWEN"}
+MODELS=/workspace/models
+
+first_shard() {
+    ls "$1/"*.gguf 2>/dev/null | sort | head -1
+}
 
 stop_server() {
     pkill -f "llama-server" 2>/dev/null || true
@@ -559,35 +571,47 @@ stop_server() {
 
 case $MODEL in
 M1)
+    MODEL_PATH=$(first_shard "$MODELS/gpt-oss-20b")
+    [ -z "$MODEL_PATH" ] && { echo "M1 model files not found in $MODELS/gpt-oss-20b"; exit 1; }
+    echo "Starting M1: $MODEL_PATH"
     stop_server
     /workspace/llama.cpp/llama-server \
-        --model /workspace/models/gpt-oss-20b/*.gguf \
+        --model "$MODEL_PATH" \
         --port 8001 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
         --jinja \
         --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
     ;;
 M2)
+    MODEL_PATH=$(first_shard "$MODELS/qwen3-coder-next")
+    [ -z "$MODEL_PATH" ] && { echo "M2 model files not found in $MODELS/qwen3-coder-next"; exit 1; }
+    echo "Starting M2: $MODEL_PATH"
     stop_server
     /workspace/llama.cpp/llama-server \
-        --model /workspace/models/qwen3-coder-next/*.gguf \
+        --model "$MODEL_PATH" \
         --port 8002 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
         --temp 1.0 --top-p 0.95 --min-p 0.01 --top-k 40
     ;;
 M3)
+    MODEL_PATH=$(first_shard "$MODELS/glm-4.7-flash")
+    [ -z "$MODEL_PATH" ] && { echo "M3 model files not found in $MODELS/glm-4.7-flash"; exit 1; }
+    echo "Starting M3: $MODEL_PATH"
     stop_server
     /workspace/llama.cpp/llama-server \
-        --model /workspace/models/glm-4.7-flash/*.gguf \
+        --model "$MODEL_PATH" \
         --port 8003 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
         --repeat-penalty 1.0 \
         --temp 1.0 --top-p 0.95 --min-p 0.01
     ;;
 QWEN)
+    MODEL_PATH=$(first_shard "$MODELS/qwen3.5-35b")
+    [ -z "$MODEL_PATH" ] && { echo "QWEN model files not found in $MODELS/qwen3.5-35b"; exit 1; }
+    echo "Starting QWEN: $MODEL_PATH"
     stop_server
     /workspace/llama.cpp/llama-server \
-        --model /workspace/models/qwen3.5-35b/*.gguf \
+        --model "$MODEL_PATH" \
         --port 8004 --host 0.0.0.0 \
         --ctx-size 8192 --n-gpu-layers 99 \
         --temp 0.3 --top-p 0.95 --min-p 0.01

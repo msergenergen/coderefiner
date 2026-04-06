@@ -178,13 +178,12 @@ def print_ablation_table(comparison: dict) -> None:
 
     descriptions = {
         "V0": "Single-shot baseline",
-        "V1": "+Execution feedback",
-        "V2": "+Static+Execution",
-        "V3": "+Execution+Judgement",
-        "V4": "Full pipeline",
+        "V1": "Execution + Judgement",
+        "V2": "Static Analysis + Judgement",
+        "V3": "Full pipeline",
     }
 
-    for v in ["V0", "V1", "V2", "V3", "V4"]:
+    for v in ["V0", "V1", "V2", "V3"]:
         if v not in comparison:
             continue
         r   = comparison[v]
@@ -201,16 +200,15 @@ def print_ablation_table(comparison: dict) -> None:
         )
 ```
 
-**Example output:**
+**Example output (placeholder — will be filled with cloud results):**
 
 ```
-| Varyant | Açıklama              | Easy TSR | Med TSR | Hard TSR | Overall | ΔV0    |
-|---------|-----------------------|----------|---------|----------|---------|--------|
-| V0      | Single-shot baseline  | 0.720    | 0.410   | 0.180    | 0.540   | +0.000 |
-| V1      | +Execution feedback   | 0.760    | 0.450   | 0.220    | 0.580   | +0.040 |
-| V2      | +Static+Execution     | 0.780    | 0.460   | 0.230    | 0.595   | +0.055 |
-| V3      | +Execution+Judgement   | 0.800    | 0.490   | 0.250    | 0.625   | +0.085 |
-| V4      | Full pipeline         | 0.820    | 0.510   | 0.270    | 0.645   | +0.105 |
+| Varyant | Açıklama                    | Easy TSR | Med TSR | Hard TSR | Overall | ΔV0    |
+|---------|-----------------------------|----------|---------|----------|---------|--------|
+| V0      | Single-shot baseline        | ?        | ?       | ?        | ?       | +0.000 |
+| V1      | Execution + Judgement       | ?        | ?       | ?        | ?       | ?      |
+| V2      | Static Analysis + Judgement | ?        | ?       | ?        | ?       | ?      |
+| V3      | Full pipeline               | ?        | ?       | ?        | ?       | ?      |
 ```
 
 ### 3.2 Per-Model Table
@@ -218,9 +216,9 @@ def print_ablation_table(comparison: dict) -> None:
 ```python
 def print_model_table(results_by_model: dict) -> None:
     """
-    Her model için V0 vs V4 karşılaştırması.
+    Her model için V0 vs V3 karşılaştırması.
     """
-    print("| Model | V0 TSR | V4 TSR | Δ | V4 Ort. iter | STOP_HIGH% |")
+    print("| Model | V0 TSR | V3 TSR | Δ | V3 Ort. iter | STOP_HIGH% |")
     print("|-------|--------|--------|---|-------------|------------|")
 
     for model, data in results_by_model.items():
@@ -242,51 +240,63 @@ def evaluate_hypotheses(comparison: dict, mcnemar_result: dict,
     """
     H1–H4 hipotezlerini sonuçlara göre değerlendirir.
     """
-    v0_easy = comparison.get("V0", {}).get("tsr_easy", 0)
-    v4_easy = comparison.get("V4", {}).get("tsr_easy", 0)
-    v3_tsr  = comparison.get("V3", {}).get("tsr_overall", 0)
+    v0_easy = comparison.get("V0", {}).get("tsr_easy",    0)
+    v0_hard = comparison.get("V0", {}).get("tsr_hard",    0)
+    v0_tsr  = comparison.get("V0", {}).get("tsr_overall", 0)
+    v1_tsr  = comparison.get("V1", {}).get("tsr_overall", 0)
     v2_tsr  = comparison.get("V2", {}).get("tsr_overall", 0)
-    v0_hard = comparison.get("V0", {}).get("tsr_hard", 0)
-    v4_hard = comparison.get("V4", {}).get("tsr_hard", 0)
+    v3_easy = comparison.get("V3", {}).get("tsr_easy",    0)
+    v3_hard = comparison.get("V3", {}).get("tsr_hard",    0)
+    v3_tsr  = comparison.get("V3", {}).get("tsr_overall", 0)
 
     results = {}
 
-    # H1: V4 easy TSR ≥ V0 easy TSR + 0.15
-    h1_delta = v4_easy - v0_easy
+    # H1: V3 easy TSR ≥ V0 easy TSR + 0.15
+    h1_delta = v3_easy - v0_easy
     results["H1"] = {
-        "hypothesis": "V4 easy TSR ≥ V0 + 15 puan",
+        "hypothesis": "V3 easy TSR ≥ V0 + 15 puan",
         "result":     h1_delta,
         "supported":  h1_delta >= 0.15,
         "note":       f"Gerçekleşen delta: {h1_delta:+.3f}",
     }
 
-    # H2: V3 > V2 (Judgement > Statik analiz)
-    h2_delta = v3_tsr - v2_tsr
+    # H2: V1 TSR > V0 TSR (Execution + Judgement improves baseline)
+    h2_delta = v1_tsr - v0_tsr
     results["H2"] = {
-        "hypothesis": "V3 TSR > V2 TSR (Judgement > Static)",
+        "hypothesis": "V1 TSR > V0 TSR (Execution+Judgement > baseline)",
         "result":     h2_delta,
         "supported":  h2_delta > 0,
-        "note":       f"V3-V2 delta: {h2_delta:+.3f}",
+        "note":       f"V1-V0 delta: {h2_delta:+.3f}",
     }
 
-    # H3: Easy gain < Hard gain (ceiling effect)
-    easy_gain = v4_easy - v0_easy
-    hard_gain = v4_hard - v0_hard
+    # H3: V3 > V1 and V3 > V2 (full pipeline is best)
+    h3_v1 = v3_tsr - v1_tsr
+    h3_v2 = v3_tsr - v2_tsr
     results["H3"] = {
-        "hypothesis": "Pipeline katkısı: easy < hard",
+        "hypothesis": "V3 TSR > V1 ve V3 TSR > V2 (tam pipeline en iyi)",
+        "result":     {"v3_vs_v1": h3_v1, "v3_vs_v2": h3_v2},
+        "supported":  h3_v1 > 0 and h3_v2 > 0,
+        "note":       f"V3-V1: {h3_v1:+.3f}, V3-V2: {h3_v2:+.3f}",
+    }
+
+    # H4: Easy gain < Hard gain (ceiling effect)
+    easy_gain = v3_easy - v0_easy
+    hard_gain = v3_hard - v0_hard
+    results["H4"] = {
+        "hypothesis": "Pipeline katkısı: easy < hard (tavan etkisi)",
         "result":     {"easy_gain": easy_gain, "hard_gain": hard_gain},
         "supported":  easy_gain < hard_gain,
         "note":       f"Easy: {easy_gain:+.3f}, Hard: {hard_gain:+.3f}",
     }
 
-    # H4: Pipeline gain lower in model with high STOP_HIGH rate
+    # H5: Pipeline gain lower in model with high STOP_HIGH rate
     sh_rates = {m: d.get("stop_high_rate", 0) for m, d in model_data.items()}
-    gains    = {m: d.get("v4_tsr", 0) - d.get("v0_tsr", 0)
+    gains    = {m: d.get("v3_tsr", 0) - d.get("v0_tsr", 0)
                 for m, d in model_data.items()}
     if sh_rates and gains:
         max_sh_model  = max(sh_rates, key=sh_rates.get)
         min_gain_model = min(gains,   key=gains.get)
-        results["H4"] = {
+        results["H5"] = {
             "hypothesis": "STOP_HIGH yüksek modelde pipeline katkısı düşük",
             "supported":  max_sh_model == min_gain_model,
             "note": (
@@ -356,15 +366,15 @@ def main():
     print_ablation_table(comparison)
 
     # Per-model analysis
-    if baseline_results and "V4" in variant_results:
+    if baseline_results and "V3" in variant_results:
         print("\n=== Model Bazlı Karşılaştırma ===")
-        # Match V0 vs V4 results per model
+        # Match V0 vs V3 results per model
         # ...
 
-    # McNemar testi (V0 M1 vs V4)
-    if "M1" in baseline_results and "V4" in variant_results:
-        mc = mcnemar_test(variant_results["V4"], baseline_results["M1"])
-        print(f"\n=== McNemar (V4 vs V0-M1) ===")
+    # McNemar testi (V0 M1 vs V3)
+    if "M1" in baseline_results and "V3" in variant_results:
+        mc = mcnemar_test(variant_results["V3"], baseline_results["M1"])
+        print(f"\n=== McNemar (V3 vs V0-M1) ===")
         print(f"p-value: {mc['p_value']}")
         print(f"Anlamlı: {mc['significant']}")
         print(mc["interpretation"])

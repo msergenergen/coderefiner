@@ -22,12 +22,12 @@ write a **fully self-contained** improved system prompt for the next iteration.
 
 | Dimension | Weight | Source |
 |-------|---------|--------|
-| Correctness | 25p | Node 2: `test_pass_rate` |
-| Verimlilik | 20p | Node 2: `cpu_ms` + `ram_mb` |
-| Kod Kalitesi | 20p | Node 1: MI + CC composite |
+| Accuracy | 25p | Node 2: `pass_rate` |
+| Efficiency | 20p | Node 2: `cpu_ms` + `ram_mb` |
+| Quality | 20p | Node 1: MI + CC composite |
 | Security | 15p | Node 1: Bandit severity weighted |
-| Solution Originality | 10p | Qwen 3.5 semantic evaluation |
-| Error Handling | 10p | Qwen 3.5 + Node 2: exception coverage |
+| Algorithm Choice | 10p | Qwen 3.5: appropriate algorithm for the problem? |
+| Error Handling | 10p | Qwen 3.5: exception and edge case handling |
 
 ---
 
@@ -150,7 +150,10 @@ results (Node 1) and sandbox execution results (Node 2).
 {_THRESHOLD_CONTEXT}
 
 Your task:
-1. Assign "algorithm_choice" (0–10): Is the algorithm approach clever and non-trivial?
+1. Assign "algorithm_choice" (0–10): Did the model choose an appropriate algorithm for the problem?
+   - 0–3: Wrong approach (e.g. brute force where DP is required, O(n²) where O(n) exists)
+   - 4–6: Correct approach but suboptimal
+   - 7–10: Appropriate algorithm, well-suited to constraints and input size
 2. Assign "error_handling" (0–10): Does the code handle exceptions and edge cases?
 3. List specific "failure_reasons" — reference actual metric values and failing test cases
 4. Write a NEW, COMPLETE "improved_system_prompt" that replaces the previous one entirely.
@@ -184,7 +187,7 @@ def judgement_node(state: PipelineState) -> PipelineState:
                               node3_failure_reasons, node3_improved_prompt
     """
     numeric = compute_numeric_scores(
-        pass_rate=state.get("node2_test_pass_rate", 0.0),
+        pass_rate=state.get("node2_pass_rate", 0.0),
         cpu_ms=state.get("node2_cpu_ms", 0.0),
         ram_mb=state.get("node2_ram_mb", 0.0),
         mi=state.get("node1_mi", 100.0),
@@ -285,7 +288,7 @@ def _build_judgement_prompt(
         "",
         "## Generated Code",
         "```python",
-        code[:2500],
+        code[:8000],
         "```",
         "",
         "## Node 1 — Static Analysis",
