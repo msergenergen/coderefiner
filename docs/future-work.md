@@ -19,21 +19,24 @@ These can be incorporated into the current work with modest additional effort.
 > without increasing model size — challenging the assumption that better code
 > generation requires larger models.
 
-**What to add:**
+**Current status:**
+The benchmark design already supports this analysis. `benchmark/baseline.py` runs
+per-model (V0), and `benchmark/evaluator.py` runs per-model (V3). The data for this
+comparison is produced as a by-product of the main benchmark run — no additional
+experiment is required.
 
-Run each model (M1, M2, M3) independently as both V0 baseline and V4 full pipeline.
-This isolates pipeline contribution from model capability:
+**What to extract post-cloud:**
 
 ```
-gpt-oss-20b  V0  →  TSR = ?
-gpt-oss-20b  V4  →  TSR = ?    ← pipeline delta for a small model
+M1 (gpt-oss-20b,  20B)   V0 TSR → V3 TSR   ΔTSR = ?
+M2 (Qwen3-Coder, ~30B)   V0 TSR → V3 TSR   ΔTSR = ?
+M3 (GLM-4.7,     ~18B)   V0 TSR → V3 TSR   ΔTSR = ?
 ```
 
 **Key visualization:**
-Plot model size (B parameters) on the x-axis against pipeline contribution (ΔTSR = V4 − V0)
-on the y-axis. Expected pattern: large gain for small models (pipeline matters more),
-small gain for large models (ceiling effect). This graph alone is a strong standalone
-contribution.
+Plot model size (B parameters) on the x-axis against pipeline contribution
+(ΔTSR = V3 − V0) on the y-axis. Expected pattern: larger gain for weaker models
+(pipeline matters more), smaller gain for stronger models (ceiling effect).
 
 **Academic positioning:**
 Connects to the test-time compute vs. model scale debate
@@ -43,6 +46,12 @@ Connects to the test-time compute vs. model scale debate
 ---
 
 ### T2. Learned Metric Gating — Logistic Regression Before Node 3
+
+**Relationship to sensitivity.md:**
+`docs/sensitivity.md` Analiz 2 (Boyut Önem Analizi) and Analiz 3 (Eşik Duyarlılığı)
+provide the statistical groundwork for T2. Those analyses identify which metrics
+are actually predictive; T2 replaces the fixed thresholds with a learned model.
+Run sensitivity analyses first; implement T2 only if predictive signal is strong.
 
 **Core idea:**
 Replace fixed, hand-tuned thresholds (CC ≤ 10, MI ≥ 65, pass_rate ≥ 0.90)
@@ -86,8 +95,11 @@ A learned intermediate layer between numeric metrics and LLM judgement —
 "learned metric gating for LLM judgement" — has no direct precedent in the literature.
 
 **Ablation opportunity:**
-Compare three configurations: (a) fixed thresholds only, (b) logistic gate only,
-(c) logistic gate + Node 3. Isolates the contribution of each evaluation layer.
+Compare three configurations:
+(a) fixed thresholds only (current V3),
+(b) logistic gate only,
+(c) logistic gate + Node 3.
+Isolates the contribution of each evaluation layer.
 
 ---
 
@@ -95,8 +107,8 @@ Compare three configurations: (a) fixed thresholds only, (b) logistic gate only,
 
 **Core idea:**
 When M1 fails and the pipeline advances to M2, M2 currently starts from scratch.
-The improved_prompts generated during M1's iterations contain specific, actionable
-information about what went wrong — this information is discarded.
+The `improved_prompt` values generated during M1's iterations contain specific,
+actionable information about what went wrong — this information is discarded.
 
 **Proposed extension:**
 Carry forward a condensed version of M1's failure history when initializing M2:
@@ -118,7 +130,7 @@ an application of curriculum learning principles to iterative code refinement.
 The downstream model benefits from the upstream model's trial-and-error.
 
 **Measurable impact:**
-Compare M2 V4 with and without M1 feedback transfer.
+Compare M2 V3 with and without M1 feedback transfer.
 If M2 reaches PASS in fewer iterations when initialized with M1's failures,
 transfer is effective.
 
@@ -133,7 +145,7 @@ These require additional data, infrastructure, or scope beyond the current thesi
 **Motivation:**
 The current pipeline uses Qwen3.5-35B-A3B as a general-purpose judge.
 A judge fine-tuned specifically for iterative code refinement could produce
-more consistent scores and more actionable improved_prompts.
+more consistent scores and more actionable `improved_prompt` outputs.
 
 **Recommended approach — DPO (Direct Preference Optimization):**
 
@@ -167,7 +179,7 @@ its code-specific instantiation does not exist in the literature.
 ### P2. Difficulty-Aware Prompt Adaptation
 
 **Motivation:**
-The current improved_prompt is generated with the same template regardless
+The current `improved_prompt` is generated with the same template regardless
 of problem difficulty. Easy problems may benefit from short, direct feedback
 ("add a bounds check"). Hard problems may require algorithm-level suggestions
 ("replace the O(n²) nested loop with a hash map approach").
@@ -194,8 +206,13 @@ with and without difficulty-aware prompting.
 **Motivation:**
 The current pipeline uses a fixed `max_iterations = 10` for all problems.
 Some problems reach PASS in 2 iterations; others never converge in 10.
-A fixed budget wastes compute on non-convergent problems and
-potentially exits too early on problems that would converge at iteration 11–12.
+A fixed budget wastes compute on non-convergent problems and potentially
+exits too early on problems that would converge at iteration 11–12.
+
+**Relationship to sensitivity.md:**
+`docs/sensitivity.md` Analiz 5 (İterasyon Verimliliği) quantifies marginal gain
+per iteration and identifies the diminishing-returns threshold.
+That analysis informs the cutoff value; P3 extends it to per-problem adaptive decisions.
 
 **Proposed extension:**
 Use the logistic regression model from T2 to predict convergence probability
@@ -213,7 +230,7 @@ Graves 2016; Banino et al., 2021).
 
 **Motivation:**
 Node 1 metrics (CC, MI, Halstead) are currently forwarded to Node 3 as
-informational context. However, the improved_prompt rarely contains
+informational context. However, the `improved_prompt` rarely contains
 specific structural refactoring instructions derived from these metrics.
 A model told "CC is 14" rarely knows which function to split or how.
 
@@ -239,26 +256,26 @@ a form of program synthesis guided by quality metrics.
 
 ### Recommended for current thesis
 
-| Item | Effort | Academic Impact |
-|------|--------|-----------------|
-| T1. Small model framing + ΔTSR graph | Low | High — reframes core claim |
-| T2. Logistic regression gating | Medium | High — novel technical contribution |
-| T3. Cross-model feedback transfer | Low | Medium — clean ablation opportunity |
+| Item | Effort | Academic Impact | Prerequisite |
+|------|--------|-----------------|--------------|
+| T1. Per-model ΔTSR analysis | None — data already produced | High — reframes core claim | Cloud benchmark done |
+| T2. Logistic regression gating | Medium | High — novel technical contribution | sensitivity.md Analiz 2-3 done |
+| T3. Cross-model feedback transfer | Low | Medium — clean ablation opportunity | Cloud benchmark done |
 
 ### Recommended for future publications
 
-| Item | Effort | Academic Impact |
-|------|--------|-----------------|
-| P1. Domain-specific judge (DPO) | High | Very High — standalone paper potential |
-| P2. Difficulty-aware prompting | Low | Medium — strong empirical addition |
-| P3. Iteration budget optimization | Medium | High — connects to active literature |
-| P4. Static analysis feedback loop | Medium | Medium — systems contribution |
+| Item | Effort | Academic Impact | Notes |
+|------|--------|-----------------|-------|
+| P1. Domain-specific judge (DPO) | High | Very High — standalone paper potential | Needs 500–1000 preference pairs |
+| P2. Difficulty-aware prompting | Low | Medium — strong empirical addition | Quick to implement and test |
+| P3. Iteration budget optimization | Medium | High — connects to active literature | Depends on T2 |
+| P4. Static analysis feedback loop | Medium | Medium — systems contribution | AST analysis required |
 
 ---
 
 ## Connection to Thesis Claims
 
-Each future direction maps directly to a limitation of the current work:
+Each future direction maps directly to a current limitation:
 
 ```
 Current limitation                    Future direction
@@ -269,10 +286,21 @@ Cross-model feedback discarded    →   T3: Cross-model transfer
 Fixed iteration budget            →   P3: Adaptive budget
 Difficulty-agnostic prompting     →   P2: Difficulty-aware prompting
 Static analysis not grounded      →   P4: Actionable static feedback
-Model size not isolated           →   T1: Small model framing
+Model size not isolated           →   T1: Small model framing (free from existing data)
 ```
 
-When writing the thesis discussion section, present each limitation
-alongside its corresponding future direction. This transforms weaknesses
-into a structured research agenda — methodologically stronger than
-listing limitations alone.
+When writing the thesis discussion section (paper.md Bölüm VI — Sonuç),
+present each limitation alongside its corresponding future direction.
+This transforms weaknesses into a structured research agenda —
+methodologically stronger than listing limitations alone.
+
+---
+
+## Relationship to Other Documents
+
+| Document | Connection |
+|----------|-----------|
+| `docs/sensitivity.md` | Statistical precursor to T2; Analiz 5 informs P3 |
+| `docs/ablation.md` | V0–V3 variant design; T1 and T3 are natural ablation extensions |
+| `docs/paper.md` | Bölüm VI (Sonuç) draws from this document's limitation-direction mapping |
+| `benchmark/analysis.py` | T1's per-model ΔTSR uses `compare_variants()` and `print_model_table()` |

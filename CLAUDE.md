@@ -102,6 +102,7 @@ project/
 │   ├── memory-logging.md      ← run_info.json, memory.md, iteration JSON
 │   ├── testing.md             ← 10 test files, pilot checklist, benchmark
 │   ├── ablation.md            ← V0–V4 variants, baseline.py, analysis
+│   ├── sensitivity.md         ← post-hoc sensitivity analysis plan (run after cloud)
 │   ├── analysis.md            ← TSR, McNemar, hypothesis validation
 │   ├── future-work.md         ← research directions
 │   ├── cloud-comparison.md    ← Vast.ai vs RunPod vs Modal
