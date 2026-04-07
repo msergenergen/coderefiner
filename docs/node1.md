@@ -13,10 +13,12 @@ Detect structural, quality, and security issues in the generated code **before e
 | `radon` | `pip install radon` | Cyclomatic Complexity, Maintainability Index, Halstead |
 | `lizard` | `pip install lizard` | Cognitive Complexity |
 | `bandit` | `pip install bandit` | Security vulnerabilities |
+| `mypy` | `pip install mypy` | Type errors (informational, no severity effect) |
+| `ruff` | `pip install ruff` | Lint warnings (informational, no severity effect) |
 | stdlib `ast` | — | Import whitelist check |
 
 ```bash
-pip install radon lizard bandit
+pip install radon lizard bandit mypy ruff
 ```
 
 ---

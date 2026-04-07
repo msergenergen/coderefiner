@@ -48,6 +48,7 @@ class PipelineState(TypedDict):
     # ── Run ve routing ────────────────────────────────────────────────
     run_id:         str          # Set in main.py by write_run_info()
     active_model:   Literal["M1", "M2", "M3"]
+    variant:        Literal["V1", "V2", "V3"]   # Ablation variant
     iteration:      int
     max_iterations: int          # Sabit: 10
 
@@ -65,21 +66,23 @@ class PipelineState(TypedDict):
     stripped_code:  str   # Comment-stripped version — only judgement sees this
 
     # ── Node 1 outputs ──────────────────────────────────────────────
-    node1_cc:          float
-    node1_mi:          float
-    node1_halstead:    float
-    node1_bandit_high: bool
-    node1_severity:    Literal["LOW", "OK", "HIGH"]
-    node1_issues:      list[str]
+    node1_cc:                   float
+    node1_mi:                   float
+    node1_halstead:             float
+    node1_bandit_high:          bool
+    node1_bandit_medium_count:  int
+    node1_severity:             Literal["LOW", "OK", "HIGH"]
+    node1_issues:               list[str]
 
     # ── Node 2 outputs ──────────────────────────────────────────────
     # Correctness — Faz 1 (lcb_runner)
-    node2_pass_rate:     float        # 0.0–1.0
-    node2_passed_count:  int          # Number of passed tests
-    node2_total_count:   int          # Total test count (public + private)
-    node2_failed_cases:  list[dict]   # Max 5, {input, expected, got, error}
-    node2_crash_count:   int          # Edge case'lerde runtime error
-    node2_lcb_available: bool         # lcb_runner kurulu mu?
+    node2_pass_rate:            float   # 0.0–1.0
+    node2_passed_count:         int     # Number of passed tests
+    node2_total_count:          int     # Total test count (public + private)
+    node2_failed_cases:         list    # Max 5, {input, expected, got, error}
+    node2_crash_count:          int     # Edge case'lerde runtime error
+    node2_test_diversity_score: float   # 1 - crash_count/len(edge_cases)
+    node2_lcb_available:        bool    # lcb_runner kurulu mu?
     # Runtime — Faz 2 (subprocess)
     node2_cpu_ms:    float
     node2_ram_mb:    float
@@ -88,7 +91,7 @@ class PipelineState(TypedDict):
     # ── Node 3 outputs ──────────────────────────────────────────────
     node3_total_score:     float
     node3_pass:            bool
-    node3_score_breakdown: dict       # {"correctness": 0, "efficiency": 0, ...}
+    node3_score_breakdown: dict       # {"accuracy": 0, "efficiency": 0, "quality": 0, "security": 0, "algorithm_choice": 0, "error_handling": 0}
     node3_failure_reasons: list[str]
     node3_improved_prompt: str        # Completely rewritten every iteration
 

@@ -190,7 +190,7 @@ class PipelineState(TypedDict):
     node1_severity: Literal["LOW", "OK", "HIGH"]
 
     # Node 2
-    node2_test_pass_rate: float
+    node2_pass_rate: float
     node2_cpu_ms: float
     node2_ram_mb: float
     node2_test_diversity_score: float

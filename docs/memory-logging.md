@@ -153,9 +153,9 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
     "total_score": 68.0,
     "pass":        false,
     "breakdown": {
-      "correctness":     15,
+      "accuracy":        15,
       "efficiency":      14,
-      "code_quality":    12,
+      "quality":         12,
       "security":        10,
       "algorithm_choice":      8,
       "error_handling":   9
@@ -352,7 +352,7 @@ def _append_md_row(state: PipelineState, status: str,
         f"| {state.get('node1_cc', 0.0):3.1f} "
         f"| {state.get('node1_mi', 0.0):4.1f} "
         f"| {state.get('node1_severity', 'N/A'):8s} "
-        f"| {state.get('node2_test_pass_rate', 0.0):7.2f} "
+        f"| {state.get('node2_pass_rate', 0.0):7.2f} "
         f"| {state.get('node3_total_score', 0.0):5.1f} "
         f"| {status:9s} "
         f"| {total_ms:8d} "
@@ -407,7 +407,7 @@ def _write_iteration_json(state: PipelineState, status: str,
         },
 
         "node2": {
-            "pass_rate":      state.get("node2_test_pass_rate", 0.0),
+            "pass_rate":      state.get("node2_pass_rate", 0.0),
             "cpu_ms":         state.get("node2_cpu_ms", 0.0),
             "ram_mb":         state.get("node2_ram_mb", 0.0),
             "test_diversity_score":  state.get("node2_test_diversity_score", 0.0),
@@ -563,7 +563,7 @@ class PipelineState(TypedDict):
                    #  "total": 0}
 
     # ── Node 3 score breakdown ────────────────────────────────────────────
-    node3_score_breakdown: dict  # {"correctness": 0, "efficiency": 0, ...}
+    node3_score_breakdown: dict  # {"accuracy": 0, "efficiency": 0, "quality": 0, "security": 0, "algorithm_choice": 0, "error_handling": 0}
 ```
 
 ---
@@ -654,10 +654,10 @@ def s(q='q_001', status_hint='loop', **kw):
         'generated_code': 'def solve(): return None',
         'node1_cc': 3.0, 'node1_mi': 72.0, 'node1_halstead': 150.0,
         'node1_issues': ['CC yüksek'], 'node1_bandit_high': False, 'node1_severity': 'OK',
-        'node2_test_pass_rate': 0.65, 'node2_cpu_ms': 500.0, 'node2_ram_mb': 120.0,
+        'node2_pass_rate': 0.65, 'node2_cpu_ms': 500.0, 'node2_ram_mb': 120.0,
         'node2_test_diversity_score': 0.6, 'node2_failed_cases': [{'input':'[]','expected':'0','got':'None'}],
         'node3_total_score': 62.0, 'node3_pass': False,
-        'node3_score_breakdown': {'correctness':10,'efficiency':12,'code_quality':10,'security':10,'algorithm_choice':10,'error_handling':10},
+        'node3_score_breakdown': {'accuracy':10,'efficiency':12,'quality':10,'security':10,'algorithm_choice':10,'error_handling':10},
         'node3_failure_reasons': ['pass_rate düşük'], 'node3_improved_prompt': 'Boş listeyi kontrol et.',
         'timing': {'codegen_ms': 3200, 'node1_ms': 45, 'node2_ms': 1200, 'node3_ms': 2800, 'total_ms': 7245},
         'tokens': {'codegen_prompt': 450, 'codegen_completion': 320, 'judgement_prompt': 1200, 'judgement_completion': 580, 'total': 2550},

@@ -481,7 +481,7 @@ def two_sum(nums, target):
     'node1_cc': 4.0, 'node1_mi': 78.0, 'node1_halstead': 210.0,
     'node1_bandit_high': False, 'node1_severity': 'OK',
     'node1_issues': [],
-    'node2_test_pass_rate': 0.5, 'node2_cpu_ms': 1800.0,
+    'node2_pass_rate': 0.5, 'node2_cpu_ms': 1800.0,
     'node2_ram_mb': 90.0, 'node2_test_diversity_score': 0.5,
     'node2_failed_cases': [{
         'input': '3 2 4\n6',
