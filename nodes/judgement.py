@@ -12,34 +12,17 @@ import re
 import time
 from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
-from models.client import generate
+from models.client import get_client, get_model_name, get_temperature
+from config import model_registry, thresholds
 
 JUDGEMENT_MODEL = "QWEN"
-
-# ── Threshold table — embedded context for Qwen 3.5 ──────────────────────────
-_THRESHOLD_CONTEXT = """
-## Metric Threshold Reference
-
-| Metric | Good | Acceptable | Poor |
-|--------|------|------------|------|
-| Cyclomatic Complexity (CC) | ≤ 5 | 6–10 | > 10 |
-| Maintainability Index (MI) | ≥ 85 | 65–85 | < 65 |
-| Halstead Volume | ≤ 500 | 500–1000 | > 1000 |
-| Test Pass Rate | ≥ 0.90 | 0.70–0.90 | < 0.70 |
-| Peak Memory | ≤ 256 MB | 256–512 MB | > 512 MB |
-| CPU Time | ≤ 2 s | 2–5 s | > 5 s |
-
-Bandit HIGH severity: zero tolerance — any finding is critical.
-MI < 65 means the code is hard to maintain and likely poorly structured.
-CC > 10 means the function has too many branches and is hard to test.
-"""
 
 JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
 
 You evaluate Python solutions to competitive programming problems using static analysis
 results (Node 1) and sandbox execution results (Node 2).
 
-{_THRESHOLD_CONTEXT}
+{thresholds.judgement_context_table()}
 
 Your task:
 1. Assign "algorithm_choice" (0–10): Did the model choose an appropriate algorithm for the problem?
@@ -181,9 +164,6 @@ def _get_llm_judgement(
     )
 
     try:
-        # Track token usage
-        from models.client import get_client, get_model_name, get_temperature
-        from config import model_registry
         cfg    = model_registry.get(JUDGEMENT_MODEL)
         client = get_client(JUDGEMENT_MODEL)
 
@@ -236,8 +216,16 @@ def _build_judgement_prompt(
     """
     pass_rate = numeric_scores["accuracy"] / 25
 
+    _pr_target = {
+        "easy":   thresholds.node2.pass_rate_easy,
+        "medium": thresholds.node2.pass_rate_medium,
+        "hard":   thresholds.node2.pass_rate_hard,
+    }.get(difficulty, thresholds.node2.pass_rate_hard)
+
     lines = [
-        f"## Iteration {iteration} | Difficulty: {difficulty}",
+        f"## Iteration {iteration} | Difficulty: {difficulty.upper()}",
+        f"> Pass rate target for {difficulty.upper()}: ≥ {_pr_target:.0%} is Good. "
+        f"Current pass rate: {pass_rate:.0%}",
         "",
         "## Problem",
         problem[:800],
