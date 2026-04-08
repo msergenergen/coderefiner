@@ -15,6 +15,41 @@ from metrics.scoring import compute_numeric_scores
 from models.client import get_client, get_model_name, get_temperature
 from config import model_registry, thresholds
 
+# ── Rule-based fix hints for common static analysis issues ───────────────────
+# Each entry: (compiled regex, fix string or callable(match) -> str)
+_ISSUE_HINTS: list[tuple] = [
+    # mypy: undefined name from typing (e.g. List, Dict, Tuple, Optional)
+    (re.compile(r'Name "([A-Za-z]+)" is not defined'),
+     lambda m: f'Add `from typing import {m.group(1)}` as the first import line'),
+    # mypy: operand with None — uninitialized variable
+    (re.compile(r'Unsupported operand types.*None'),
+     lambda _: 'Initialize the variable to 0 or an empty collection before the loop, not None'),
+    # ruff F821 — same root as mypy name-defined
+    (re.compile(r'\[F821\].*Undefined name `([A-Za-z]+)`'),
+     lambda m: f'Add `from typing import {m.group(1)}` — `{m.group(1)}` is not a builtin in Python 3.9+'),
+    # ruff W293 — trailing whitespace on blank lines
+    (re.compile(r'\[W293\]'),
+     lambda _: 'Remove trailing whitespace from blank lines (run: sed -i "s/[[:space:]]*$//" your_file.py)'),
+    # ruff E501 — line too long
+    (re.compile(r'\[E501\].*[Ll]ine too long \((\d+)'),
+     lambda m: f'Line is {m.group(1)} chars — break it into two lines (max 88)'),
+    # ruff E302/E303 — missing blank lines
+    (re.compile(r'\[E30[23]\]'),
+     lambda _: 'Add the required blank lines between top-level definitions'),
+    # mypy return type mismatch
+    (re.compile(r'Incompatible return value type'),
+     lambda _: 'Return type does not match the annotation — check your return statement'),
+]
+
+
+def _hint_for_issue(issue: str) -> str | None:
+    """Returns a concrete fix suggestion for a known issue pattern, or None."""
+    for pattern, fix in _ISSUE_HINTS:
+        m = pattern.search(issue)
+        if m:
+            return fix(m) if callable(fix) else fix
+    return None
+
 JUDGEMENT_MODEL = "QWEN"
 
 JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
@@ -241,9 +276,14 @@ def _build_judgement_prompt(
     ]
 
     if node1_issues:
-        lines.append("- Issues:")
+        lines.append("- Issues (with required fixes):")
+        seen_hints: set[str] = set()
         for issue in node1_issues:
             lines.append(f"  • {issue}")
+            hint = _hint_for_issue(issue)
+            if hint and hint not in seen_hints:
+                lines.append(f"    → Fix: {hint}")
+                seen_hints.add(hint)
     else:
         lines.append("- No issues detected.")
 
