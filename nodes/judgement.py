@@ -131,7 +131,10 @@ def judgement_node(state: PipelineState) -> PipelineState:
 
     from pipeline.gates import PASS_THRESHOLDS
     threshold = PASS_THRESHOLDS[state["difficulty"]]
-    passed = total >= threshold
+    # Hard gate: zero test pass rate → cannot PASS regardless of other scores.
+    # A solution that produces no correct output must not be marked as passing,
+    # even if static analysis and LLM scores are high.
+    passed = total >= threshold and numeric["accuracy"] > 0.0
 
     node3_ms = int((time.perf_counter() - t0) * 1000)
     timing = dict(state.get("timing", {}))
