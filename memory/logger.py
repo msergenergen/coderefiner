@@ -97,10 +97,8 @@ def write_run_info() -> str:
         "env":       settings.env,
         "hardware":  _collect_hardware(),
         "models": {
-            "M1":   model_registry.M1.model_name,
-            "M2":   model_registry.M2.model_name,
-            "M3":   model_registry.M3.model_name,
-            "QWEN": model_registry.QWEN.model_name,
+            **{m: model_registry.get(m).model_name for m in settings.model_sequence},
+            settings.judge_model: model_registry.get(settings.judge_model).model_name,
         },
         "pipeline_config": {
             "max_iterations":      settings.max_iterations,

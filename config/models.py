@@ -51,12 +51,21 @@ class ModelRegistry:
         except AttributeError:
             raise ValueError(f"Invalid model_id: {model_id!r}. Must be M1/M2/M3/QWEN.")
 
-    def codegen_models(self) -> list:
-        """Sequential execution order: [M1, M2, M3]."""
-        return [self.M1, self.M2, self.M3]
+    def codegen_models(self, sequence: list[str]) -> list:
+        """Returns ModelConfig list for the given model keys in order.
 
-    def judgement_model(self) -> ModelConfig:
-        return self.QWEN
+        Args:
+            sequence: list of model keys, e.g. settings.model_sequence
+        """
+        return [self.get(k) for k in sequence]
+
+    def judgement_model(self, key: str) -> ModelConfig:
+        """Returns the ModelConfig for the given judgement model key.
+
+        Args:
+            key: registry key, e.g. settings.judge_model
+        """
+        return self.get(key)
 
     def api_key(self) -> str:
         return os.getenv("LLAMA_API_KEY", "local")
