@@ -1,24 +1,24 @@
 """
 Sequential model router.
-Runs M1 → M2 → M3 in order.
+Runs models in the order defined by PIPELINE_MODELS env var (default: M1,M2,M3).
 Advances to the next model after one completes.
 """
+from config import settings
 from pipeline.state import PipelineState
-
-MODEL_SEQUENCE = ["M1", "M2", "M3"]
 
 
 def get_next_model(current: str):
     """
-    Returns the model after the current one.
-    Returns None after M3 (all models completed).
+    Returns the model after the current one in settings.model_sequence.
+    Returns None when all models are completed.
     """
+    sequence = settings.model_sequence
     try:
-        idx = MODEL_SEQUENCE.index(current)
+        idx = sequence.index(current)
     except ValueError:
         return None
-    if idx + 1 < len(MODEL_SEQUENCE):
-        return MODEL_SEQUENCE[idx + 1]
+    if idx + 1 < len(sequence):
+        return sequence[idx + 1]
     return None
 
 

@@ -45,6 +45,11 @@ class PipelineSettings:
     # "M1,M2,M3"  → full sequence (cloud benchmark, default)
     pipeline_models: str = os.getenv("PIPELINE_MODELS", "M1,M2,M3")
 
+    # ── Judge model ───────────────────────────────────────────────────────
+    # Registry key of the judgement model. Must match a key in ModelRegistry.
+    # Default: "QWEN" — change to any registered model (e.g. "M3") to swap.
+    judge_model: str = os.getenv("JUDGE_MODEL", "QWEN")
+
     @property
     def model_sequence(self) -> list:
         return [m.strip() for m in self.pipeline_models.split(",") if m.strip()]

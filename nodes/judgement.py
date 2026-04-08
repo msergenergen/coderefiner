@@ -13,7 +13,7 @@ import time
 from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
 from models.client import get_client, get_model_name, get_temperature
-from config import model_registry, thresholds
+from config import model_registry, settings, thresholds
 
 # ── Rule-based fix hints for common static analysis issues ───────────────────
 # Each entry: (compiled regex, fix string or callable(match) -> str)
@@ -50,7 +50,9 @@ def _hint_for_issue(issue: str) -> str | None:
             return fix(m) if callable(fix) else fix
     return None
 
-JUDGEMENT_MODEL = "QWEN"
+# Configurable via .env: JUDGE_MODEL=QWEN (default)
+# Change to any registry key (M1/M2/M3/QWEN) to swap the judge.
+JUDGEMENT_MODEL: str = settings.judge_model
 
 JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
 
