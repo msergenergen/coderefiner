@@ -52,7 +52,7 @@ class PipelineState(TypedDict):
     # ── Node 3 outputs ──────────────────────────────────────────────
     node3_total_score:     float
     node3_pass:            bool
-    node3_score_breakdown: dict        # {"correctness": 0, "efficiency": 0, ...}
+    node3_score_breakdown: dict        # {"accuracy": 0, "efficiency": 0, "quality": 0, "security": 0, "algorithm_choice": 0, "error_handling": 0}
     node3_failure_reasons: list
     node3_improved_prompt: str         # Completely rewritten every iteration
 

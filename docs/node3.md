@@ -232,8 +232,10 @@ def _get_llm_judgement(
     numeric_scores: dict,
     code: str,
     problem: str,
-    node1_issues: list[str],
-    failed_cases: list[dict],
+    node1_issues: list,
+    failed_cases: list,
+    halstead: float,
+    timed_out: bool,
     difficulty: str,
     iteration: int,
 ) -> dict:
@@ -243,25 +245,43 @@ def _get_llm_judgement(
         problem=problem,
         node1_issues=node1_issues,
         failed_cases=failed_cases,
+        halstead=halstead,
+        timed_out=timed_out,
         difficulty=difficulty,
         iteration=iteration,
     )
 
     try:
-        raw = generate(
-            model_id=JUDGEMENT_MODEL,
-            system_prompt=JUDGEMENT_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
+        cfg    = model_registry.get(JUDGEMENT_MODEL)
+        client = get_client(JUDGEMENT_MODEL)
+
+        response = client.chat.completions.create(
+            model=cfg.model_name,
+            messages=[
+                {"role": "system", "content": JUDGEMENT_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=cfg.temperature,
             max_tokens=1024,
         )
-        return _parse_judgement(raw)
+        raw = response.choices[0].message.content
+        result = _parse_judgement(raw)
+
+        if hasattr(response, "usage") and response.usage:
+            result["_judgement_prompt_tokens"]     = response.usage.prompt_tokens
+            result["_judgement_completion_tokens"] = response.usage.completion_tokens
+        else:
+            result.setdefault("_judgement_prompt_tokens",     0)
+            result.setdefault("_judgement_completion_tokens", 0)
+
+        return result
+
     except Exception:
-        # LLM error → do not stop pipeline, use rule-based fallback
         return {
-            "algorithm_choice":            5,
+            "algorithm_choice":       5,
             "error_handling":         5,
             "failure_reasons":        ["judgement_llm_error"],
-            "improved_system_prompt": _fallback_prompt(node1_issues, failed_cases),
+            "improved_system_prompt": _fallback_prompt(node1_issues, failed_cases, timed_out),
         }
 
 
@@ -269,19 +289,29 @@ def _build_judgement_prompt(
     numeric_scores: dict,
     code: str,
     problem: str,
-    node1_issues: list[str],
-    failed_cases: list[dict],
+    node1_issues: list,
+    failed_cases: list,
+    halstead: float,
+    timed_out: bool,
     difficulty: str,
     iteration: int,
 ) -> str:
     """
-    Qwen 3.5'e gönderilecek tam kullanıcı promptu.
-    Threshold bağlamı system prompt'ta olduğu için burada tekrar edilmez.
+    Builds the full user prompt sent to Qwen 3.5.
+    Threshold context is in the system prompt — not repeated here.
     """
     pass_rate = numeric_scores["accuracy"] / 25
 
+    _pr_target = {
+        "easy":   thresholds.node2.pass_rate_easy,
+        "medium": thresholds.node2.pass_rate_medium,
+        "hard":   thresholds.node2.pass_rate_hard,
+    }.get(difficulty, thresholds.node2.pass_rate_hard)
+
     lines = [
-        f"## Iteration {iteration} | Difficulty: {difficulty}",
+        f"## Iteration {iteration} | Difficulty: {difficulty.upper()}",
+        f"> Pass rate target for {difficulty.upper()}: ≥ {_pr_target:.0%} is Good. "
+        f"Current pass rate: {pass_rate:.0%}",
         "",
         "## Problem",
         problem[:800],
@@ -292,7 +322,8 @@ def _build_judgement_prompt(
         "```",
         "",
         "## Node 1 — Static Analysis",
-        f"- Cyclomatic Complexity: {numeric_scores['quality']:.1f}/20 quality score",
+        f"- Code quality score: {numeric_scores['quality']:.1f}/20",
+        f"- Halstead Volume:    {halstead:.1f}",
     ]
 
     if node1_issues:
@@ -302,6 +333,7 @@ def _build_judgement_prompt(
     else:
         lines.append("- No issues detected.")
 
+    timed_out_str = "YES — solution exceeded time limit" if timed_out else "No"
     lines += [
         "",
         "## Node 2 — Execution Results",
@@ -309,6 +341,7 @@ def _build_judgement_prompt(
         f"- Efficiency score: {numeric_scores['efficiency']}/20",
         f"- Security score:   {numeric_scores['security']}/15",
         f"- Numeric subtotal: {numeric_scores['numeric_total']}/80",
+        f"- Timed out:        {timed_out_str}",
     ]
 
     if failed_cases:
@@ -336,8 +369,9 @@ def _build_judgement_prompt(
 
 
 def _fallback_prompt(
-    node1_issues: list[str],
-    failed_cases: list[dict],
+    node1_issues: list,
+    failed_cases: list,
+    timed_out: bool = False,
 ) -> str:
     """
     LLM hatası durumunda kural tabanlı temel prompt üretir.

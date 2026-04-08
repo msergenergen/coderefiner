@@ -49,21 +49,6 @@ def get_model_name(model_id: str) -> str:
 def get_temperature(model_id: str) -> float:
     return model_registry.get(model_id).temperature
 
-    base_url, _, _ = _MODEL_CONFIG[model_id]
-    api_key = os.getenv("LLAMA_API_KEY", "local")
-
-    return OpenAI(base_url=base_url, api_key=api_key)
-
-
-def get_model_name(model_id: str) -> str:
-    _, model_name, _ = _MODEL_CONFIG[model_id]
-    return model_name
-
-
-def get_temperature(model_id: str) -> float:
-    _, _, temperature = _MODEL_CONFIG[model_id]
-    return temperature
-
 
 def generate(
     model_id: str,
