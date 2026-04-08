@@ -1,6 +1,6 @@
 """
 100-point rubric computation — numeric dimensions.
-Originality (10p) and Error Handling (10p) are filled by Qwen 3.5.
+Algorithm Choice (10p) and Error Handling (10p) are filled by the Judge model.
 """
 
 

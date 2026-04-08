@@ -1,11 +1,11 @@
 """
-LangGraph Node 3: Judgement LLM (Qwen 3.5)
+LangGraph Node 3: Judgement LLM (Judge)
 
 Critical design decisions:
   1. improved_prompt is COMPLETELY REWRITTEN every iteration — no accumulation.
   2. Threshold table is embedded in the system prompt.
   3. Failing test cases (input/expected/got) are included verbatim in the prompt.
-  4. Judgement model (Qwen 3.5) is independent of the code generation models.
+  4. Judgement model (Judge) is independent of the code generation models (M1/M2/M3).
 """
 import json
 import re
@@ -246,7 +246,7 @@ def _build_judgement_prompt(
     iteration: int,
 ) -> str:
     """
-    Builds the full user prompt sent to Qwen 3.5.
+    Builds the full user prompt sent to the Judge model.
     Threshold context is in the system prompt — not repeated here.
     """
     pass_rate = numeric_scores["accuracy"] / 25
@@ -329,7 +329,7 @@ def _fallback_prompt(
 ) -> str:
     """
     Generates a rule-based basic prompt on LLM error.
-    Keeps the pipeline running even if Qwen 3.5 fails.
+    Keeps the pipeline running even if the Judge model fails.
     """
     parts = [
         "You are an expert Python programmer solving a competitive programming problem.",
