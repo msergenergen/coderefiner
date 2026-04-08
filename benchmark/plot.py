@@ -48,10 +48,10 @@ FULL_W  = 7.16   # double-column figure width (inches)
 FIG_H   = 2.6    # default height
 
 PALETTE = {
-    "V0": "#6c757d",   # grey  — baseline
-    "V1": "#4a90d9",   # blue  — execution + judgement
+    "V0": "#6c757d",   # grey   — baseline
+    "V1": "#4a90d9",   # blue   — execution + judgement
     "V2": "#e07b39",   # orange — static + judgement
-    "V3": "#2a9d5c",   # green — full pipeline
+    "V3": "#2a9d5c",   # green  — full pipeline
 }
 DIFF_COLOURS = {
     "easy":   "#5b8dd9",
@@ -59,10 +59,10 @@ DIFF_COLOURS = {
     "hard":   "#d94f4f",
 }
 VARIANT_LABELS = {
-    "V0": "V0 Temel",
-    "V1": "V1 Yür.+Yargı",
-    "V2": "V2 Stat.+Yargı",
-    "V3": "V3 Tam Hat",
+    "V0": "V0 Baseline",
+    "V1": "V1 Exec+Judge",
+    "V2": "V2 Static+Judge",
+    "V3": "V3 Full Pipeline",
 }
 
 plt.rcParams.update({
@@ -144,11 +144,11 @@ def fig_ablation_tsr(variant_data: dict, out_dir: str) -> None:
     Error bars: 95% Wilson CI.
     """
     difficulties = ["easy", "medium", "hard"]
-    diff_labels  = ["Kolay", "Orta", "Zor"]
+    diff_labels  = ["Easy", "Medium", "Hard"]
     variants     = [v for v in ("V0", "V1", "V2", "V3") if v in variant_data]
 
     if not variants:
-        print("  [fig1] Veri yok — atlanıyor")
+        print("  [fig1] No data — skipping")
         return
 
     n_diff    = len(difficulties)
@@ -205,15 +205,15 @@ def fig_ablation_tsr(variant_data: dict, out_dir: str) -> None:
 
     ax.set_xticks(x)
     ax.set_xticklabels(diff_labels)
-    ax.set_ylabel("Görev Başarı Oranı (TSR)")
+    ax.set_ylabel("Task Success Rate (TSR)")
     ax.set_ylim(0, 1.12)
-    ax.set_title("Ablasyon Varyantlarına Göre TSR\n(hata çubukları: %95 Wilson GA)")
+    ax.set_title("TSR by Ablation Variant\n(error bars: 95% Wilson CI)")
     ax.legend(loc="upper right", framealpha=0.85, ncol=2)
     ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(xmax=1, decimals=0))
 
     fig.tight_layout()
     _save(fig, out_dir, "fig1_ablation_tsr")
-    print(f"  [fig1] Kaydedildi → {out_dir}/fig1_ablation_tsr")
+    print(f"  [fig1] Saved → {out_dir}/fig1_ablation_tsr")
 
 
 # ── Figure 2 — Per-model V0 vs V3 comparison ─────────────────────────────────
@@ -226,7 +226,7 @@ def fig_model_comparison(variant_data: dict, baseline_by_model: dict,
     """
     models = [m for m in ("M1", "M2", "M3") if m in baseline_by_model]
     if not models or "V3" not in variant_data:
-        print("  [fig2] Veri yok — atlanıyor")
+        print("  [fig2] No data — skipping")
         return
 
     # V3 results split by active_model
@@ -263,11 +263,11 @@ def fig_model_comparison(variant_data: dict, baseline_by_model: dict,
         v3_cis.append(ci_v3["tsr"] - ci_v3.get("ci_lo", 0.0))
 
     bars_v0 = ax.bar(x - bar_w / 2, v0_tsrs, width=bar_w,
-                     color=PALETTE["V0"], label="V0 Temel",
+                     color=PALETTE["V0"], label="V0 Baseline",
                      alpha=0.88, yerr=v0_cis, capsize=2,
                      error_kw={"linewidth": 0.8, "ecolor": "black", "alpha": 0.6})
     bars_v3 = ax.bar(x + bar_w / 2, v3_tsrs, width=bar_w,
-                     color=PALETTE["V3"], label="V3 Tam Hat",
+                     color=PALETTE["V3"], label="V3 Full Pipeline",
                      alpha=0.88, yerr=v3_cis, capsize=2,
                      error_kw={"linewidth": 0.8, "ecolor": "black", "alpha": 0.6})
 
@@ -290,15 +290,15 @@ def fig_model_comparison(variant_data: dict, baseline_by_model: dict,
     }
     ax.set_xticks(x)
     ax.set_xticklabels([model_names.get(m, m) for m in models])
-    ax.set_ylabel("Görev Başarı Oranı (TSR)")
+    ax.set_ylabel("Task Success Rate (TSR)")
     ax.set_ylim(0, 1.15)
-    ax.set_title("Model Bazlı V0 → V3 Karşılaştırması\n(yeşil delta = tam hat kazanımı)")
+    ax.set_title("Per-Model V0 vs V3 Comparison\n(green delta = full pipeline gain)")
     ax.legend(loc="upper right", framealpha=0.85)
     ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(xmax=1, decimals=0))
 
     fig.tight_layout()
     _save(fig, out_dir, "fig2_model_comparison")
-    print(f"  [fig2] Kaydedildi → {out_dir}/fig2_model_comparison")
+    print(f"  [fig2] Saved → {out_dir}/fig2_model_comparison")
 
 
 # ── Figure 3 — Score progression across iterations ───────────────────────────
@@ -310,7 +310,7 @@ def fig_score_progression(iter_rows: list[dict], out_dir: str) -> None:
     One line per difficulty level.
     """
     if not iter_rows:
-        print("  [fig3] İterasyon verisi yok — atlanıyor")
+        print("  [fig3] No iteration data — skipping")
         return
 
     # Collect (iteration, score, difficulty) for LOOP rows
@@ -335,7 +335,7 @@ def fig_score_progression(iter_rows: list[dict], out_dir: str) -> None:
         default=0,
     )
     if max_iter == 0:
-        print("  [fig3] İterasyon verisi boş — atlanıyor")
+        print("  [fig3] Iteration data is empty — skipping")
         return
 
     fig, ax = plt.subplots(figsize=(COL_W, FIG_H))
@@ -350,7 +350,7 @@ def fig_score_progression(iter_rows: list[dict], out_dir: str) -> None:
 
         ax.plot(xs, ys, marker="o", markersize=3.5,
                 color=colour, linewidth=1.5,
-                label={"easy": "Kolay", "medium": "Orta", "hard": "Zor"}[diff])
+                label={"easy": "Easy", "medium": "Medium", "hard": "Hard"}[diff])
         ax.fill_between(
             xs,
             [y - s for y, s in zip(ys, sds)],
@@ -358,20 +358,20 @@ def fig_score_progression(iter_rows: list[dict], out_dir: str) -> None:
             alpha=0.12, color=colour,
         )
 
-    ax.set_xlabel("Yineleme")
-    ax.set_ylabel("Ortalama Toplam Puan")
-    ax.set_title("Yineleme Boyunca Puan Gelişimi\n(gölge alan: ±1 std)")
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Average Total Score")
+    ax.set_title("Score Progression Across Iterations\n(shaded area: ±1 std)")
     ax.set_xlim(0.5, max_iter + 0.5)
     ax.set_ylim(0, 100)
     ax.set_xticks(range(1, max_iter + 1))
     ax.legend(loc="lower right", framealpha=0.85)
-    ax.axhline(80, color="#2a9d5c", linewidth=0.7, linestyle="--", alpha=0.5, label="Kolay eşik (80)")
+    ax.axhline(80, color="#2a9d5c", linewidth=0.7, linestyle="--", alpha=0.5, label="Easy threshold (80)")
     ax.axhline(70, color="#f0a500", linewidth=0.7, linestyle="--", alpha=0.5)
     ax.axhline(60, color="#d94f4f", linewidth=0.7, linestyle="--", alpha=0.5)
 
     fig.tight_layout()
     _save(fig, out_dir, "fig3_score_progression")
-    print(f"  [fig3] Kaydedildi → {out_dir}/fig3_score_progression")
+    print(f"  [fig3] Saved → {out_dir}/fig3_score_progression")
 
 
 # ── Figure 4 — Status breakdown per variant ───────────────────────────────────
@@ -382,7 +382,7 @@ def fig_status_breakdown(variant_data: dict, out_dir: str) -> None:
     """
     variants = [v for v in ("V0", "V1", "V2", "V3") if v in variant_data]
     if not variants:
-        print("  [fig4] Veri yok — atlanıyor")
+        print("  [fig4] No data — skipping")
         return
 
     status_colours = {
@@ -421,9 +421,9 @@ def fig_status_breakdown(variant_data: dict, out_dir: str) -> None:
 
     ax.set_yticks(range(len(variants)))
     ax.set_yticklabels([VARIANT_LABELS[v] for v in reversed(variants)])
-    ax.set_xlabel("Oran")
+    ax.set_xlabel("Ratio")
     ax.set_xlim(0, 1)
-    ax.set_title("Varyant Başına Durum Dağılımı")
+    ax.set_title("Status Distribution per Variant")
     ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(xmax=1, decimals=0))
 
     legend_patches = [
@@ -436,7 +436,7 @@ def fig_status_breakdown(variant_data: dict, out_dir: str) -> None:
 
     fig.tight_layout()
     _save(fig, out_dir, "fig4_status_breakdown")
-    print(f"  [fig4] Kaydedildi → {out_dir}/fig4_status_breakdown")
+    print(f"  [fig4] Saved → {out_dir}/fig4_status_breakdown")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -505,9 +505,9 @@ if __name__ == "__main__":
             if v in ("V1", "V2", "V3"):
                 variant_data[v] = data.get("results", [])
 
-    print(f"Yüklendi: {list(variant_data)} — model: {list(baseline_by_model)}")
-    print(f"İterasyon verisi: {len(iter_rows)} kayıt")
-    print(f"Çıktı dizini: {args.out}")
+    print(f"Loaded: {list(variant_data)} — models: {list(baseline_by_model)}")
+    print(f"Iteration records: {len(iter_rows)}")
+    print(f"Output directory: {args.out}")
     print()
 
     # ── Generate figures ──────────────────────────────────────────────────────
@@ -516,4 +516,4 @@ if __name__ == "__main__":
     fig_score_progression(iter_rows, args.out)
     fig_status_breakdown(variant_data, args.out)
 
-    print("\nTüm grafikler oluşturuldu.")
+    print("\nAll figures generated.")
