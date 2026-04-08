@@ -10,9 +10,9 @@ write a **fully self-contained** improved system prompt for the next iteration.
 
 | Decision | Rationale |
 |-------|---------|
-| Judgement model = Qwen 3.5 (independent of M1/M2/M3) | Reduces self-enhancement bias risk [Zheng et al., 2023] |
+| Judgement model = Judge (independent of M1/M2/M3) | Reduces self-enhancement bias risk [Zheng et al., 2023] |
 | `improved_prompt` is **completely rewritten** every iteration | Accumulated prompts produce contradictory instructions (semantic drift) |
-| Threshold table is **embedded** in the judgement prompt | So Qwen 3.5 understands why `mi=48` is poor |
+| Threshold table is **embedded** in the judgement prompt | So the Judge understands why `mi=48` is poor |
 | Failing test cases (input/expected/got) are **included verbatim** | Answers "why did it fail?" far better than numeric metrics alone |
 | Fallback mechanism | Rule-based prompt is generated on LLM error — pipeline keeps running |
 
@@ -26,8 +26,8 @@ write a **fully self-contained** improved system prompt for the next iteration.
 | Efficiency | 20p | Node 2: `cpu_ms` + `ram_mb` |
 | Quality | 20p | Node 1: MI + CC composite |
 | Security | 15p | Node 1: Bandit severity weighted |
-| Algorithm Choice | 10p | Qwen 3.5: appropriate algorithm for the problem? |
-| Error Handling | 10p | Qwen 3.5: exception and edge case handling |
+| Algorithm Choice | 10p | Judge: appropriate algorithm for the problem? |
+| Error Handling | 10p | Judge: exception and edge case handling |
 
 ---
 
@@ -36,7 +36,7 @@ write a **fully self-contained** improved system prompt for the next iteration.
 ```python
 """
 100 puanlık rubric hesaplama — sayısal boyutlar.
-Özgünlük (10p) ve Hata Yönetimi (10p) Qwen 3.5 tarafından doldurulur.
+Algorithm Choice (10p) ve Error Handling (10p) Judge modeli tarafından doldurulur.
 """
 
 
@@ -108,13 +108,13 @@ def compute_numeric_scores(
 
 ```python
 """
-LangGraph Node 3: Judgement LLM (Qwen 3.5)
+LangGraph Node 3: Judgement LLM (Judge)
 
 Kritik tasarım kararları:
   1. Her iterasyonda improved_prompt TAMAMEN YENİDEN YAZILIR — birikim yok.
   2. Threshold tablosu system prompt'a gömülü.
   3. Başarısız test case'ler (input/expected/got) prompt'a eklenir.
-  4. Yargı modeli (Qwen 3.5) kod üreten modellerden bağımsız.
+  4. Judge modeli (QWEN) kod üreten modellerden (M1/M2/M3) bağımsız.
 """
 import json
 import re
@@ -124,7 +124,7 @@ from models.client import generate
 
 JUDGEMENT_MODEL = "QWEN"
 
-# ── Threshold table — embedded context for Qwen 3.5 ────────────────────────
+# ── Threshold table — embedded context for the Judge model ──────────────────
 _THRESHOLD_CONTEXT = """
 ## Metric Threshold Reference
 
@@ -297,7 +297,7 @@ def _build_judgement_prompt(
     iteration: int,
 ) -> str:
     """
-    Builds the full user prompt sent to Qwen 3.5.
+    Builds the full user prompt sent to the Judge model.
     Threshold context is in the system prompt — not repeated here.
     """
     pass_rate = numeric_scores["accuracy"] / 25
@@ -375,7 +375,7 @@ def _fallback_prompt(
 ) -> str:
     """
     LLM hatası durumunda kural tabanlı temel prompt üretir.
-    Qwen 3.5 yetersiz kalırsa pipeline yine de devam eder.
+    Judge modeli yetersiz kalırsa pipeline yine de devam eder.
     """
     parts = [
         "You are an expert Python programmer solving a competitive programming problem.",
@@ -431,7 +431,7 @@ def _parse_judgement(raw: str) -> dict:
 
 ---
 
-## 5. models/client.py — Qwen 3.5 Eklemesi
+## 5. models/client.py — Judge Model Registration
 
 Add to the `_MODEL_CONFIG` dict in `models/client.py`:
 
@@ -478,7 +478,7 @@ def build_system_prompt(improved_prompt: str | None = None) -> str:
     BİRLEŞTİRİLMEZ. Bu sayede:
       - Çelişkili talimat birikimi önlenir (semantic drift)
       - Her iterasyon temiz bir bağlamla başlar
-      - Qwen 3.5, improved_prompt'u zaten self-contained yazmakla yükümlü
+      - Judge, improved_prompt'u zaten self-contained yazmakla yükümlü
 
     improved_prompt yoksa (ilk iterasyon) BASE_SYSTEM_PROMPT kullanılır.
     """
