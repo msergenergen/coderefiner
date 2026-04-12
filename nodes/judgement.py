@@ -165,6 +165,14 @@ def judgement_node(state: PipelineState) -> PipelineState:
         "error_handling":   llm_scores["error_handling"],
     }
 
+    # Cap improved_prompt to prevent codegen context window growth over iterations.
+    # Judge max_tokens=1024 can produce ~800 tokens (~3200 chars) per iteration;
+    # without a cap this compounds and inflates codegen prompt tokens on every loop.
+    _MAX_IMPROVED_PROMPT_CHARS = 2000
+    improved_prompt = llm_scores["improved_system_prompt"]
+    if len(improved_prompt) > _MAX_IMPROVED_PROMPT_CHARS:
+        improved_prompt = improved_prompt[:_MAX_IMPROVED_PROMPT_CHARS]
+
     return {
         **state,
         "node3_total_score":      total,
@@ -172,7 +180,7 @@ def judgement_node(state: PipelineState) -> PipelineState:
         "node3_score_breakdown":  score_breakdown,
         "node3_failure_reasons":  llm_scores["failure_reasons"],
         # Completely rewritten — previous prompt is not inherited
-        "node3_improved_prompt":  llm_scores["improved_system_prompt"],
+        "node3_improved_prompt":  improved_prompt,
         "timing":                 timing,
         "tokens":                 tokens,
     }

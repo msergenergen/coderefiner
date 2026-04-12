@@ -3,6 +3,7 @@ LangGraph Node 1: Static Analysis
 
 Analyzes generated code without executing it and makes a severity decision.
 """
+import logging
 from pipeline.state import PipelineState
 from metrics.complexity import (
     cyclomatic_complexity,
@@ -12,6 +13,8 @@ from metrics.complexity import (
 )
 from metrics.security import bandit_scan, check_imports
 from metrics.linting  import mypy_check, ruff_check
+
+logger = logging.getLogger(__name__)
 
 
 def static_analysis_node(state: PipelineState) -> PipelineState:
@@ -53,6 +56,18 @@ def static_analysis_node(state: PipelineState) -> PipelineState:
         bandit=bandit, forbidden=forbidden,
         mypy=mypy, ruff=ruff,
     )
+
+    if severity != "OK":
+        logger.warning(
+            "Node 1 severity=%s | model=%s iter=%d | CC=%.1f MI=%.1f "
+            "Halstead=%.0f bandit_high=%s forbidden=%s",
+            severity,
+            state.get("active_model", "?"),
+            state.get("iteration", 0),
+            cc, mi, halstead,
+            bandit["high_count"] > 0,
+            forbidden,
+        )
 
     node1_ms = int((time.perf_counter() - t0) * 1000)
     timing = dict(state.get("timing", {}))
