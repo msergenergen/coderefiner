@@ -111,6 +111,12 @@ def write_run_info() -> str:
                 "medium": 70,
                 "hard":   60,
             },
+            "trend_extension": {
+                "enabled":          settings.trend_extension_enabled,
+                "max_extension_iters": settings.max_extension_iters,
+                "min_slope":        settings.trend_min_slope,
+                "ema_alpha":        settings.trend_ema_alpha,
+            },
         },
     }
 
@@ -207,7 +213,7 @@ def _write_iteration_json(state: PipelineState, status: str,
         "model_name":  model_name,
         "question_id": q_id,
         "difficulty":  state["difficulty"],
-        "variant":     state.get("variant", "V4"),
+        "variant":     state.get("variant", "V3"),
         "status":      status,
 
         "timing": timing,
@@ -226,6 +232,10 @@ def _write_iteration_json(state: PipelineState, status: str,
 
         "node2": {
             "pass_rate":            state.get("node2_pass_rate", 0.0),
+            "passed_count":         state.get("node2_passed_count", 0),
+            "total_count":          state.get("node2_total_count", 0),
+            "crash_count":          state.get("node2_crash_count", 0),
+            "lcb_available":        state.get("node2_lcb_available", False),
             "cpu_ms":               state.get("node2_cpu_ms", 0.0),
             "ram_mb":               state.get("node2_ram_mb", 0.0),
             "timed_out":            state.get("node2_timed_out", False),
@@ -239,6 +249,12 @@ def _write_iteration_json(state: PipelineState, status: str,
             "breakdown":       state.get("node3_score_breakdown", {}),
             "failure_reasons": state.get("node3_failure_reasons", []),
             "improved_prompt": state.get("node3_improved_prompt", ""),
+        },
+
+        "trend": {
+            "extension_count":  state.get("extension_count", 0),
+            "score_history":    state.get("score_history", []),
+            "pass_rate_history": state.get("pass_rate_history", []),
         },
     }
 

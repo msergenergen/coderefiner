@@ -149,9 +149,10 @@ def run_evaluator(
         f"{len(rows)} problems | difficulty={difficulty}"
     )
 
-    results      = []
-    pass_counts  = {"easy": 0, "medium": 0, "hard": 0}
-    total_counts = {"easy": 0, "medium": 0, "hard": 0}
+    results            = []
+    quality_counts     = {"easy": 0, "medium": 0, "hard": 0}  # node3_pass
+    correctness_counts = {"easy": 0, "medium": 0, "hard": 0}  # final_pass_rate==1.0
+    total_counts       = {"easy": 0, "medium": 0, "hard": 0}
 
     for i, row in enumerate(rows):
         diff = row.get("difficulty", "medium")
@@ -160,20 +161,27 @@ def run_evaluator(
         results.append(result)
 
         total_counts[diff] = total_counts.get(diff, 0) + 1
-        # Pipeline PASS: at least one model got PASS
+        # TSR_quality: at least one model received PASS (judge criterion)
         if any(m["status"] == "PASS" for m in result["results"]):
-            pass_counts[diff] = pass_counts.get(diff, 0) + 1
+            quality_counts[diff] = quality_counts.get(diff, 0) + 1
+        # TSR_correctness: at least one model achieved final_pass_rate==1.0 (lcb criterion)
+        if any(m.get("final_pass_rate", 0.0) == 1.0 for m in result["results"]):
+            correctness_counts[diff] = correctness_counts.get(diff, 0) + 1
+
+    def _tsr_dict(counts):
+        return {
+            d: round(counts.get(d, 0) / total_counts[d], 3)
+            if total_counts.get(d, 0) > 0 else 0.0
+            for d in ("easy", "medium", "hard")
+        }
 
     summary = {
         "run_id":    run_id,
         "variant":   variant,
         "timestamp": datetime.now().isoformat(),
         "total":     len(rows),
-        "tsr": {
-            d: round(pass_counts.get(d, 0) / total_counts[d], 3)
-            if total_counts.get(d, 0) > 0 else 0.0
-            for d in ("easy", "medium", "hard")
-        },
+        "tsr_quality":     _tsr_dict(quality_counts),      # LLM-judge criterion
+        "tsr_correctness": _tsr_dict(correctness_counts),  # lcb execution criterion
         "results": results,
     }
 
@@ -188,7 +196,8 @@ def run_evaluator(
         json.dump(summary, f, indent=2, ensure_ascii=False)
 
     logger.info(f"Done → {path}")
-    logger.info(f"TSR: {summary['tsr']}")
+    logger.info(f"TSR_quality:     {summary['tsr_quality']}")
+    logger.info(f"TSR_correctness: {summary['tsr_correctness']}")
     return summary
 
 
