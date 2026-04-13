@@ -376,6 +376,43 @@ def build_graph(variant: str = "V3") -> StateGraph:
 PASS criterion is identical across all variants: `node3_total_score ≥ threshold`
 (Judgement always runs — V0 is the only variant without it, and V0 uses `baseline.py`).
 
+### benchmark_V*.json — Output Format
+
+Each evaluator run writes a JSON file with two TSR layers:
+
+```json
+{
+  "run_id":    "run_20250413_143000",
+  "variant":   "V3",
+  "timestamp": "2025-04-13T14:30:00",
+  "total":     50,
+  "tsr_quality": {
+    "easy":   0.880,
+    "medium": 0.720,
+    "hard":   0.600
+  },
+  "tsr_correctness": {
+    "easy":   0.800,
+    "medium": 0.640,
+    "hard":   0.520
+  },
+  "results": [
+    {
+      "problem_id": "q_001",
+      "difficulty": "easy",
+      "results": [
+        { "model": "M1", "status": "PASS", "score": 84.0, "final_pass_rate": 0.95 },
+        { "model": "M2", "status": "PASS", "score": 91.0, "final_pass_rate": 1.00 }
+      ]
+    }
+  ]
+}
+```
+
+- **`tsr_quality`** — `node3_pass == True` (LLM-judge criterion). Pipeline optimization target.
+- **`tsr_correctness`** — `final_pass_rate == 1.0` (lcb execution criterion). Primary comparison metric; apples-to-apples with V0 `"tsr"`.
+- V0 baseline JSON uses `"tsr"` (correctness-only, single model, no judge).
+
 ---
 
 ## 6. Phase 4 — Experiment Run Commands

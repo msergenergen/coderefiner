@@ -127,11 +127,12 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
   },
 
   "node1": {
-    "cc":           3.0,
-    "mi":          72.1,
-    "halstead":   150.0,
-    "severity":    "OK",
-    "bandit_high": false,
+    "cc":                  3.0,
+    "mi":                 72.1,
+    "halstead":          150.0,
+    "severity":           "OK",
+    "bandit_high":        false,
+    "bandit_medium_count": 1,
     "issues": [
       "Cyclomatic Complexity 12 — eşik 10. Fonksiyon daha küçük parçalara bölünmeli.",
       "Maintainability Index 72.1 — eşik 65. Kod yapısı iyileştirilmeli."
@@ -139,10 +140,15 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
   },
 
   "node2": {
-    "pass_rate":      0.85,
-    "cpu_ms":       340.0,
-    "ram_mb":       128.0,
-    "test_diversity_score":  0.72,
+    "pass_rate":            0.85,
+    "passed_count":         17,
+    "total_count":          20,
+    "crash_count":           1,
+    "lcb_available":        true,
+    "cpu_ms":             340.0,
+    "ram_mb":             128.0,
+    "timed_out":           false,
+    "test_diversity_score": 0.72,
     "failed_cases": [
       { "input": "[1, 2, 3]", "expected": "6",    "got": "None" },
       { "input": "[0]",       "expected": "0",    "got": "Error: NoneType" }
@@ -153,18 +159,24 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
     "total_score": 68.0,
     "pass":        false,
     "breakdown": {
-      "accuracy":        15,
-      "efficiency":      14,
-      "quality":         12,
-      "security":        10,
-      "algorithm_choice":      8,
-      "error_handling":   9
+      "accuracy":         15,
+      "efficiency":       14,
+      "quality":          12,
+      "security":         10,
+      "algorithm_choice":  8,
+      "error_handling":    9
     },
     "failure_reasons": [
       "Test pass rate 0.85 — easy eşiği 0.90 altında.",
       "Hata yönetimi eksik: None döndürmek yerine ValueError fırlatılmalı."
     ],
     "improved_prompt": "Bir önceki çözümde şu sorunlar tespit edildi:\n1. Boş liste girişi kontrol edilmemiş — None yerine ValueError fırlatmalısın.\n2. Test case [1,2,3] için beklenen 6 ama None döndürdün...\n\nLütfen bu sorunları gidererek yeni bir çözüm üret:"
+  },
+
+  "trend": {
+    "extension_count":   0,
+    "score_history":     [52.0, 68.0],
+    "pass_rate_history": [0.70, 0.85]
   }
 }
 ```
@@ -184,8 +196,9 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
     "severity": "HIGH", "bandit_high": true,
     "issues": ["Bandit HIGH: subprocess kullanımı — yasak import.", "CC 24 — kritik eşik 20 aşıldı."]
   },
-  "node2": { "pass_rate": 0.0, "cpu_ms": 0.0, "ram_mb": 0.0, "test_diversity_score": 0.0, "failed_cases": [] },
-  "node3": { "total_score": 0.0, "pass": false, "breakdown": {}, "failure_reasons": ["STOP_HIGH — Node 2/3 çalışmadı."], "improved_prompt": "" }
+  "node2": { "pass_rate": 0.0, "passed_count": 0, "total_count": 0, "crash_count": 0, "lcb_available": false, "cpu_ms": 0.0, "ram_mb": 0.0, "timed_out": false, "test_diversity_score": 0.0, "failed_cases": [] },
+  "node3": { "total_score": 0.0, "pass": false, "breakdown": {}, "failure_reasons": ["STOP_HIGH — Node 2/3 çalışmadı."], "improved_prompt": "" },
+  "trend": { "extension_count": 0, "score_history": [], "pass_rate_history": [] }
 }
 ```
 
