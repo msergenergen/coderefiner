@@ -2,8 +2,15 @@
 Results analysis: TSR computation, McNemar test, ablation comparison,
 hypothesis validation.
 
+Two TSR metrics are reported for pipeline variants (V1–V3/V5):
+  TSR_quality     — node3_score ≥ threshold AND node3_pass (LLM-judge criterion)
+  TSR_correctness — final_pass_rate == 1.0 (lcb execution criterion, comparable to V0)
+
+V0 baseline uses only TSR_correctness (lcb pass_rate == 1.0).
+Primary McNemar test and H1–H4 comparisons use TSR_correctness.
+
 Usage:
-    python benchmark/analysis.py --pipeline outputs/results/benchmark_V4_*.json
+    python benchmark/analysis.py --pipeline outputs/results/benchmark_V3_*.json
                                   --baseline  outputs/results/baseline_v0_M1_*.json
 """
 import argparse
@@ -18,12 +25,21 @@ from statsmodels.stats.proportion import proportion_confint
 
 # ── TSR computation ───────────────────────────────────────────────────────────
 
+def _pipeline_quality_pass(problem_result: dict) -> bool:
+    """Pipeline PASS via LLM-judge criterion (node3_score ≥ threshold AND node3_pass)."""
+    return any(m["status"] == "PASS" for m in problem_result["results"])
+
+
+def _pipeline_correctness_pass(problem_result: dict) -> bool:
+    """Pipeline PASS via lcb execution criterion (final_pass_rate == 1.0)."""
+    return any(m.get("final_pass_rate", 0.0) == 1.0 for m in problem_result["results"])
+
+
 def compute_tsr(results: list) -> dict:
     """
-    Computes Task Success Rate by difficulty level.
-
-    Args:
-        results: list from benchmark JSON's results field
+    TSR_quality: pipeline PASS based on LLM-judge score (node3_pass).
+    For pipeline variants (results have a 'results' key per model).
+    For baseline V0, falls back to r['passed'] (lcb correctness).
 
     Returns:
         {"easy": 0.72, "medium": 0.45, "hard": 0.20, "overall": 0.55}
@@ -32,10 +48,48 @@ def compute_tsr(results: list) -> dict:
 
     for r in results:
         diff = r.get("difficulty", "medium")
-        # Pipeline variant: did at least one model get PASS?
+        # Pipeline variant: did at least one model get PASS (quality)?
         if "results" in r:
-            passed = any(m["status"] == "PASS" for m in r["results"])
+            passed = _pipeline_quality_pass(r)
         # Baseline variant: single model
+        else:
+            passed = r.get("passed", False)
+
+        if diff not in counts:
+            counts[diff] = [0, 0]
+        counts[diff][1] += 1
+        if passed:
+            counts[diff][0] += 1
+
+    tsr = {}
+    total_pass  = sum(v[0] for v in counts.values())
+    total_count = sum(v[1] for v in counts.values())
+
+    for diff, (p, t) in counts.items():
+        tsr[diff] = round(p / t, 3) if t > 0 else 0.0
+
+    tsr["overall"] = round(total_pass / total_count, 3) if total_count > 0 else 0.0
+    return tsr
+
+
+def compute_tsr_correctness(results: list) -> dict:
+    """
+    TSR_correctness: PASS when final_pass_rate == 1.0 (all lcb tests pass).
+    Directly comparable to V0 baseline (which uses the same lcb criterion).
+    For pipeline variants, at least one model must have final_pass_rate == 1.0.
+    For baseline V0, uses r['passed'] (which is already pass_rate == 1.0).
+
+    Returns:
+        {"easy": 0.60, "medium": 0.35, "hard": 0.15, "overall": 0.42}
+    """
+    counts = {"easy": [0, 0], "medium": [0, 0], "hard": [0, 0]}
+
+    for r in results:
+        diff = r.get("difficulty", "medium")
+        # Pipeline variant
+        if "results" in r:
+            passed = _pipeline_correctness_pass(r)
+        # Baseline V0
         else:
             passed = r.get("passed", False)
 
@@ -74,16 +128,19 @@ def compute_tsr_with_ci(passed: int, total: int) -> dict:
 
 # ── Statistical tests ─────────────────────────────────────────────────────────
 
-def mcnemar_test(pipeline_results: list, baseline_results: list) -> dict:
+def mcnemar_test(pipeline_results: list, baseline_results: list,
+                 criterion: str = "correctness") -> dict:
     """
     McNemar test for pipeline vs baseline, paired binary outcomes.
 
     Args:
-        pipeline_results: V4 benchmark JSON results list
+        pipeline_results: benchmark JSON results list (V1–V3/V5)
         baseline_results: V0 baseline JSON results list
+        criterion: "correctness" (final_pass_rate==1.0, default, comparable to V0)
+                   "quality"     (node3_pass, LLM-judge criterion)
 
     Returns:
-        {"statistic", "p_value", "b", "c", "significant", "interpretation"}
+        {"statistic", "p_value", "b", "c", "significant", "interpretation", "criterion"}
     """
     # Match by question_id
     pipeline_map = {r["problem_id"]: r for r in pipeline_results}
@@ -94,8 +151,10 @@ def mcnemar_test(pipeline_results: list, baseline_results: list) -> dict:
     a = b = c = d = 0   # contingency table cells
 
     for qid in common_ids:
-        p_pass = any(m["status"] == "PASS"
-                     for m in pipeline_map[qid]["results"])
+        if criterion == "quality":
+            p_pass = _pipeline_quality_pass(pipeline_map[qid])
+        else:
+            p_pass = _pipeline_correctness_pass(pipeline_map[qid])
         b_pass = baseline_map[qid].get("passed", False)
 
         if     p_pass and     b_pass: a += 1  # both pass
@@ -111,6 +170,7 @@ def mcnemar_test(pipeline_results: list, baseline_results: list) -> dict:
     )
 
     return {
+        "criterion":      criterion,
         "statistic":      round(result.statistic, 4),
         "p_value":        round(result.pvalue, 4),
         "a_both_pass":    a,
@@ -127,25 +187,35 @@ def mcnemar_test(pipeline_results: list, baseline_results: list) -> dict:
 
 def compare_variants(variant_results: dict) -> dict:
     """
-    Computes TSR difference between V0–V4.
+    Computes both TSR_quality and TSR_correctness for V0–V5.
 
     Args:
-        variant_results: {"V0": [...], "V1": [...], ..., "V4": [...]}
+        variant_results: {"V0": [...], "V1": [...], ..., "V5": [...]}
 
     Returns:
-        Per-variant TSR + delta vs V0
+        Per-variant dict with both TSR layers + delta vs V0 (correctness-based).
+        V0 has no TSR_quality (no judge); its TSR_correctness == TSR_quality.
     """
-    v0_tsr = compute_tsr(variant_results.get("V0", []))["overall"]
+    v0_correctness = compute_tsr_correctness(variant_results.get("V0", []))["overall"]
     comparison = {}
 
     for variant, results in variant_results.items():
-        tsr = compute_tsr(results)
+        tsr_q = compute_tsr(results)             # quality (judge-based)
+        tsr_c = compute_tsr_correctness(results)  # correctness (lcb-based)
+
         comparison[variant] = {
-            "tsr_overall": tsr["overall"],
-            "tsr_easy":    tsr.get("easy", 0.0),
-            "tsr_medium":  tsr.get("medium", 0.0),
-            "tsr_hard":    tsr.get("hard", 0.0),
-            "delta_vs_v0": round(tsr["overall"] - v0_tsr, 3),
+            # Quality (judge-based)
+            "tsr_quality_overall": tsr_q["overall"],
+            "tsr_quality_easy":    tsr_q.get("easy", 0.0),
+            "tsr_quality_medium":  tsr_q.get("medium", 0.0),
+            "tsr_quality_hard":    tsr_q.get("hard", 0.0),
+            # Correctness (lcb-based, comparable to V0)
+            "tsr_correctness_overall": tsr_c["overall"],
+            "tsr_correctness_easy":    tsr_c.get("easy", 0.0),
+            "tsr_correctness_medium":  tsr_c.get("medium", 0.0),
+            "tsr_correctness_hard":    tsr_c.get("hard", 0.0),
+            # Delta vs V0 (correctness-based — apples to apples)
+            "delta_vs_v0": round(tsr_c["overall"] - v0_correctness, 3),
         }
 
     return comparison
@@ -154,31 +224,52 @@ def compare_variants(variant_results: dict) -> dict:
 # ── Result tables ─────────────────────────────────────────────────────────────
 
 def print_ablation_table(comparison: dict) -> None:
-    """Prints ablation results as a markdown table."""
-    print("| Variant | Description | Easy TSR | Med TSR | Hard TSR | Overall | ΔV0 |")
-    print("|---------|-------------|----------|---------|----------|---------|-----|")
-
+    """
+    Prints ablation results as two markdown tables:
+      Table 1 — TSR_correctness (lcb-based, comparable to V0)
+      Table 2 — TSR_quality (judge-based, pipeline's optimisation target)
+    """
     descriptions = {
         "V0": "Single-shot baseline",
         "V1": "Execution + Judgement",
         "V2": "Static Analysis + Judgement",
         "V3": "Full pipeline",
+        "V5": "Full pipeline + Trend Extension",
     }
+    variants = [v for v in ["V0", "V1", "V2", "V3", "V5"] if v in comparison]
 
-    for v in ["V0", "V1", "V2", "V3"]:
-        if v not in comparison:
-            continue
+    print("\n### TSR_correctness (lcb execution — primary, comparable to V0)\n")
+    print("| Variant | Description | Easy | Medium | Hard | Overall | ΔV0 |")
+    print("|---------|-------------|------|--------|------|---------|-----|")
+    for v in variants:
         r   = comparison[v]
         dsc = descriptions.get(v, "")
         delta = f"+{r['delta_vs_v0']:.3f}" if r["delta_vs_v0"] >= 0 \
                 else f"{r['delta_vs_v0']:.3f}"
         print(
             f"| {v} | {dsc} "
-            f"| {r['tsr_easy']:.3f} "
-            f"| {r['tsr_medium']:.3f} "
-            f"| {r['tsr_hard']:.3f} "
-            f"| {r['tsr_overall']:.3f} "
+            f"| {r['tsr_correctness_easy']:.3f} "
+            f"| {r['tsr_correctness_medium']:.3f} "
+            f"| {r['tsr_correctness_hard']:.3f} "
+            f"| {r['tsr_correctness_overall']:.3f} "
             f"| {delta} |"
+        )
+
+    print("\n### TSR_quality (LLM-judge score — secondary, optimisation target)\n")
+    print("| Variant | Description | Easy | Medium | Hard | Overall | Quality−Correctness |")
+    print("|---------|-------------|------|--------|------|---------|---------------------|")
+    for v in variants:
+        r   = comparison[v]
+        dsc = descriptions.get(v, "")
+        gap = round(r["tsr_quality_overall"] - r["tsr_correctness_overall"], 3)
+        gap_str = f"+{gap:.3f}" if gap >= 0 else f"{gap:.3f}"
+        print(
+            f"| {v} | {dsc} "
+            f"| {r['tsr_quality_easy']:.3f} "
+            f"| {r['tsr_quality_medium']:.3f} "
+            f"| {r['tsr_quality_hard']:.3f} "
+            f"| {r['tsr_quality_overall']:.3f} "
+            f"| {gap_str} |"
         )
 
 
@@ -203,14 +294,15 @@ def evaluate_hypotheses(comparison: dict, mcnemar_result: dict,
     """
     Evaluates H1–H4 hypotheses based on results.
     """
-    v0_easy = comparison.get("V0", {}).get("tsr_easy",    0)
-    v0_hard = comparison.get("V0", {}).get("tsr_hard",    0)
-    v0_tsr  = comparison.get("V0", {}).get("tsr_overall", 0)
-    v1_tsr  = comparison.get("V1", {}).get("tsr_overall", 0)
-    v2_tsr  = comparison.get("V2", {}).get("tsr_overall", 0)
-    v3_easy = comparison.get("V3", {}).get("tsr_easy",    0)
-    v3_hard = comparison.get("V3", {}).get("tsr_hard",    0)
-    v3_tsr  = comparison.get("V3", {}).get("tsr_overall", 0)
+    # All hypothesis comparisons use TSR_correctness (apples-to-apples with V0)
+    v0_easy = comparison.get("V0", {}).get("tsr_correctness_easy",    0)
+    v0_hard = comparison.get("V0", {}).get("tsr_correctness_hard",    0)
+    v0_tsr  = comparison.get("V0", {}).get("tsr_correctness_overall", 0)
+    v1_tsr  = comparison.get("V1", {}).get("tsr_correctness_overall", 0)
+    v2_tsr  = comparison.get("V2", {}).get("tsr_correctness_overall", 0)
+    v3_easy = comparison.get("V3", {}).get("tsr_correctness_easy",    0)
+    v3_hard = comparison.get("V3", {}).get("tsr_correctness_hard",    0)
+    v3_tsr  = comparison.get("V3", {}).get("tsr_correctness_overall", 0)
 
     results = {}
 
@@ -299,14 +391,27 @@ if __name__ == "__main__":
     pipeline_results = pipeline_data["results"]
     baseline_results = baseline_data["results"]
 
-    # TSR
-    p_tsr = compute_tsr(pipeline_results)
-    b_tsr = compute_tsr(baseline_results)
-    print(f"Pipeline TSR: {p_tsr}")
-    print(f"Baseline TSR: {b_tsr}")
+    # TSR — both layers
+    p_tsr_quality     = compute_tsr(pipeline_results)
+    p_tsr_correctness = compute_tsr_correctness(pipeline_results)
+    b_tsr             = compute_tsr_correctness(baseline_results)
 
-    # McNemar
-    mc = mcnemar_test(pipeline_results, baseline_results)
-    print(f"\nMcNemar Test:")
-    print(f"  p-value: {mc['p_value']}")
-    print(f"  {mc['interpretation']}")
+    print(f"Pipeline TSR_correctness (lcb): {p_tsr_correctness}")
+    print(f"Pipeline TSR_quality (judge):   {p_tsr_quality}")
+    print(f"Baseline  TSR_correctness (V0): {b_tsr}")
+
+    gap = round(p_tsr_quality["overall"] - p_tsr_correctness["overall"], 3)
+    print(f"\nQuality−Correctness gap (pipeline): {gap:+.3f}")
+    print("  (positive gap = judge credits code that doesn't pass all lcb tests)")
+
+    # McNemar — primary: correctness criterion
+    print(f"\nMcNemar Test (correctness criterion — primary, comparable to V0):")
+    mc_c = mcnemar_test(pipeline_results, baseline_results, criterion="correctness")
+    print(f"  p-value: {mc_c['p_value']}")
+    print(f"  {mc_c['interpretation']}")
+
+    # McNemar — secondary: quality criterion
+    print(f"\nMcNemar Test (quality criterion — secondary):")
+    mc_q = mcnemar_test(pipeline_results, baseline_results, criterion="quality")
+    print(f"  p-value: {mc_q['p_value']}")
+    print(f"  {mc_q['interpretation']}")

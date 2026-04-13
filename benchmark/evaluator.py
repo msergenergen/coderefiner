@@ -108,8 +108,17 @@ def run_variant_for_problem(
         status      = final_state["final_status"]
         score       = final_state.get("node3_total_score", 0.0)
 
-        logger.info(f"[{variant}][{model_id}] done — status={status} score={score:.1f}")
-        all_results.append({"model": model_id, "status": status, "score": score})
+        final_pass_rate = final_state.get("node2_pass_rate", 0.0)
+        logger.info(
+            f"[{variant}][{model_id}] done — status={status} "
+            f"score={score:.1f} pass_rate={final_pass_rate:.2f}"
+        )
+        all_results.append({
+            "model":           model_id,
+            "status":          status,
+            "score":           score,
+            "final_pass_rate": final_pass_rate,   # son iterasyonun lcb pass_rate'i
+        })
 
     return {
         "problem_id": question_id,
