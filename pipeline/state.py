@@ -75,6 +75,11 @@ class PipelineState(TypedDict):
     #   "total":               0    ← computed by log_iteration_node
     # }
 
+    # ── Trend-aware extension ─────────────────────────────────────────
+    score_history:     list   # [float] — node3_total_score appended each iteration
+    pass_rate_history: list   # [float] — node2_pass_rate appended each iteration
+    extension_count:   int    # number of trend extensions consumed (per model)
+
     # ── Log ───────────────────────────────────────────────────────────
     memory_log:   list
     final_status: Literal["PASS", "STOP_HIGH", "STOP_MAX", "PENDING"]

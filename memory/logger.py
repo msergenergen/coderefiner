@@ -254,8 +254,9 @@ def log_iteration_node(state: PipelineState) -> PipelineState:
     """
     LangGraph node: logs each iteration after judgement.
     Writes LOOP / PASS / STOP_MAX statuses.
+    Also maintains score_history and pass_rate_history for trend-aware extension.
     """
-    from config import thresholds
+    from config import thresholds, settings
     threshold = thresholds.node3.for_difficulty(state["difficulty"])
     passed    = state["node3_total_score"] >= threshold and state["node3_pass"]
 
@@ -279,7 +280,23 @@ def log_iteration_node(state: PipelineState) -> PipelineState:
 
     _append_md_row(state, status, run_id, json_path, total_ms, total_tok)
 
-    return state
+    # Append current iteration metrics to history lists for trend-aware extension.
+    # extension_count is incremented only when this iteration ran beyond max_iterations.
+    score_history     = list(state.get("score_history",     []))
+    pass_rate_history = list(state.get("pass_rate_history", []))
+    score_history.append(state.get("node3_total_score", 0.0))
+    pass_rate_history.append(state.get("node2_pass_rate", 0.0))
+
+    extension_count = state.get("extension_count", 0)
+    if state["iteration"] > state["max_iterations"]:
+        extension_count += 1
+
+    return {
+        **state,
+        "score_history":     score_history,
+        "pass_rate_history": pass_rate_history,
+        "extension_count":   extension_count,
+    }
 
 
 def log_severity_stop_node(state: PipelineState) -> PipelineState:

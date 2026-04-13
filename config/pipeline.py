@@ -50,6 +50,22 @@ class PipelineSettings:
     # Default: "QWEN" — change to any registered model (e.g. "M3") to swap.
     judge_model: str = os.getenv("JUDGE_MODEL", "QWEN")
 
+    # ── Trend-aware extension ─────────────────────────────────────────────
+    # When enabled, iteration_gate allows up to max_extension_iters additional
+    # iterations beyond max_iterations if the score shows a genuine upward trend.
+    # Disabled by default — enable for V5 ablation variant.
+    #
+    # Activation requires ALL of:
+    #   1. accuracy > 0 (at least one test passing)
+    #   2. pass_rate_slope > 0 (pass rate increasing in last 3 iters)
+    #   3. EMA-smoothed score slope >= trend_min_slope (points/iter)
+    #   4. expected_gain >= gap to threshold (slope * remaining extensions)
+    #   5. extension_count < max_extension_iters
+    trend_extension_enabled: bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
+    max_extension_iters:     int   = int(os.getenv("MAX_EXTENSION_ITERS",  "3"))
+    trend_min_slope:         float = float(os.getenv("TREND_MIN_SLOPE",    "1.0"))
+    trend_ema_alpha:         float = float(os.getenv("TREND_EMA_ALPHA",    "0.5"))
+
     @property
     def model_sequence(self) -> list:
         return [m.strip() for m in self.pipeline_models.split(",") if m.strip()]
