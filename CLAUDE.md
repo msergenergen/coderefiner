@@ -201,6 +201,31 @@ project/
 
 ---
 
+## Docs Update Rule
+
+**When modifying code, always update the corresponding `docs/*.md` file in the same commit.**
+
+| Modified file | Docs file to update |
+|---|---|
+| `memory/logger.py` | `docs/memory-logging.md` |
+| `benchmark/evaluator.py` | `docs/ablation.md` |
+| `benchmark/analysis.py` | `docs/analysis.md` |
+| `benchmark/baseline.py` | `docs/ablation.md` |
+| `pipeline/graph.py`, `pipeline/gates.py` | `docs/graph.md` |
+| `nodes/codegen.py`, `models/prompts.py` | `docs/codegen-models.md` |
+| `nodes/static_analysis.py`, `metrics/` | `docs/node1.md` |
+| `nodes/sandbox.py`, `sandbox/` | `docs/node2.md` |
+| `nodes/judgement.py`, `metrics/scoring.py` | `docs/node3.md` |
+| `config/` | `docs/config.md` |
+| `dataset/` | `docs/dataset.md` |
+| `pipeline/state.py` | `docs/graph.md` |
+
+Do not ask for permission — update docs automatically as part of the same change.
+If the docs update would overwrite thesis-authored prose (design rationale, methodology explanation),
+preserve the existing text and only add/update the affected code snippet or field list.
+
+---
+
 ## Important Notes
 
 - All models run locally on llama.cpp. Internet is only needed for model download.
