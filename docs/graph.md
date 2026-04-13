@@ -23,8 +23,8 @@ log_iteration_node  ← Her iterasyon: memory.md + JSON yazılır
   ↓                   timing["total_ms"] hesaplanır
 iteration_gate
   ├─ PASS      → write_memory_final → next_model → END
-  ├─ STOP_MAX  → stop_max → END
-  └─ LOOP      → codegen (sonraki iterasyon)
+  ├─ STOP_MAX  → stop_max → END          ← trend extension aktifse atlanabilir
+  └─ LOOP      → codegen (sonraki iterasyon veya trend extension)
 ```
 
 **`strip_comments` neden burada?**
@@ -114,6 +114,11 @@ class PipelineState(TypedDict):
     #   "total":               0    ← log_iteration_node hesaplar
     # }
 
+    # ── Trend-aware extension ─────────────────────────────────────────
+    score_history:     list   # [float] — node3_total_score appended each iteration
+    pass_rate_history: list   # [float] — node2_pass_rate appended each iteration
+    extension_count:   int    # number of trend extensions consumed (per model)
+
     # ── Log ───────────────────────────────────────────────────────────
     memory_log:   list[dict]
     final_status: Literal["PASS", "STOP_HIGH", "STOP_MAX", "PENDING"]
@@ -129,7 +134,7 @@ Conditional edge fonksiyonları.
 iteration_gate, log_iteration_node SONRASI çalışır —
 loglama zaten tamamlandı, sadece yönlendirme kararı verilir.
 """
-from config import thresholds
+from config import thresholds, settings
 from pipeline.state import PipelineState
 
 PASS_THRESHOLDS = thresholds.node3.as_dict()
@@ -156,18 +161,87 @@ def iteration_gate(state: PipelineState) -> str:
     log_iteration_node sonrası yönlendirme.
     Satır zaten memory.md ve JSON'a yazıldı.
 
-    "write_memory_final" → PASS    — final_status güncelle, sonraki model
+    "write_memory_final" → PASS     — final_status güncelle, sonraki model
     "stop_max"           → STOP_MAX — final_status güncelle, END
-    "loop_to_codegen"    → LOOP    — tekrar dene
+    "loop_to_codegen"    → LOOP     — tekrar dene (veya trend extension)
     """
     threshold = PASS_THRESHOLDS[state["difficulty"]]
     passed    = state["node3_total_score"] >= threshold and state["node3_pass"]
 
     if passed:
         return "write_memory_final"
-    elif state["iteration"] >= state["max_iterations"]:
+
+    if state["iteration"] >= state["max_iterations"]:
+        if settings.trend_extension_enabled and _should_extend(state, threshold):
+            return "loop_to_codegen"   # trend extension: ek iterasyon ver
         return "stop_max"
+
     return "loop_to_codegen"
+
+
+# ── Trend-aware extension helpers ─────────────────────────────────────────────
+
+def _compute_ema(values: list, alpha: float) -> list:
+    """EMA ile gürültü azaltma. alpha=0.5 → son değerlere 2× ağırlık."""
+    if not values:
+        return []
+    ema = [values[0]]
+    for v in values[1:]:
+        ema.append(alpha * v + (1 - alpha) * ema[-1])
+    return ema
+
+
+def _linear_slope(values: list) -> float:
+    """Son 3 noktaya least-squares doğrusu fit eder; slope döner."""
+    pts = values[-3:]
+    n = len(pts)
+    if n < 2:
+        return 0.0
+    x_mean = (n - 1) / 2
+    y_mean = sum(pts) / n
+    num = sum((i - x_mean) * (pts[i] - y_mean) for i in range(n))
+    den = sum((i - x_mean) ** 2 for i in range(n))
+    return num / den if den else 0.0
+
+
+def _should_extend(state: PipelineState, threshold: float) -> bool:
+    """
+    Tüm aktivasyon koşulları sağlandığında True döner:
+
+      1. accuracy > 0           — en az bir test geçiyor (hard gate)
+      2. pass_rate_slope > 0    — pass rate yukarı trending (son 3 iter)
+      3. score_slope >= min     — EMA-smoothed score gerçekten artıyor
+      4. expected_gain >= gap   — kalan iterasyonlarda eşiğe ulaşılabilir
+      5. extension_count < max  — extension bütçesi tükenmemiş
+    """
+    accuracy = state.get("node3_score_breakdown", {}).get("accuracy", 0.0)
+    if accuracy <= 0.0:
+        return False
+
+    extension_count = state.get("extension_count", 0)
+    if extension_count >= settings.max_extension_iters:
+        return False
+
+    score_history     = state.get("score_history", [])
+    pass_rate_history = state.get("pass_rate_history", [])
+    if len(score_history) < 3:
+        return False
+
+    if _linear_slope(pass_rate_history) <= 0.0:
+        return False
+
+    smoothed    = _compute_ema(score_history, alpha=settings.trend_ema_alpha)
+    score_slope = _linear_slope(smoothed)
+    if score_slope < settings.trend_min_slope:
+        return False
+
+    remaining     = settings.max_extension_iters - extension_count
+    expected_gain = score_slope * remaining
+    gap           = threshold - state.get("node3_total_score", 0.0)
+    if expected_gain < gap:
+        return False
+
+    return True
 ```
 
 ---
