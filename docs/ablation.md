@@ -23,9 +23,21 @@ The pipeline allows up to 10 iterations per model and generates an improved_prom
 with Node 1/2/3 feedback at each iteration. This is test-time compute
 with guided repair and is not directly comparable to pass@1.
 
-**Correct comparison:**
-Pipeline TSR = (Pipeline ile PASS alan sorular) / (Toplam sorular)
-Baseline TSR = (Questions correct in single-shot) / (Total questions)
+**İki Katmanlı TSR:**
+
+| Metrik | Kriter | Kullanım Yeri |
+|--------|--------|---------------|
+| **TSR_correctness** | `final_pass_rate == 1.0` (lcb execution) | V0 ile birincil karşılaştırma; McNemar; H1–H4 |
+| **TSR_quality** | `node3_pass == True` (LLM-judge skoru ≥ eşik) | Pipeline optimizasyon hedefi; ikincil analiz |
+
+```
+Pipeline TSR_correctness = (final_pass_rate==1.0 olan sorular) / (Toplam sorular)
+Pipeline TSR_quality     = (node3_pass==True olan sorular) / (Toplam sorular)
+Baseline TSR             = (lcb pass_rate==1.0 olan sorular) / (Toplam sorular)  ← = TSR_correctness
+```
+
+`Quality − Correctness gap` pozitifse: judge, lcb'nin geçmediği koda puan veriyor.
+Bu fark hem metodolojik şeffaflık hem de tez bulgusu olarak raporlanır.
 
 ---
 
