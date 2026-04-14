@@ -2,7 +2,7 @@
 Results analysis: TSR computation, McNemar test, ablation comparison,
 hypothesis validation.
 
-Two TSR metrics are reported for pipeline variants (V1–V3/V5):
+Two TSR metrics are reported for pipeline variants (V1–V3):
   TSR_quality     — node3_score ≥ threshold AND node3_pass (LLM-judge criterion)
   TSR_correctness — final_pass_rate == 1.0 (lcb execution criterion, comparable to V0)
 
@@ -134,7 +134,7 @@ def mcnemar_test(pipeline_results: list, baseline_results: list,
     McNemar test for pipeline vs baseline, paired binary outcomes.
 
     Args:
-        pipeline_results: benchmark JSON results list (V1–V3/V5)
+        pipeline_results: benchmark JSON results list (V1–V3)
         baseline_results: V0 baseline JSON results list
         criterion: "correctness" (final_pass_rate==1.0, default, comparable to V0)
                    "quality"     (node3_pass, LLM-judge criterion)
@@ -187,10 +187,10 @@ def mcnemar_test(pipeline_results: list, baseline_results: list,
 
 def compare_variants(variant_results: dict) -> dict:
     """
-    Computes both TSR_quality and TSR_correctness for V0–V5.
+    Computes both TSR_quality and TSR_correctness for V0–V3.
 
     Args:
-        variant_results: {"V0": [...], "V1": [...], ..., "V5": [...]}
+        variant_results: {"V0": [...], "V1": [...], "V2": [...], "V3": [...]}
 
     Returns:
         Per-variant dict with both TSR layers + delta vs V0 (correctness-based).
@@ -234,9 +234,8 @@ def print_ablation_table(comparison: dict) -> None:
         "V1": "Execution + Judgement",
         "V2": "Static Analysis + Judgement",
         "V3": "Full pipeline",
-        "V5": "Full pipeline + Trend Extension",
     }
-    variants = [v for v in ["V0", "V1", "V2", "V3", "V5"] if v in comparison]
+    variants = [v for v in ["V0", "V1", "V2", "V3"] if v in comparison]
 
     print("\n### TSR_correctness (lcb execution — primary, comparable to V0)\n")
     print("| Variant | Description | Easy | Medium | Hard | Overall | ΔV0 |")

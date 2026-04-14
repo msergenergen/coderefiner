@@ -116,17 +116,17 @@ class PipelineSettings:
     memory_log_path:   str = os.getenv("MEMORY_LOG_PATH",   "outputs/memory.md")
     pipeline_log_path: str = os.getenv("PIPELINE_LOG_PATH", "outputs/pipeline.log")
 
-    # ── Trend-aware extension (V5 ablation variant) ───────────────────
+    # ── Trend-aware extension ─────────────────────────────────────────
     # max_iterations'a ulaşıldığında stop_max yerine EMA trend analizi yapılır.
     # Tüm 5 aktivasyon koşulu sağlanırsa ek iterasyon verilir.
     # Varsayılan: false — V1–V3 ablasyon sonuçlarını etkilemez.
-    # V5 için: TREND_EXTENSION_ENABLED=true
+    # Aktive etmek için: TREND_EXTENSION_ENABLED=true
     #
     # Aktivasyon koşulları (hepsi sağlanmalı):
-    #   1. accuracy > 0               (en az bir test geçiyor)
-    #   2. pass_rate_slope > 0        (son 3 iter'de pass rate artıyor)
-    #   3. EMA score_slope >= min     (skor gerçekten iyileşiyor)
-    #   4. slope * remaining >= gap   (kalan bütçeyle eşiğe ulaşılabilir)
+    #   1. accuracy > 0                           (en az bir test geçiyor)
+    #   2. pass_rate_slope > 0                    (son 3 iter'de pass rate artıyor)
+    #   3. EMA score_slope >= min                 (skor gerçekten iyileşiyor)
+    #   4. slope * TREND_PROJECTION_WINDOW >= gap (sabit pencereyle eşiğe ulaşılabilir)
     #   5. extension_count < max      (bütçe tükenmemiş)
     trend_extension_enabled: bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
     max_extension_iters:     int   = int(os.getenv("MAX_EXTENSION_ITERS",  "3"))
@@ -433,8 +433,8 @@ OUTPUT_DIR=outputs/results
 MEMORY_LOG_PATH=outputs/memory.md
 PIPELINE_LOG_PATH=outputs/pipeline.log
 
-# ── Trend-aware extension (V5 ablation) ───────────────────────────
-# V3 çalıştırırken false bırak. V5 için true yap.
+# ── Trend-aware extension ─────────────────────────────────────────
+# V1–V3 ablasyon çalıştırmalarında false bırak.
 TREND_EXTENSION_ENABLED=false
 MAX_EXTENSION_ITERS=3
 TREND_MIN_SLOPE=1.0

@@ -53,7 +53,7 @@ class PipelineSettings:
     # ── Trend-aware extension ─────────────────────────────────────────────
     # When enabled, iteration_gate allows up to max_extension_iters additional
     # iterations beyond max_iterations if the score shows a genuine upward trend.
-    # Disabled by default — enable for V5 ablation variant.
+    # Disabled by default — enable to add trend-aware extension to any variant.
     #
     # Activation requires ALL of:
     #   1. accuracy > 0 (at least one test passing)
@@ -63,8 +63,8 @@ class PipelineSettings:
     #   5. extension_count < max_extension_iters
     #
     # NOTE: trend_projection_window and max_extension_iters are intentionally
-    # separate. The projection window determines how far ahead the gain estimate
-    # looks (fixed look-ahead); the extension budget is the hard safety cap.
+    # separate. The projection window is a fixed look-ahead for the gain estimate;
+    # max_extension_iters is the hard safety cap.
     # Increasing max_extension_iters does NOT inflate the gain projection.
     trend_extension_enabled:  bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
     max_extension_iters:      int   = int(os.getenv("MAX_EXTENSION_ITERS",       "3"))

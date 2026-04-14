@@ -2,7 +2,7 @@
 
 ## 1. TSR Tanımı — İki Katman
 
-Pipeline varyantları (V1–V3/V5) ile V0 baseline arasında metodolojik olarak
+Pipeline varyantları (V1–V3) ile V0 baseline arasında metodolojik olarak
 doğru bir karşılaştırma yapabilmek için **iki ayrı TSR** raporlanır:
 
 | Metrik | Kriter | Ne Zaman Kullanılır |
@@ -151,7 +151,7 @@ def mcnemar_test(pipeline_results: list, baseline_results: list,
     Pipeline vs baseline için McNemar testi.
 
     Args:
-        pipeline_results: benchmark JSON results (V1–V3/V5)
+        pipeline_results: benchmark JSON results (V1–V3)
         baseline_results: V0 baseline JSON results
         criterion: "correctness" (final_pass_rate==1.0, default)
                    "quality"     (node3_pass, LLM-judge)
@@ -210,7 +210,7 @@ Her varyant için her iki TSR katmanını hesaplar.
 ```python
 def compare_variants(variant_results: dict) -> dict:
     """
-    Computes both TSR_quality and TSR_correctness for V0–V5.
+    Computes both TSR_quality and TSR_correctness for V0–V3.
 
     Returns per-variant dict:
         tsr_quality_{overall,easy,medium,hard}
@@ -255,7 +255,6 @@ def compare_variants(variant_results: dict) -> dict:
 | V1      | Execution + Judgement       | ?    | ?      | ?    | ?       | ?   |
 | V2      | Static Analysis + Judgement | ?    | ?      | ?    | ?       | ?   |
 | V3      | Full pipeline               | ?    | ?      | ?    | ?       | ?   |
-| V5      | Full pipeline + Trend Ext.  | ?    | ?      | ?    | ?       | ?   |
 ```
 
 **Tablo 2 — TSR_quality (ikincil, pipeline'ın optimizasyon hedefi):**
@@ -269,7 +268,6 @@ def compare_variants(variant_results: dict) -> dict:
 | V1      | Execution + Judgement       | ?    | ?      | ?    | ?       | ?      |
 | V2      | Static Analysis + Judgement | ?    | ?      | ?    | ?       | ?      |
 | V3      | Full pipeline               | ?    | ?      | ?    | ?       | ?      |
-| V5      | Full pipeline + Trend Ext.  | ?    | ?      | ?    | ?       | ?      |
 ```
 
 `Quality − Correctness` sütunu: pozitifse judge, lcb'nin geçmediği koda puan veriyor.

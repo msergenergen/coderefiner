@@ -50,10 +50,7 @@ Each variant runs independently. Separate results are obtained for each model pe
 | **V0** — Single-shot baseline | ✗ | ✗ | ✗ | ✗ | Pipeline yok, tek deneme |
 | **V1** — Execution + Judgement | ✗ | ✓ | ✓ | ✗ | Test sonuçları + Judgement LLM, statik analiz yok |
 | **V2** — Static Analysis + Judgement | ✓ | ✗ | ✓ | ✗ | Statik analiz + Judgement LLM, execution yok |
-| **V3** — Full Pipeline | ✓ | ✓ | ✓ | ✗ | Tam sistem, sabit max_iterations |
-| **V5** — Full Pipeline + Trend Extension | ✓ | ✓ | ✓ | ✓ | V3 + EMA trend analizi ile ek iterasyon |
-
-> **Not:** V4 numarası gelecekteki bir variant için rezerve edilmiştir.
+| **V3** — Full Pipeline | ✓ | ✓ | ✓ | env flag | Tam sistem; `TREND_EXTENSION_ENABLED=true` ile adaptif iterasyon aktif |
 
 ### What Each Variant Answers
 
@@ -62,30 +59,28 @@ V0 → Modelin doğal yeteneği nedir? (referans taban)
 V1 → Execution feedback + Judgement yeterli mi? (Node 1 olmadan)
 V2 → Statik analiz + Judgement yeterli mi? (Node 2 olmadan)
 V3 → Tüm bileşenler birlikte ne kadar katkı sağlıyor?
-V5 → Trend-aware extension STOP_MAX vakalarını kurtarıyor mu?
 
 V3 - V1 farkı → Node 1'in (statik analiz) marjinal katkısı
 V3 - V2 farkı → Node 2'nin (execution) marjinal katkısı
 V1 - V0 farkı → Execution + Judgement'ın baseline'a katkısı
 V2 - V0 farkı → Static + Judgement'ın baseline'a katkısı
-V5 - V3 farkı → Trend extension'ın marjinal katkısı
 ```
 
-### V5 Aktivasyon
+### Trend-Aware Extension (V3 özelliği)
 
-V5, `TREND_EXTENSION_ENABLED=true` ile etkinleştirilir.
-`iteration_gate` max_iterations'a ulaşıldığında stop_max yerine
-EMA trend analizini çalıştırır; **tüm 5 koşul sağlanırsa** ek iterasyon verir:
+`TREND_EXTENSION_ENABLED=true` ile etkinleştirilir — variant değil, V3'ün isteğe bağlı özelliği.
+`iteration_gate` max_iterations'a ulaşıldığında stop_max yerine EMA trend analizini çalıştırır;
+**tüm 5 koşul sağlanırsa** ek iterasyon verir:
 
 1. `accuracy > 0` — en az bir test geçiyor (hard gate)
 2. `pass_rate_slope > 0` — pass rate son 3 iterasyonda artıyor
 3. EMA-smoothed `score_slope >= TREND_MIN_SLOPE` — skor gerçekten iyileşiyor
-4. `expected_gain = slope × remaining >= gap` — kalan extension'larla eşiğe ulaşılabilir
+4. `expected_gain = slope × TREND_PROJECTION_WINDOW >= gap` — sabit projeksiyon penceresiyle eşiğe ulaşılabilir
 5. `extension_count < MAX_EXTENSION_ITERS` — bütçe tükenmemiş
 
 ```bash
-# V5 çalıştırma
-TREND_EXTENSION_ENABLED=true python -m benchmark.evaluator --variant V3 --sample 50 --tag v5
+# Trend extension aktif (V3 üzerinde)
+TREND_EXTENSION_ENABLED=true python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_trend
 ```
 
 ---
