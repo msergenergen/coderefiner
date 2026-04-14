@@ -211,8 +211,11 @@ def _should_extend(state: PipelineState, threshold: float) -> bool:
       1. accuracy > 0           — en az bir test geçiyor (hard gate)
       2. pass_rate_slope > 0    — pass rate yukarı trending (son 3 iter)
       3. score_slope >= min     — EMA-smoothed score gerçekten artıyor
-      4. expected_gain >= gap   — kalan iterasyonlarda eşiğe ulaşılabilir
+      4. expected_gain >= gap   — sabit projeksiyon penceresiyle eşiğe ulaşılabilir
       5. extension_count < max  — extension bütçesi tükenmemiş
+
+    NOT: Koşul 4, MAX_EXTENSION_ITERS'dan bağımsız TREND_PROJECTION_WINDOW kullanır.
+    Bu sayede bütçeyi artırmak projeksiyon kazanımını yapay olarak şişirmez.
     """
     accuracy = state.get("node3_score_breakdown", {}).get("accuracy", 0.0)
     if accuracy <= 0.0:
@@ -235,8 +238,8 @@ def _should_extend(state: PipelineState, threshold: float) -> bool:
     if score_slope < settings.trend_min_slope:
         return False
 
-    remaining     = settings.max_extension_iters - extension_count
-    expected_gain = score_slope * remaining
+    # Sabit projeksiyon penceresi — extension bütçesinden bağımsız
+    expected_gain = score_slope * settings.trend_projection_window
     gap           = threshold - state.get("node3_total_score", 0.0)
     if expected_gain < gap:
         return False

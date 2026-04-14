@@ -59,12 +59,18 @@ class PipelineSettings:
     #   1. accuracy > 0 (at least one test passing)
     #   2. pass_rate_slope > 0 (pass rate increasing in last 3 iters)
     #   3. EMA-smoothed score slope >= trend_min_slope (points/iter)
-    #   4. expected_gain >= gap to threshold (slope * remaining extensions)
+    #   4. expected_gain >= gap to threshold (slope * trend_projection_window)
     #   5. extension_count < max_extension_iters
-    trend_extension_enabled: bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
-    max_extension_iters:     int   = int(os.getenv("MAX_EXTENSION_ITERS",  "3"))
-    trend_min_slope:         float = float(os.getenv("TREND_MIN_SLOPE",    "1.0"))
-    trend_ema_alpha:         float = float(os.getenv("TREND_EMA_ALPHA",    "0.5"))
+    #
+    # NOTE: trend_projection_window and max_extension_iters are intentionally
+    # separate. The projection window determines how far ahead the gain estimate
+    # looks (fixed look-ahead); the extension budget is the hard safety cap.
+    # Increasing max_extension_iters does NOT inflate the gain projection.
+    trend_extension_enabled:  bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
+    max_extension_iters:      int   = int(os.getenv("MAX_EXTENSION_ITERS",       "3"))
+    trend_projection_window:  int   = int(os.getenv("TREND_PROJECTION_WINDOW",   "3"))
+    trend_min_slope:          float = float(os.getenv("TREND_MIN_SLOPE",         "1.0"))
+    trend_ema_alpha:          float = float(os.getenv("TREND_EMA_ALPHA",         "0.5"))
 
     @property
     def model_sequence(self) -> list:

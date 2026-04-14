@@ -164,6 +164,7 @@ class TestShouldExtend:
         defaults = dict(
             trend_extension_enabled=True,
             max_extension_iters=3,
+            trend_projection_window=3,
             trend_min_slope=1.0,
             trend_ema_alpha=0.5,
         )

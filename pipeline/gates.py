@@ -118,9 +118,11 @@ def _should_extend(state: PipelineState, threshold: float) -> bool:
     if score_slope < settings.trend_min_slope:
         return False
 
-    # 4. Expected gain must be sufficient to potentially reach threshold
-    remaining    = settings.max_extension_iters - extension_count
-    expected_gain = score_slope * remaining
+    # 4. Expected gain must be sufficient to potentially reach threshold.
+    # Uses a fixed projection window (trend_projection_window) — independent of
+    # the extension budget — so increasing max_extension_iters does not
+    # artificially inflate the gain estimate.
+    expected_gain = score_slope * settings.trend_projection_window
     gap           = threshold - state.get("node3_total_score", 0.0)
     if expected_gain < gap:
         return False
