@@ -1,0 +1,14 @@
+# Judge model training dependencies
+# Install: pip install -r requirements.txt
+# Note: torch must be installed separately matching your CUDA / Metal version.
+#   CUDA:  pip install torch --index-url https://download.pytorch.org/whl/cu121
+#   Mac:   pip install torch           (Metal backend via MPS)
+
+transformers>=4.45.0
+trl>=0.11.0
+peft>=0.13.0
+datasets>=2.21.0,<3.0.0
+accelerate>=0.34.0
+scipy>=1.13.0
+bitsandbytes>=0.44.0   # 4-bit quantization; Mac users can skip (no CUDA)
+PyYAML>=6.0

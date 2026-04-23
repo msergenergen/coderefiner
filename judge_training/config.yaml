@@ -1,0 +1,79 @@
+# ── Judge Model Training Configuration ─────────────────────────────────────────
+# All scripts read this file. CLI flags override individual keys.
+
+# ── Base model ──────────────────────────────────────────────────────────────────
+base_model: Qwen/Qwen2.5-Coder-7B-Instruct
+# Alternatives:
+#   Qwen/Qwen2.5-7B-Instruct          — instruction-tuned, better rubric following
+#   meta-llama/Llama-3.1-8B-Instruct  — strong general base, different failure modes
+#   mistralai/Mistral-7B-Instruct-v0.3 — lightweight baseline
+
+# ── Data ────────────────────────────────────────────────────────────────────────
+data:
+  source_dir: ../outputs/results          # root that contains dated subdirs with iteration JSONs
+  output_dir: ./data                      # where build_dataset.py writes processed splits
+  quality_filters:
+    require_stripped_code: true           # drop examples where training.stripped_code is empty
+    require_improved_prompt: true         # drop examples where node3.improved_prompt is empty
+    exclude_json_parse_error: true        # drop examples where node3.failure_reasons has json_parse_error
+    exclude_stop_high: true              # drop STOP_HIGH examples (node2/3 never ran)
+    min_total_score: 0.0                  # set > 0 to keep only examples above a score floor
+  split:
+    train: 0.80
+    val:   0.10
+    test:  0.10
+    seed:  42
+    # Split is by question_id to prevent problem leakage across splits
+
+# ── LoRA / QLoRA ────────────────────────────────────────────────────────────────
+lora:
+  r: 64                    # 16 for Mac Mini M4 (16 GB), 64 for A100 80 GB
+  alpha: 128               # typically 2× r
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj            # FFN modules — include for A100, remove for Mac to save memory
+    - up_proj
+    - down_proj
+
+# ── Quantization ────────────────────────────────────────────────────────────────
+quantization:
+  load_in_4bit: false      # true for Mac Mini M4 (16 GB); false for A100 80 GB (full bfloat16)
+  bnb_4bit_compute_dtype: bfloat16
+  bnb_4bit_quant_type: nf4
+
+# ── Training ────────────────────────────────────────────────────────────────────
+training:
+  output_dir: ./checkpoints
+  num_train_epochs: 3
+  per_device_train_batch_size: 4       # 2 for Mac Mini M4, 4 for A100
+  gradient_accumulation_steps: 4       # effective batch size = batch × accum = 16
+  learning_rate: 2.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.05
+  bf16: true
+  tf32: true                           # A100 only — set false on Mac
+  max_seq_length: 4096
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 200
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: eval_loss
+  report_to: none                      # none | wandb | tensorboard
+
+# ── GGUF conversion ─────────────────────────────────────────────────────────────
+gguf:
+  llama_cpp_dir: ~/llama.cpp
+  output_path: ../models/judge-7b-code.gguf
+  quant_type: q4_k_m                  # q4_k_m | q5_k_m | q8_0
+
+# ── Serving ─────────────────────────────────────────────────────────────────────
+serve:
+  port: 8004                           # matches LOCAL_JUDGEMENT_MODEL port in .env.local
+  ctx_size: 4096
+  n_gpu_layers: 99                    # 99 = all layers to GPU; 0 = CPU only
+  parallel: 4
