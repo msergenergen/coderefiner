@@ -251,6 +251,16 @@ def _write_iteration_json(state: PipelineState, status: str,
             "improved_prompt": state.get("node3_improved_prompt", ""),
         },
 
+        # Fields required for judge model training (Prometheus-style SFT).
+        # stripped_code is what the judge actually receives — training input.
+        # problem is the formatted problem statement — training context.
+        # all_tests are reference tests used as rubric ground truth.
+        "training": {
+            "stripped_code": state.get("stripped_code", ""),
+            "problem":       state.get("problem", ""),
+            "all_tests":     state.get("problem_row", {}).get("all_tests", []),
+        },
+
         "trend": {
             "extension_count":  state.get("extension_count", 0),
             "score_history":    state.get("score_history", []),

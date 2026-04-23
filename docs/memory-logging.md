@@ -177,9 +177,22 @@ One row per iteration. Details are in JSON; the table holds numeric summary + re
     "extension_count":   0,
     "score_history":     [52.0, 68.0],
     "pass_rate_history": [0.70, 0.85]
+  },
+
+  "training": {
+    "stripped_code": "def solve(nums):\n    return sum(nums)",
+    "problem":       "Given a list of integers, return their sum.\n\nConstraints: ...",
+    "all_tests":     [{"input": "[1, 2, 3]", "output": "6"}, "..."]
   }
 }
 ```
+
+The `training` block contains the three fields required to construct Prometheus-style SFT examples for judge model training:
+- `stripped_code` — comment-stripped code that the judge actually received as input
+- `problem` — formatted problem statement used as training context
+- `all_tests` — reference tests from LCB used as rubric ground truth
+
+Together with `node3` outputs (scores, failure_reasons, improved_prompt), every iteration JSON is a self-contained training example: `(problem + code + rubric) → (breakdown + score + improved_prompt)`.
 
 **On STOP_HIGH**, node2 and node3 blocks are written with zero/empty values:
 
