@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starts a single model server — stops the previous one first.
 #
-# Local (Mac Mini):  argument is optional; always starts Qwen2.5-Coder-7B on port 8001
+# Local (Mac Mini):  argument is optional; always starts gpt-oss-20b on port 8001
 #   bash scripts/start_model.sh
 #   bash scripts/start_model.sh M1   # same result
 #
@@ -25,15 +25,15 @@ fi
 # ── Local mode ────────────────────────────────────────────────────────────────
 if [ "$ENV_VAL" = "local" ]; then
     LLAMA=~/llama.cpp/llama-server
-    MODEL_PATH=$(ls "$PROJECT_ROOT/models/qwen2.5-coder-7b/"*.gguf 2>/dev/null | head -1)
+    MODEL_PATH=$(ls "$PROJECT_ROOT/models/gpt-oss-20b/"*.gguf 2>/dev/null | head -1)
 
     if [ -z "$MODEL_PATH" ]; then
-        echo "Model not found: $PROJECT_ROOT/models/qwen2.5-coder-7b/*.gguf"
-        echo "Run A7 first: huggingface-cli download bartowski/Qwen2.5-Coder-7B-Instruct-GGUF ..."
+        echo "Model not found: $PROJECT_ROOT/models/gpt-oss-20b/*.gguf"
+        echo "Run: hf download unsloth/gpt-oss-20b-GGUF --include \"gpt-oss-20b-UD-Q4_K_XL.gguf\" --local-dir ./models/gpt-oss-20b"
         exit 1
     fi
 
-    echo "→ Local mode: starting Qwen2.5-Coder-7B on port 8001 (Apple Metal)..."
+    echo "→ Local mode: starting gpt-oss-20b on port 8001 (Apple Metal)..."
     pkill -f "llama-server" 2>/dev/null || true
     sleep 2
 
@@ -43,7 +43,8 @@ if [ "$ENV_VAL" = "local" ]; then
         --host 0.0.0.0 \
         --ctx-size 8192 \
         --n-gpu-layers 99 \
-        --temp 0.7
+        --jinja \
+        --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
 
     exit 0
 fi

@@ -73,7 +73,7 @@ Run the following 4 variants separately for each model:
 [ ] llama.cpp Metal derleme
 [ ] Proje repo clone + venv + pip install
 [ ] .env.local oluşturma (ENV=local)
-[ ] Qwen2.5-Coder-7B indirme (~4 GB)
+[ ] gpt-oss-20b (Unsloth UD-Q4_K_XL) indirme (~11.9 GB)
 [ ] llama-server port 8001 başlatma
 [ ] ENV=local python -c "from config import settings; print(settings.env)"
 [ ] python dataset/verify.py

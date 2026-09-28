@@ -10,7 +10,7 @@
 #   3. llama.cpp Metal build         (skip with --skip-llamacpp)
 #   4. Project clone + venv + deps
 #   5. .env.local creation
-#   6. Model download (~4 GB)        (skip with --skip-model)
+#   6. Model download (~11.9 GB)     (skip with --skip-model)
 #   7. Verification
 #
 # Resume behaviour:
@@ -38,7 +38,7 @@ done
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT="$HOME/Desktop/llm-code-refinement"
 LLAMACPP="$HOME/llama.cpp"
-MODEL_DIR="$PROJECT/models/qwen2.5-coder-7b"
+MODEL_DIR="$PROJECT/models/gpt-oss-20b"
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -169,8 +169,8 @@ ENV=local
 
 # ── Single server — all roles go here ────────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
-LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b
-LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b
+LOCAL_CODEGEN_MODEL=gpt-oss-20b
+LOCAL_JUDGEMENT_MODEL=gpt-oss-20b
 LLAMA_API_KEY=local
 
 # ── Pipeline — keep short for debug ──────────────────────────────
@@ -197,8 +197,8 @@ ln -sf .env.local .env
 mkdir -p outputs/results
 ok ".env → .env.local symlink aktif"
 
-# ── Phase 6 — Model download (~4 GB) ─────────────────────────────────────────
-section "Phase 6 — Model download (Qwen2.5-Coder-7B)"
+# ── Phase 6 — Model download (~11.9 GB) ──────────────────────────────────────
+section "Phase 6 — Model download (gpt-oss-20b)"
 
 if [ "$SKIP_MODEL" = "1" ]; then
     warn "Model indirme atlandı (--skip-model)"
@@ -208,9 +208,9 @@ elif [ "$(ls "$MODEL_DIR/"*.gguf 2>/dev/null | wc -l)" -ge 1 ]; then
 else
     source "$PROJECT/.venv/bin/activate"
     mkdir -p "$MODEL_DIR"
-    echo "  İndiriliyor: bartowski/Qwen2.5-Coder-7B-Instruct-GGUF (~4 GB)"
-    huggingface-cli download bartowski/Qwen2.5-Coder-7B-Instruct-GGUF \
-        --include "*Q4_K_M.gguf" \
+    echo "  İndiriliyor: unsloth/gpt-oss-20b-GGUF UD-Q4_K_XL (~11.9 GB)"
+    hf download unsloth/gpt-oss-20b-GGUF \
+        --include "gpt-oss-20b-UD-Q4_K_XL.gguf" \
         --local-dir "$MODEL_DIR"
     ok "Model indirme tamamlandı"
     ls "$MODEL_DIR/"*.gguf
@@ -234,8 +234,8 @@ echo "  [2/6] mypy + ruff OK"
 python - << 'PYEOF'
 from config import settings, model_registry, thresholds
 assert settings.env == 'local',                                       'ENV != local'
-assert model_registry.M1.model_name   == 'qwen2.5-coder-7b',         'M1 model hatalı'
-assert model_registry.QWEN.model_name == 'qwen2.5-coder-7b',         'QWEN model hatalı'
+assert model_registry.M1.model_name   == 'gpt-oss-20b',              'M1 model hatalı'
+assert model_registry.QWEN.model_name == 'gpt-oss-20b',              'QWEN model hatalı'
 assert model_registry.is_local() == True,                             'is_local() False'
 assert thresholds.node3.easy   == 80
 assert thresholds.node3.medium == 70

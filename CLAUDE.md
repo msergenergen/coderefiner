@@ -27,7 +27,7 @@ Active environment is determined by the `.env` symlink in the project root.
 | `local` | Mac Mini M4 16GB | Apple Metal | `ln -sf .env.local .env` |
 | `cloud` | Vast.ai A100 80GB | CUDA | `ln -sf .env.cloud .env` |
 
-**Local** (ENV=local): Qwen2.5-Coder-7B on port 8001 — used for all roles (M1/M2/M3 + judgement).
+**Local** (ENV=local): gpt-oss-20b (Unsloth UD-Q4_K_XL GGUF) on port 8001 — used for all roles (M1/M2/M3 + judgement).
 **Cloud** (ENV=cloud): Full model set on separate ports (see Models section).
 
 The `.env` file is never committed to git. Create the appropriate env file and symlink
@@ -48,7 +48,7 @@ All models expose an **OpenAI-compatible API** (`/v1/chat/completions`).
 The pipeline connects to all via the `openai` Python library.
 Codegen order is fixed: M1 → M2 → M3. Judgement calls QWEN every iteration.
 
-In local mode, all roles (M1/M2/M3/QWEN) route to port 8001 (Qwen2.5-Coder-7B).
+In local mode, all roles (M1/M2/M3/QWEN) route to port 8001 (gpt-oss-20b).
 
 ---
 

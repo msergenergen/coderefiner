@@ -8,10 +8,10 @@ ENV=cloud (default, Vast.ai):
     QWEN → Qwen3.5-35B-A3B  (~24 GB)   port 8004
 
 ENV=local (Mac Mini M4 16GB):
-    M1   → Qwen2.5-Coder-7B (~4 GB)   port 8001
-    M2   → Qwen2.5-Coder-7B (~4 GB)   port 8001  ← same server
-    M3   → Qwen2.5-Coder-7B (~4 GB)   port 8001  ← same server
-    QWEN → Qwen2.5-Coder-7B (~4 GB)   port 8001  ← same server
+    M1   → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001
+    M2   → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001  ← same server
+    M3   → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001  ← same server
+    QWEN → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001  ← same server
 
 In local mode all roles route to a single server (8001).
 Pipeline logic (ordering, gates, iterations) runs identically.
@@ -121,20 +121,21 @@ def _local_registry() -> ModelRegistry:
     """
     Mac Mini M4 16GB local debug registry.
 
-    All codegen roles (M1/M2/M3) route to the same small model:
-        Qwen2.5-Coder-7B  — Q4_K_M ~4 GB  — fits easily in 16 GB
+    All codegen roles (M1/M2/M3) route to the same model:
+        gpt-oss-20b (Unsloth UD-Q4_K_XL GGUF)  ~11.9 GB  — fits in 16 GB
 
     Judgement also uses the same model on the same port.
     Single llama.cpp server (port 8001) handles all roles.
     Pipeline logic (ordering, gates, iterations) is identical to cloud.
+    gpt-oss-20b requires --jinja on the server (Harmony chat template).
     """
     local_url = os.getenv("LOCAL_BASE_URL", "http://localhost:8001/v1")
 
     codegen_slot = ModelConfig(
         model_id="LOCAL_CODEGEN",
         base_url=local_url,
-        model_name=os.getenv("LOCAL_CODEGEN_MODEL", "qwen2.5-coder-7b"),
-        temperature=0.7,
+        model_name=os.getenv("LOCAL_CODEGEN_MODEL", "gpt-oss-20b"),
+        temperature=1.0,   # Harmony format; follows OpenAI recommendation
         port=8001,
         role="codegen",
     )
@@ -142,8 +143,8 @@ def _local_registry() -> ModelRegistry:
     judgement_slot = ModelConfig(
         model_id="LOCAL_JUDGEMENT",
         base_url=local_url,
-        model_name=os.getenv("LOCAL_JUDGEMENT_MODEL", "qwen2.5-coder-7b"),
-        temperature=0.3,
+        model_name=os.getenv("LOCAL_JUDGEMENT_MODEL", "gpt-oss-20b"),
+        temperature=1.0,   # Harmony format; follows OpenAI recommendation
         port=8001,
         role="judgement",
     )

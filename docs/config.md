@@ -30,12 +30,11 @@ The active `.env` file controls the entire model set:
 
 | ENV | M1 | M2 | M3 | Judgement | Toplam Bellek |
 |-----|----|----|----|----------|--------------|
-| `local` | Qwen2.5-Coder-7B | Qwen2.5-Coder-7B | Qwen2.5-Coder-7B | Qwen2.5-Coder-3B | ~6 GB |
+| `local` | gpt-oss-20b | gpt-oss-20b | gpt-oss-20b | gpt-oss-20b | ~11.9 GB |
 | `cloud` | gpt-oss-20b | Qwen3-Coder-Next | GLM-4.7-Flash | Qwen3.5-35B-A3B | ~99 GB |
 
-In local mode all codegen models (M1/M2/M3) route to the same small model;
-pipeline flow, gates, and iteration logic run identically.
-A slightly smaller model (3B) is used for judgement — sufficiently consistent.
+In local mode all roles (M1/M2/M3 and judgement) route to the same model
+on the same server; pipeline flow, gates, and iteration logic run identically.
 
 ### Sequential Model Architecture and Memory
 
@@ -45,7 +44,7 @@ START → M1 (çalışır, biter) → M2 (çalışır, biter) → M3 (çalışı
 ```
 
 Cloud dominant model: **Qwen3-Coder-Next (~46 GB)** → minimum A100 80GB.
-Local dominant model: **Qwen2.5-Coder-7B (~4 GB)** → Mac Mini M4 16GB is sufficient.
+Local dominant model: **gpt-oss-20b (~11.9 GB)** → Mac Mini M4 16GB is sufficient.
 
 ---
 
@@ -242,10 +241,10 @@ ENV=cloud (varsayılan, Vast.ai):
   QWEN → Qwen3.5-35B-A3B (~24 GB)   port 8004
 
 ENV=local (Mac Mini M4 16GB):
-    M1 → Qwen2.5-Coder-7B (~4 GB)   port 8001
-    M2 → Qwen2.5-Coder-7B (~4 GB)   port 8001  ← aynı server
-    M3 → Qwen2.5-Coder-7B (~4 GB)   port 8001  ← aynı server
-  QWEN → Qwen2.5-Coder-7B (~4 GB)   port 8001  ← aynı server
+    M1 → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001
+    M2 → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001  ← aynı server
+    M3 → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001  ← aynı server
+  QWEN → gpt-oss-20b (UD-Q4_K_XL, ~11.9 GB)   port 8001  ← aynı server
 
 Local modda tüm roller tek server'a (8001) gider.
 Pipeline mantığı (sıra, gate, iterasyon) tamamen aynı çalışır.
@@ -346,22 +345,20 @@ def _local_registry() -> ModelRegistry:
     """
     Mac Mini M4 16GB local debug registry'si.
 
-    Tüm codegen rolleri (M1/M2/M3) aynı küçük modele yönlenir:
-        Qwen2.5-Coder-7B  — Q4_K_M ~4 GB  — 16 GB'a rahatça sığar
-
-    Judgement için biraz daha küçük:
-        Qwen2.5-Coder-3B  — Q4_K_M ~2 GB
+    Tüm codegen rolleri (M1/M2/M3) ve judgement aynı modele yönlenir:
+        gpt-oss-20b (Unsloth UD-Q4_K_XL GGUF)  ~11.9 GB  — 16 GB'a sığar
 
     Tek llama.cpp server (port 8001) tüm roller için yeterli.
     Pipeline mantığı (sıra, gate, iterasyon) cloud ile aynı.
+    gpt-oss-20b server'da --jinja gerektirir (Harmony chat template).
     """
     local_url = os.getenv("LOCAL_BASE_URL", "http://localhost:8001/v1")
 
     codegen_slot = ModelConfig(
         model_id="LOCAL_CODEGEN",
         base_url=local_url,
-        model_name=os.getenv("LOCAL_CODEGEN_MODEL", "qwen2.5-coder-7b"),
-        temperature=0.7,
+        model_name=os.getenv("LOCAL_CODEGEN_MODEL", "gpt-oss-20b"),
+        temperature=1.0,   # Harmony format; OpenAI recommendation
         port=8001,
         role="codegen",
     )
@@ -369,8 +366,8 @@ def _local_registry() -> ModelRegistry:
     judgement_slot = ModelConfig(
         model_id="LOCAL_JUDGEMENT",
         base_url=local_url,
-        model_name=os.getenv("LOCAL_JUDGEMENT_MODEL", "qwen2.5-coder-7b"),
-        temperature=0.3,
+        model_name=os.getenv("LOCAL_JUDGEMENT_MODEL", "gpt-oss-20b"),
+        temperature=1.0,   # Harmony format; OpenAI recommendation
         port=8001,
         role="judgement",
     )
@@ -449,8 +446,8 @@ ENV=local
 
 # ── Single server (all roles go here) ──────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
-LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b   # Q4_K_M ~4 GB
-LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b  # Q4_K_M ~4 GB (codegen ile aynı model)
+LOCAL_CODEGEN_MODEL=gpt-oss-20b   # Unsloth UD-Q4_K_XL ~11.9 GB
+LOCAL_JUDGEMENT_MODEL=gpt-oss-20b  # aynı model, aynı server
 LLAMA_API_KEY=local
 
 # ── Pipeline — keep short ───────────────────────────────────────────
@@ -496,15 +493,10 @@ python -c "from config import settings, model_registry; \
 ### Model Download (one-time)
 
 ```bash
-# Codegen — ~4 GB
-huggingface-cli download bartowski/Qwen2.5-Coder-7B-Instruct-GGUF \
-    --include "*Q4_K_M*" \
-    --local-dir ./models/qwen2.5-coder-7b
-
-# Judgement — ~2 GB
-huggingface-cli download bartowski/Qwen2.5-Coder-3B-Instruct-GGUF \
-    --include "*Q4_K_M*" \
-    --local-dir ./models/qwen2.5-coder-7b
+# Tüm roller (codegen + judgement) — ~11.9 GB
+hf download unsloth/gpt-oss-20b-GGUF \
+    --include "gpt-oss-20b-UD-Q4_K_XL.gguf" \
+    --local-dir ./models/gpt-oss-20b
 ```
 
 ### llama.cpp Metal Derleme
@@ -522,26 +514,25 @@ cmake --build llama.cpp/build \
 
 ```bash
 # Codegen and judgement both go to port 8001
-# Start codegen model on first run:
 ./llama.cpp/llama-server \
-    --model ./models/qwen2.5-coder-7b/*.gguf \
+    --model ./models/gpt-oss-20b/*.gguf \
     --port 8001 --host 0.0.0.0 \
     --ctx-size 8192 --n-gpu-layers 99 \
-    --temp 0.7
+    --jinja \
+    --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
 ```
 
+> `--jinja` is required — gpt-oss-20b uses the Harmony chat template.
 > In local mode, judgement calls also go to port 8001. llama.cpp
-> handles both over the same port.
-> If you want to run the judgement model (3B) separately, open a different port,
-> but overriding the model name via `LOCAL_JUDGEMENT_MODEL` is sufficient.
+> handles both over the same port and the same model.
 
 ### Run Pipeline
 
 ```bash
 # Symlink already set to .env.local (done in setup step A6)
 python main.py
-# → ENV=local → M1/M2/M3 → qwen2.5-coder-7b (port 8001)
-# → QWEN → qwen2.5-coder-7b (port 8001)
+# → ENV=local → M1/M2/M3 → gpt-oss-20b (port 8001)
+# → QWEN → gpt-oss-20b (port 8001)
 # → 5 easy questions, 3 iterations
 ```
 
@@ -660,7 +651,7 @@ from config import model_registry
 
 def get_client(model_id: str) -> OpenAI:
     cfg = model_registry.get(model_id)
-    # local mode: M1/M2/M3 → port 8001 (qwen2.5-coder-7b)
+    # local mode: M1/M2/M3 → port 8001 (gpt-oss-20b)
     # cloud'da M1 → port 8001 (gpt-oss-20b), M2 → 8002, M3 → 8003
     return OpenAI(base_url=cfg.base_url, api_key=model_registry.api_key())
 
@@ -702,13 +693,13 @@ print('Is local:   ', model_registry.is_local())       # False
 ENV=local python -c "
 from config import settings, model_registry
 print('ENV:        ', settings.env)            # local
-print('M1 model:   ', model_registry.M1.model_name)   # qwen2.5-coder-7b
+print('M1 model:   ', model_registry.M1.model_name)   # gpt-oss-20b
 print('M1 port:    ', model_registry.M1.port)          # 8001
-print('M2 model:   ', model_registry.M2.model_name)   # qwen2.5-coder-7b
+print('M2 model:   ', model_registry.M2.model_name)   # gpt-oss-20b
 print('M2 port:    ', model_registry.M2.port)          # 8001 (aynı)
-print('M3 model:   ', model_registry.M3.model_name)   # qwen2.5-coder-7b
+print('M3 model:   ', model_registry.M3.model_name)   # gpt-oss-20b
 print('M3 port:    ', model_registry.M3.port)          # 8001 (aynı)
-print('QWEN model: ', model_registry.QWEN.model_name)  # qwen2.5-coder-7b
+print('QWEN model: ', model_registry.QWEN.model_name)  # gpt-oss-20b
 print('QWEN port:  ', model_registry.QWEN.port)        # 8001 (aynı)
 print('Is local:   ', model_registry.is_local())       # True
 "

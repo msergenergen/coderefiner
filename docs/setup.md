@@ -103,8 +103,8 @@ ENV=local
 
 # ── Single server — all roles go here ────────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
-LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b
-LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b
+LOCAL_CODEGEN_MODEL=gpt-oss-20b
+LOCAL_JUDGEMENT_MODEL=gpt-oss-20b
 LLAMA_API_KEY=local
 
 # ── Pipeline — keep short for debug ──────────────────────────────
@@ -141,16 +141,16 @@ grep -qxF '.env.cloud' .gitignore 2>/dev/null || echo '.env.cloud' >> .gitignore
 ```bash
 # In project root directory
 mkdir -p models
-cd models
 
-# Qwen2.5-Coder-7B — for both codegen and judgement (~4 GB)
-huggingface-cli download bartowski/Qwen2.5-Coder-7B-Instruct-GGUF \
-    --include "*Q4_K_M.gguf" \
-    --local-dir ./qwen2.5-coder-7b
+# gpt-oss-20b (Unsloth UD-Q4_K_XL) — for both codegen and judgement (~11.9 GB)
+hf download unsloth/gpt-oss-20b-GGUF \
+    --include "gpt-oss-20b-UD-Q4_K_XL.gguf" \
+    --local-dir ./models/gpt-oss-20b
 ```
 
-> `bartowski` quants are tested with Mac Metal and work smoothly with llama.cpp.
-> Toplam indirme: ~4 GB.
+> Unsloth Dynamic (UD) quants give the best quality/size tradeoff for gpt-oss —
+> all quants land near ~11-13 GB since the MoE weights are already native MXFP4.
+> Toplam indirme: ~11.9 GB.
 
 ### A8. Start llama.cpp Server (Local)
 
@@ -159,11 +159,12 @@ Single server; all roles (M1/M2/M3/QWEN) route to this port:
 ```bash
 # Run in a separate terminal or tmux window in project root
 ~/llama.cpp/llama-server \
-    --model ./models/qwen2.5-coder-7b/*.gguf \
+    --model ./models/gpt-oss-20b/*.gguf \
     --port 8001 \
     --host 0.0.0.0 \
     --ctx-size 8192 \
-    --n-gpu-layers 99   # Metal — tüm katmanlar GPU'da
+    --n-gpu-layers 99 \
+    --jinja   # required — gpt-oss-20b uses the Harmony chat template
 
 # You should see this in the output:
 # llama server listening at http://0.0.0.0:8001
@@ -181,8 +182,8 @@ curl -s http://localhost:8001/v1/models | python -m json.tool
 ENV=local python -c "
 from config import settings, model_registry
 print('ENV:       ', settings.env)
-print('M1 model:  ', model_registry.M1.model_name)   # qwen2.5-coder-7b
-print('QWEN model:', model_registry.QWEN.model_name)  # qwen2.5-coder-7b
+print('M1 model:  ', model_registry.M1.model_name)   # gpt-oss-20b
+print('QWEN model:', model_registry.QWEN.model_name)  # gpt-oss-20b
 print('Local mod: ', model_registry.is_local())       # True
 "
 

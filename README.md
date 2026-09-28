@@ -123,7 +123,7 @@ pytest, pytest-timeout, pytest-cov  # Testing
 | M3 | GLM-4.7-Flash (Unsloth GGUF) | ~18 GB | 8003 | `--repeat-penalty 1.0` |
 | QWEN | Qwen3.5-35B-A3B (Unsloth GGUF) | ~24 GB | 8004 | — |
 
-**Local (debug):** All roles use a single Qwen2.5-Coder-7B (~4 GB) on port 8001.  
+**Local (debug):** All roles use a single gpt-oss-20b (Unsloth UD-Q4_K_XL, ~11.9 GB) on port 8001.  
 **Cloud (benchmark):** Each model runs on a separate port. Minimum A100 80GB required for M2.
 
 ---
@@ -176,8 +176,8 @@ pip install -r requirements.txt
 cat > .env.local << 'EOF'
 ENV=local
 LOCAL_BASE_URL=http://localhost:8001/v1
-LOCAL_CODEGEN_MODEL=qwen2.5-coder-7b
-LOCAL_JUDGEMENT_MODEL=qwen2.5-coder-7b
+LOCAL_CODEGEN_MODEL=gpt-oss-20b
+LOCAL_JUDGEMENT_MODEL=gpt-oss-20b
 LLAMA_API_KEY=local
 MAX_ITERATIONS=3
 SANDBOX_TIMEOUT_SEC=15
@@ -192,18 +192,12 @@ ln -sf .env.local .env
 mkdir -p outputs/results
 ```
 
-#### 5. Download the local model (~4 GB)
+#### 5. Download the local model (~11.9 GB)
 
 ```bash
-python -c "
-from huggingface_hub import snapshot_download
-snapshot_download(
-    repo_id='bartowski/Qwen2.5-Coder-7B-Instruct-GGUF',
-    allow_patterns=['*Q4_K_M.gguf'],
-    local_dir='./models/qwen2.5-coder-7b',
-)
-print('Done.')
-"
+hf download unsloth/gpt-oss-20b-GGUF \
+    --include "gpt-oss-20b-UD-Q4_K_XL.gguf" \
+    --local-dir ./models/gpt-oss-20b
 ```
 
 #### 6. Start the model server
@@ -226,7 +220,7 @@ source .venv/bin/activate
 python -c "
 from config import settings, model_registry
 print('ENV:       ', settings.env)           # local
-print('M1 model:  ', model_registry.M1.model_name)   # qwen2.5-coder-7b
+print('M1 model:  ', model_registry.M1.model_name)   # gpt-oss-20b
 print('Local mode:', model_registry.is_local())       # True
 "
 
@@ -390,12 +384,12 @@ tail -f outputs/memory.md
 ### `scripts/start_model.sh`
 
 Starts a llama.cpp model server. In local mode, always starts port 8001
-with the downloaded Qwen2.5-Coder-7B. In cloud mode, starts the model
-matching the given role ID on its dedicated port.
+with the downloaded gpt-oss-20b (`--jinja` applied automatically). In cloud
+mode, starts the model matching the given role ID on its dedicated port.
 
 ```bash
 # Local mode — argument is optional (ENV=local detected from .env)
-bash scripts/start_model.sh         # starts Qwen2.5-Coder-7B on port 8001
+bash scripts/start_model.sh         # starts gpt-oss-20b on port 8001
 bash scripts/start_model.sh M1      # same result in local mode
 
 # Cloud mode — argument required
@@ -593,7 +587,7 @@ llm-code-refinement/
 ├── benchmark/                 ← baseline.py (V0), evaluator.py (V1–V4), analysis.py
 ├── tests/                     ← 11 test files + conftest.py
 ├── docs/                      ← Phase documentation (one .md per module)
-└── models/qwen2.5-coder-7b/   ← Downloaded GGUF model (local mode)
+└── models/gpt-oss-20b/        ← Downloaded GGUF model (local mode)
 ```
 
 ---
