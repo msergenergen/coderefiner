@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from loguru import logger
 
 
 def mypy_check(code: str) -> dict:
@@ -46,7 +47,8 @@ def mypy_check(code: str) -> dict:
             "error_count": len(errors),
             "errors":      errors[:5],
         }
-    except Exception:
+    except Exception as e:
+        logger.warning(f"mypy_check: mypy failed ({e}) — defaulting to no errors")
         return {"error_count": 0, "errors": []}
     finally:
         try:
@@ -93,7 +95,8 @@ def ruff_check(code: str) -> dict:
             "issue_count": len(findings),
             "issues":      messages[:5],
         }
-    except Exception:
+    except Exception as e:
+        logger.warning(f"ruff_check: ruff failed ({e}) — defaulting to no issues")
         return {"issue_count": 0, "issues": []}
     finally:
         try:

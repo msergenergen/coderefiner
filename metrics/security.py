@@ -7,6 +7,7 @@ import sys
 import tempfile
 import os
 import ast
+from loguru import logger
 from sandbox.whitelist import ALLOWED_IMPORTS
 
 # Use the bandit from the active Python environment
@@ -51,7 +52,8 @@ def bandit_scan(code: str) -> dict:
             "medium_count": len(medium),
             "issues":       results,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning(f"bandit_scan: bandit failed ({e}) — defaulting to no findings")
         return {"high_count": 0, "medium_count": 0, "issues": []}
     finally:
         try:

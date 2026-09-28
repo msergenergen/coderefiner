@@ -33,11 +33,17 @@ write a **fully self-contained** improved system prompt for the next iteration.
 
 ## 3. metrics/scoring.py
 
+`compute_efficiency_score` and `compute_quality_score` read their limits from
+`config.thresholds` (`node2.cpu_limit_ms`, `node2.ram_limit_mb`, `node1.cc_hard_limit`)
+instead of hardcoding them — this keeps the scoring formula from silently
+desyncing from the threshold table shown to the Judge (`judgement_context_table()`).
+
 ```python
 """
 100 puanlık rubric hesaplama — sayısal boyutlar.
 Algorithm Choice (10p) ve Error Handling (10p) Judge modeli tarafından doldurulur.
 """
+from config import thresholds
 
 
 def compute_accuracy_score(pass_rate: float) -> float:
@@ -47,15 +53,16 @@ def compute_accuracy_score(pass_rate: float) -> float:
 
 def compute_efficiency_score(cpu_ms: float, ram_mb: float) -> float:
     """Verimlilik skoru: 0–20 puan."""
-    cpu_score = max(0.0, 1 - cpu_ms / 5000)
-    ram_score = max(0.0, 1 - ram_mb / 512)
+    n2 = thresholds.node2
+    cpu_score = max(0.0, 1 - cpu_ms / n2.cpu_limit_ms)
+    ram_score = max(0.0, 1 - ram_mb / n2.ram_limit_mb)
     return round((cpu_score + ram_score) / 2 * 20, 2)
 
 
 def compute_quality_score(mi: float, cc: float) -> float:
     """Kod kalitesi skoru: 0–20 puan."""
     mi_score = min(1.0, mi / 100)
-    cc_score = max(0.0, 1 - cc / 20)
+    cc_score = max(0.0, 1 - cc / thresholds.node1.cc_hard_limit)
     return round((mi_score + cc_score) / 2 * 20, 2)
 
 

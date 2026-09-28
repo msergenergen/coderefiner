@@ -7,6 +7,7 @@ import sys
 import tempfile
 import os
 import lizard
+from loguru import logger
 
 # Use the radon from the active Python environment
 _RADON = [sys.executable, "-m", "radon"]
@@ -37,7 +38,8 @@ def cyclomatic_complexity(code: str) -> float:
             for block in blocks:
                 scores.append(block.get("complexity", 0))
         return max(scores) if scores else 0.0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"cyclomatic_complexity: radon cc failed ({e}) — defaulting to 0.0")
         return 0.0
     finally:
         try:
@@ -68,7 +70,8 @@ def maintainability_index(code: str) -> float:
         data = json.loads(result.stdout)
         scores = [v.get("mi", 100.0) for v in data.values()]
         return min(scores) if scores else 100.0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"maintainability_index: radon mi failed ({e}) — defaulting to 100.0")
         return 100.0
     finally:
         try:
@@ -102,7 +105,8 @@ def halstead_volume(code: str) -> float:
             total = v.get("total", {})
             volumes.append(float(total.get("volume", 0.0)))
         return max(volumes) if volumes else 0.0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"halstead_volume: radon hal failed ({e}) — defaulting to 0.0")
         return 0.0
     finally:
         try:
@@ -120,5 +124,6 @@ def cognitive_complexity(code: str) -> float:
         result = lizard.analyze_file.analyze_source_code("tmp.py", code)
         scores = [fn.cyclomatic_complexity for fn in result.function_list]
         return max(scores) if scores else 0.0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"cognitive_complexity: lizard failed ({e}) — defaulting to 0.0")
         return 0.0
