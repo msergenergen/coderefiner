@@ -23,6 +23,15 @@ lcb_runner is LCB's official evaluation engine. Using the official method is a m
 necessity for the thesis claim that the pipeline improves LCB task success rates.
 Runs on `all_tests` (public + private + edge_cases).
 
+> **Verified gap:** every iteration JSON in the only pilot run so far
+> (`outputs/results/2026-04-15/`) has `lcb_available: false` — `lcb_runner` was not
+> installed and `_fallback_evaluate()` ran instead (exact-string-match; `crash_count`
+> and `test_diversity_score` are hardcoded placeholders, not measurements — see
+> `sandbox/lcb_eval.py:194-202`). `dataset/verify.py` now checks and warns on this.
+> **Before any run whose results are meant to support the thesis claim above,
+> confirm `lcb_runner: OK` in `dataset/verify.py` output — do not trust
+> `crash_count`/`test_diversity_score` from a run where `lcb_available` is `false`.**
+
 ### How lcb_runner Works
 
 The lcb_runner `check_correctness()` function runs the code inside a Process

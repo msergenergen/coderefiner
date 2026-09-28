@@ -10,6 +10,20 @@ from dataset.edge_cases import augment_row, needs_edge_cases
 def main():
     print("Verifying LiveCodeBench...")
 
+    # sandbox/lcb_eval.py falls back to a crude exact-string-match evaluator
+    # (fabricated crash_count/test_diversity_score) when lcb_runner isn't
+    # installed. The thesis's correctness claim depends on the official
+    # evaluator, so a missing install must never pass silently.
+    try:
+        from lcb_runner.evaluation.utils_execute import check_correctness  # noqa: F401
+        print("  lcb_runner: OK (official evaluator available)")
+    except ImportError:
+        print(
+            "  WARNING: lcb_runner is NOT installed — sandbox/lcb_eval.py will "
+            "silently use the fallback evaluator (crash_count/test_diversity_score "
+            "will be placeholders, not measurements). Run: pip install -e LiveCodeBench/"
+        )
+
     try:
         rows = load_lcb(split="test", difficulty="all", sample_size=10)
         print(f"  Load OK — {len(rows)} examples")

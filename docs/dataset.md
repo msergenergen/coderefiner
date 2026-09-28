@@ -296,6 +296,12 @@ def augment_row(row: dict) -> dict:
 python dataset/verify.py
 ```
 
+Also checks that `lcb_runner` is importable — `sandbox/lcb_eval.py` silently falls
+back to a crude exact-string-match evaluator (with fabricated `crash_count`/
+`test_diversity_score` placeholders) when it isn't installed, which would
+otherwise invalidate the thesis's "official LCB evaluator" correctness claim
+without anyone noticing.
+
 ```python
 """
 Veri seti kurulum doğrulama scripti.
@@ -308,6 +314,16 @@ from dataset.edge_cases import augment_row, needs_edge_cases
 
 def main():
     print("LiveCodeBench doğrulanıyor...")
+
+    try:
+        from lcb_runner.evaluation.utils_execute import check_correctness  # noqa: F401
+        print("  lcb_runner: OK (resmi evaluator kullanılabilir)")
+    except ImportError:
+        print(
+            "  UYARI: lcb_runner kurulu değil — sandbox/lcb_eval.py sessizce "
+            "fallback evaluator'a düşecek (crash_count/test_diversity_score "
+            "gerçek ölçüm değil, sabit değer olacak). Çalıştır: pip install -e LiveCodeBench/"
+        )
 
     try:
         rows = load_lcb(split="test", difficulty="all", sample_size=10)
