@@ -39,12 +39,12 @@ SYSTEM_PROMPT = (
 )
 
 RUBRIC = """\
-- accuracy (0–30): Does the code correctly solve all reference test cases?
+- accuracy (0–25): Does the code correctly solve all reference test cases?
 - efficiency (0–20): Is time/space complexity appropriate for the problem constraints?
 - quality (0–20): Is the code readable, well-structured, and maintainable?
 - security (0–15): Are there dangerous imports, eval/exec, or unsafe patterns?
 - algorithm_choice (0–10): Does the code use the right algorithm for the given constraints?
-- error_handling (0–5): Are edge cases and invalid inputs handled correctly?"""
+- error_handling (0–10): Are edge cases and invalid inputs handled correctly?"""
 
 
 def format_prompt(example: dict) -> str:

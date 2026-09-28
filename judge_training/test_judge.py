@@ -42,21 +42,10 @@ def load_config(path: str = "config.yaml") -> dict:
         return yaml.safe_load(f)
 
 
-# ── Prompt (mirrors build_dataset.py) ────────────────────────────────────────
+# ── Prompt — imported from build_dataset.py so the rubric can't drift out of
+# sync between training-data generation and this evaluation script ──────────
 
-SYSTEM_PROMPT = (
-    "You are a specialized code judge for Python competitive programming solutions. "
-    "Evaluate the given code using the rubric and reference tests, then respond with "
-    "a single valid JSON object only — no markdown, no explanation."
-)
-
-RUBRIC = """\
-- accuracy (0–30): Does the code correctly solve all reference test cases?
-- efficiency (0–20): Is time/space complexity appropriate for the problem constraints?
-- quality (0–20): Is the code readable, well-structured, and maintainable?
-- security (0–15): Are there dangerous imports, eval/exec, or unsafe patterns?
-- algorithm_choice (0–10): Does the code use the right algorithm for the given constraints?
-- error_handling (0–5): Are edge cases and invalid inputs handled correctly?"""
+from build_dataset import SYSTEM_PROMPT, RUBRIC  # noqa: E402
 
 
 def build_user_message(problem: str, code: str, all_tests) -> str:
