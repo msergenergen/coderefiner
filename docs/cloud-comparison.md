@@ -3,6 +3,8 @@
 > Goal: Select the best platform to run the iterative code refinement pipeline (gpt-oss-20b + Qwen3-Coder-Next + GLM-4.7-Flash + Qwen3.5-35B-A3B)
 > using an on-premise GGUF / llama.cpp architecture.
 
+> **⚠️ OUT OF DATE:** This document's hardware/cost analysis assumes the removed M2 model (Qwen3-Coder-Next, ~46 GB "dominant model"). The current registry (M1=Qwen3.5-9B ~6GB, M2=Qwen2.5-Coder-1.5B ~1GB, QWEN=~24GB) requires much less memory; A100 80GB is likely no longer necessary, but the numbers below should not be trusted without re-verification against current Vast.ai/RunPod pricing. Existing tables are preserved as historical record.
+
 ---
 
 ## 1. Core Requirement: Sequential Models, Single Memory

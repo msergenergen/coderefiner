@@ -73,7 +73,7 @@ Run the following 4 variants separately for each model:
 [ ] llama.cpp Metal derleme
 [ ] Proje repo clone + venv + pip install
 [ ] .env.local oluşturma (ENV=local)
-[ ] gpt-oss-20b (Unsloth UD-Q4_K_XL) indirme (~11.9 GB)
+[ ] qwen3.5-9b (Unsloth UD-Q4_K_XL) indirme (~6 GB)
 [ ] llama-server port 8001 başlatma
 [ ] ENV=local python -c "from config import settings; print(settings.env)"
 [ ] python dataset/verify.py
@@ -82,14 +82,14 @@ Run the following 4 variants separately for each model:
 ### 1.2 Vast.ai A100 80GB (Cloud)
 
 ```
-[ ] Reliability > 0.95, 80GB VRAM, 300GB SSD instance seç
+[ ] Reliability > 0.95, ≥32 GB VRAM (likely allows smaller than A100 80GB), 300GB SSD instance seç
 [ ] SSH bağlantısı + tmux kurulumu
 [ ] Sistem paketleri (build-essential, cmake, python3.11-dev)
 [ ] llama.cpp CUDA derleme
 [ ] Proje clone + venv + pip install
 [ ] lcb_runner kurulumu (pip install -e LiveCodeBench/)
 [ ] .env.cloud oluşturma (ENV=cloud)
-[ ] Model indirme (4 model, ~99 GB toplam, tmux paralel)
+[ ] Model indirme (3 model, ~31 GB toplam, tmux paralel)
 [ ] scripts/start_model.sh M1 → curl test
 [ ] ENV=cloud python -c "from config import settings; print(settings.env)"
 ```
@@ -243,9 +243,9 @@ ENV=local LCB_SAMPLE_SIZE=1 LCB_DIFFICULTY=easy python main.py
 ### 3.1 Incremental Cloud Migration
 
 ```
-[ ] Adım 1: ENV=cloud, sadece M3 (GLM-4.7-Flash), 5 easy soru
-[ ] Adım 2: ENV=cloud, M1 + M3, 10 soru
-[ ] Adım 3: ENV=cloud, tam pipeline (M1+M2+M3+QWEN), 5 soru
+[ ] Adım 1: ENV=cloud, sadece M1 (Qwen3.5-9B), 5 easy soru
+[ ] Adım 2: ENV=cloud, M1 + M2, 10 soru
+[ ] Adım 3: ENV=cloud, tam pipeline (M1+M2+QWEN), 5 soru
 ```
 
 ### 3.2 Pilot Kontrolleri
@@ -280,7 +280,6 @@ ENV=local LCB_SAMPLE_SIZE=1 LCB_DIFFICULTY=easy python main.py
 ```
 [ ] ENV=cloud python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
 [ ] ENV=cloud python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
-[ ] ENV=cloud python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
 [ ] Sonuçları yerel makineye kopyala (scp)
 ```
 
@@ -384,7 +383,7 @@ ENV=local LCB_SAMPLE_SIZE=1 LCB_DIFFICULTY=easy python main.py
 ```
 [ ] Cloud sonuçlarını docs/paper.md Bölüm V'e ekle
 [ ] Tablo III (ablation TSR): V0–V3 × easy/medium/hard
-[ ] Tablo IV (model karşılaştırma): M1/M2/M3 V0 vs V3
+[ ] Tablo IV (model karşılaştırma): M1/M2 V0 vs V3
 [ ] Şekil 2 (ablation bar chart): benchmark/plot.py ile üret
 [ ] H1–H5 hipotez sonuçlarını hipotez tablosuna yaz
 [ ] Özetçe'deki "dört varyantlı ablasyon" rakamını doğrula
@@ -403,7 +402,7 @@ ENV=local LCB_SAMPLE_SIZE=1 LCB_DIFFICULTY=easy python main.py
 | lcb_runner API change | Low | Pin version, fallback ready |
 | Vast.ai instance instability | Medium | Filter Reliability > 0.95 |
 | 50-question statistical power | High | Use McNemar test + report 95% CI |
-| M1→M2→M3 causality issue | High | Run V0 ablation separately per model |
+| M1→M2 causality issue | High | Run V0 ablation separately per model |
 
 ---
 

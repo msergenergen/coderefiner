@@ -1,6 +1,6 @@
 """
 Sequential model router.
-Runs models in the order defined by PIPELINE_MODELS env var (default: M1,M2,M3).
+Runs models in the order defined by PIPELINE_MODELS env var (default: M1,M2).
 Advances to the next model after one completes.
 """
 from config import settings

@@ -7,7 +7,6 @@ Results are used for ablation comparison.
 Usage:
     python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
     python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
-    python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
 """
 import argparse
 import json
@@ -175,7 +174,7 @@ def run_baseline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM-as-a-Judge — V0 Single-Shot Baseline")
-    parser.add_argument("--model",      required=True, choices=["M1", "M2", "M3"])
+    parser.add_argument("--model",      required=True, choices=["M1", "M2"])
     parser.add_argument("--difficulty", default="all")
     parser.add_argument("--sample",     type=int, default=50)
     parser.add_argument("--tag",        default="")

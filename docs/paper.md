@@ -243,9 +243,9 @@ Tasarım sürecinde öne çıkan başlıca gözlemler şunlardır: Yargı modeli
 
 [5] X. Chen, M. Lin, N. Schärli ve D. Zhou, "Teaching Large Language Models to Self-Debug," *arXiv*, arXiv:2304.05128, 2023.
 
-[6] C. Olausson, J. Inala, C. Wang, J. Gao ve A. Solar-Lezama, "Is Self-Repair a Silver Bullet for Code Generation?" *International Conference on Learning Representations (ICLR)*, 2024.
+[6] T. X. Olausson, J. P. Inala, C. Wang, J. Gao ve A. Solar-Lezama, "Is Self-Repair a Silver Bullet for Code Generation?" *International Conference on Learning Representations (ICLR)*, 2024.
 
-[7] N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan ve S. Yao, "Reflexion: Language Agents with Verbal Reinforcement Learning," *Advances in Neural Information Processing Systems (NeurIPS)*, cilt 36, 2023.
+[7] N. Shinn, F. Cassano, E. Berman, A. Gopinath, K. Narasimhan ve S. Yao, "Reflexion: Language Agents with Verbal Reinforcement Learning," *Advances in Neural Information Processing Systems (NeurIPS)*, cilt 36, 2023.
 
 [8] L. Zheng, W.-L. Chiang, Y. Sheng, S. Zhuang, Z. Wu ve diğerleri, "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena," *Advances in Neural Information Processing Systems (NeurIPS)*, cilt 36, 2023.
 
@@ -263,8 +263,8 @@ Tasarım sürecinde öne çıkan başlıca gözlemler şunlardır: Yargı modeli
 
 [15] B. Hui, J. Yang, Z. Cui, J. Yang, D. Liu ve diğerleri, "Qwen2.5-Coder Technical Report," *arXiv*, arXiv:2409.12186, 2024.
 
-[16] C. Sheng, J. Zhou, X. Li, X. Dong ve diğerleri, "GLM-4: Open Multilingual Multimodal Chat LLMs," *arXiv*, arXiv:2406.12793, 2024.
+[16] Team GLM: A. Zeng, B. Xu, B. Wang, C. Zhang, D. Yin ve diğerleri, "ChatGLM: A Family of Large Language Models from GLM-130B to GLM-4 All Tools," *arXiv*, arXiv:2406.12793, 2024.
 
-[17] T. J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter ve diğerleri, "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models," *Advances in Neural Information Processing Systems (NeurIPS)*, cilt 35, ss. 24824–24837, 2022.
+[17] J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter ve diğerleri, "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models," *Advances in Neural Information Processing Systems (NeurIPS)*, cilt 35, ss. 24824–24837, 2022.
 
-[18] A. Yang, B. Zhang, B. Hui, B. Zheng ve diğerleri, "Qwen3 Technical Report," *arXiv*, arXiv:2505.09388, 2025.
+[18] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui ve diğerleri, "Qwen3 Technical Report," *arXiv*, arXiv:2505.09388, 2025.

@@ -41,9 +41,9 @@ class PipelineSettings:
     pipeline_log_path: str = os.getenv("PIPELINE_LOG_PATH", "outputs/pipeline.log")
 
     # ── Model sequence ────────────────────────────────────────────────────
-    # "M1"         → single model (local debug)
-    # "M1,M2,M3"  → full sequence (cloud benchmark, default)
-    pipeline_models: str = os.getenv("PIPELINE_MODELS", "M1,M2,M3")
+    # "M1"      → single model (local debug)
+    # "M1,M2"  → full sequence (cloud benchmark, default) — medium then small Qwen model
+    pipeline_models: str = os.getenv("PIPELINE_MODELS", "M1,M2")
 
     # ── Judge model ───────────────────────────────────────────────────────
     # Registry key of the judgement model. Must match a key in ModelRegistry.

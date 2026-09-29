@@ -284,9 +284,8 @@ def fig_model_comparison(variant_data: dict, baseline_by_model: dict,
         )
 
     model_names = {
-        "M1": "M1\ngpt-oss-20b",
-        "M2": "M2\nQwen3-Coder",
-        "M3": "M3\nGLM-4.7-Flash",
+        "M1": "M1\nQwen3.5-9B",
+        "M2": "M2\nQwen2.5-Coder-1.5B",
     }
     ax.set_xticks(x)
     ax.set_xticklabels([model_names.get(m, m) for m in models])

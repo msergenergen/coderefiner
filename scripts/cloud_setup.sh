@@ -184,22 +184,31 @@ else
 
     # Each model is downloaded sequentially.
     # huggingface-cli resumes automatically if interrupted.
+    # M1/M2 are same-family Qwen models at two size tiers (medium/small) —
+    # isolates model size as the controlled variable instead of three
+    # cross-vendor models. See config/models.py docstring.
     declare -A REPOS=(
-        [gpt-oss-20b]="unsloth/gpt-oss-20b-GGUF"
-        [qwen3-coder-next]="unsloth/Qwen3-Coder-Next-GGUF"
-        [glm-4.7-flash]="unsloth/GLM-4.7-Flash-GGUF"
+        [qwen3.5-9b]="unsloth/Qwen3.5-9B-GGUF"
+        [qwen2.5-coder-1.5b]="unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF"
         [qwen3.5-35b]="unsloth/Qwen3.5-35B-A3B-GGUF"
     )
     declare -A SIZES=(
-        [gpt-oss-20b]="~11 GB"
-        [qwen3-coder-next]="~46 GB"
-        [glm-4.7-flash]="~18 GB"
+        [qwen3.5-9b]="~6 GB"
+        [qwen2.5-coder-1.5b]="~1 GB"
         [qwen3.5-35b]="~24 GB"
     )
+    # Qwen2.5-Coder-1.5B-Instruct only ships standard quants (no Unsloth
+    # "UD-" dynamic quant exists for this small a checkpoint) — use Q4_K_M.
+    declare -A INCLUDE_PATTERNS=(
+        [qwen3.5-9b]="*UD-Q4_K_XL*"
+        [qwen2.5-coder-1.5b]="*Q4_K_M*"
+        [qwen3.5-35b]="*UD-Q4_K_XL*"
+    )
 
-    for DIR in gpt-oss-20b qwen3-coder-next glm-4.7-flash qwen3.5-35b; do
+    for DIR in qwen3.5-9b qwen2.5-coder-1.5b qwen3.5-35b; do
         REPO="${REPOS[$DIR]}"
         SIZE="${SIZES[$DIR]}"
+        PATTERN="${INCLUDE_PATTERNS[$DIR]}"
         TARGET="$MODELS/$DIR"
 
         existing=$(ls "$TARGET/"*.gguf 2>/dev/null | wc -l)
@@ -208,7 +217,7 @@ else
         else
             echo "  İndiriliyor: $REPO  ($SIZE)"
             huggingface-cli download "$REPO" \
-                --include "*UD-Q4_K_XL*" \
+                --include "$PATTERN" \
                 --local-dir "$TARGET"
             ok "$DIR indirme tamamlandı"
         fi
@@ -237,10 +246,9 @@ echo "  [2/6] mypy + ruff OK"
 python - << 'PYEOF'
 from config import settings, model_registry, thresholds
 assert settings.env == 'cloud',                            'ENV != cloud'
-assert model_registry.M1.model_name   == 'gpt-oss-20b',   'M1 model hatalı'
-assert model_registry.M2.model_name   == 'qwen3-coder-next', 'M2 model hatalı'
-assert model_registry.M3.model_name   == 'glm-4.7-flash',  'M3 model hatalı'
-assert model_registry.QWEN.model_name == 'qwen3.5-35b-a3b','QWEN model hatalı'
+assert model_registry.M1.model_name   == 'qwen3.5-9b',                    'M1 model hatalı'
+assert model_registry.M2.model_name   == 'qwen2.5-coder-1.5b-instruct',   'M2 model hatalı'
+assert model_registry.QWEN.model_name == 'qwen3.5-35b-a3b',               'QWEN model hatalı'
 assert thresholds.node3.easy   == 80
 assert thresholds.node3.medium == 70
 assert thresholds.node3.hard   == 60
@@ -263,7 +271,7 @@ echo "  [5/6] Dataset OK"
 # 6. Model files present
 echo "  [6/6] Model shards:"
 all_ok=1
-for d in gpt-oss-20b qwen3-coder-next glm-4.7-flash qwen3.5-35b; do
+for d in qwen3.5-9b qwen2.5-coder-1.5b qwen3.5-35b; do
     count=$(ls "$MODELS/$d/"*.gguf 2>/dev/null | wc -l)
     if [ "$count" -ge 1 ]; then
         echo "    $d: $count shard ✓"

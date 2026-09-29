@@ -6,7 +6,10 @@
 #   bash scripts/start_model.sh M1   # same result
 #
 # Cloud (Vast.ai):   argument required; each model has a dedicated port
-#   bash scripts/start_model.sh M1|M2|M3|QWEN
+#   bash scripts/start_model.sh M1|M2|QWEN
+#   M1 = Qwen3.5-9B (medium), M2 = Qwen2.5-Coder-1.5B-Instruct (small) —
+#   same-family Qwen models at two size tiers, isolating model size as
+#   the controlled variable (see config/models.py docstring).
 
 set -e
 MODEL=${1:-local}
@@ -25,15 +28,15 @@ fi
 # ── Local mode ────────────────────────────────────────────────────────────────
 if [ "$ENV_VAL" = "local" ]; then
     LLAMA=~/llama.cpp/llama-server
-    MODEL_PATH=$(ls "$PROJECT_ROOT/models/gpt-oss-20b/"*.gguf 2>/dev/null | head -1)
+    MODEL_PATH=$(ls "$PROJECT_ROOT/models/qwen3.5-9b/"*.gguf 2>/dev/null | head -1)
 
     if [ -z "$MODEL_PATH" ]; then
-        echo "Model not found: $PROJECT_ROOT/models/gpt-oss-20b/*.gguf"
-        echo "Run: hf download unsloth/gpt-oss-20b-GGUF --include \"gpt-oss-20b-UD-Q4_K_XL.gguf\" --local-dir ./models/gpt-oss-20b"
+        echo "Model not found: $PROJECT_ROOT/models/qwen3.5-9b/*.gguf"
+        echo "Run: hf download unsloth/Qwen3.5-9B-GGUF --include \"Qwen3.5-9B-UD-Q4_K_XL.gguf\" --local-dir ./models/qwen3.5-9b"
         exit 1
     fi
 
-    echo "→ Local mode: starting gpt-oss-20b on port 8001 (Apple Metal)..."
+    echo "→ Local mode: starting qwen3.5-9b on port 8001 (Apple Metal)..."
     pkill -f "llama-server" 2>/dev/null || true
     sleep 2
 
@@ -43,8 +46,10 @@ if [ "$ENV_VAL" = "local" ]; then
         --host 0.0.0.0 \
         --ctx-size 8192 \
         --n-gpu-layers 99 \
+        --parallel 1 \
+        --cache-ram 0 \
         --jinja \
-        --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
+        --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
 
     exit 0
 fi
@@ -68,39 +73,30 @@ first_shard() {
 
 case $MODEL in
 M1)
-    MODEL_PATH=$(first_shard "$MODELS/gpt-oss-20b")
-    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/gpt-oss-20b/*.gguf"; exit 1; }
-    echo "→ Starting gpt-oss-20b (port 8001) — $MODEL_PATH"
+    MODEL_PATH=$(first_shard "$MODELS/qwen3.5-9b")
+    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/qwen3.5-9b/*.gguf"; exit 1; }
+    echo "→ Starting Qwen3.5-9B — medium anchor (port 8001) — $MODEL_PATH"
     stop_server
     $LLAMA \
         --model "$MODEL_PATH" \
         --port 8001 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
+        --cache-ram 0 \
         --jinja \
-        --temp 1.0 --top-p 1.0 --min-p 0.0 --top-k 0
+        --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
     ;;
 M2)
-    MODEL_PATH=$(first_shard "$MODELS/qwen3-coder-next")
-    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/qwen3-coder-next/*.gguf"; exit 1; }
-    echo "→ Starting Qwen3-Coder-Next (port 8002) — $MODEL_PATH"
+    MODEL_PATH=$(first_shard "$MODELS/qwen2.5-coder-1.5b")
+    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/qwen2.5-coder-1.5b/*.gguf"; exit 1; }
+    echo "→ Starting Qwen2.5-Coder-1.5B-Instruct — small anchor (port 8002) — $MODEL_PATH"
     stop_server
     $LLAMA \
         --model "$MODEL_PATH" \
         --port 8002 --host 0.0.0.0 \
         --ctx-size 16384 --n-gpu-layers 99 \
-        --temp 1.0 --top-p 0.95 --min-p 0.01 --top-k 40
-    ;;
-M3)
-    MODEL_PATH=$(first_shard "$MODELS/glm-4.7-flash")
-    [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/glm-4.7-flash/*.gguf"; exit 1; }
-    echo "→ Starting GLM-4.7-Flash (port 8003) — $MODEL_PATH"
-    stop_server
-    $LLAMA \
-        --model "$MODEL_PATH" \
-        --port 8003 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
-        --repeat-penalty 1.0 \
-        --temp 1.0 --top-p 0.95 --min-p 0.01
+        --cache-ram 0 \
+        --jinja \
+        --temp 0.7 --top-p 0.8 --top-k 20 --repeat-penalty 1.05
     ;;
 QWEN)
     MODEL_PATH=$(first_shard "$MODELS/qwen3.5-35b")
@@ -114,7 +110,7 @@ QWEN)
         --temp 0.3 --top-p 0.95 --min-p 0.01
     ;;
 *)
-    echo "Cloud mode requires a model argument: M1 | M2 | M3 | QWEN"
+    echo "Cloud mode requires a model argument: M1 | M2 | QWEN"
     echo "Usage: bash scripts/start_model.sh M1"
     exit 1
     ;;

@@ -8,7 +8,7 @@ to quickly understand it. Refer to this file when navigating the codebase.
 ## Project Purpose
 
 A LangGraph-based pipeline that routes Easy / Medium / Hard Python problems
-from the LiveCodeBench (LCB) dataset to three LLMs (M1, M2, M3) sequentially,
+from the LiveCodeBench (LCB) dataset to two LLMs (M1, M2) sequentially,
 passes generated code through three analysis nodes, and automatically
 improves failing outputs.
 
@@ -25,9 +25,9 @@ Active environment is determined by the `.env` symlink in the project root.
 | Environment | Hardware | Backend | `.env` symlink |
 |-------------|----------|---------|----------------|
 | `local` | Mac Mini M4 16GB | Apple Metal | `ln -sf .env.local .env` |
-| `cloud` | Vast.ai A100 80GB | CUDA | `ln -sf .env.cloud .env` |
+| `cloud` | Vast.ai GPU (≥32GB; A100 80GB no longer confirmed necessary — see Models section) | CUDA | `ln -sf .env.cloud .env` |
 
-**Local** (ENV=local): gpt-oss-20b (Unsloth UD-Q4_K_XL GGUF) on port 8001 — used for all roles (M1/M2/M3 + judgement).
+**Local** (ENV=local): qwen3.5-9b (Unsloth UD-Q4_K_XL GGUF, ~6 GB) on port 8001 — used for all roles (M1/M2 + judgement).
 **Cloud** (ENV=cloud): Full model set on separate ports (see Models section).
 
 The `.env` file is never committed to git. Create the appropriate env file and symlink
@@ -39,16 +39,15 @@ as the first setup step (see `docs/setup.md` section A6 for local, B6 for cloud)
 
 | ID | Model | Format | Port | Min. Memory | Notes |
 |----|-------|--------|------|-------------|-------|
-| M1 | gpt-oss-20b (Unsloth GGUF) | GGUF | 8001 | ~11 GB | Apache 2.0; `--jinja` required |
-| M2 | Qwen3-Coder-Next (Unsloth GGUF) | GGUF | 8002 | ~46 GB | Dominant model; determines hardware |
-| M3 | GLM-4.7-Flash (Unsloth GGUF) | GGUF | 8003 | ~18 GB | `--repeat-penalty 1.0` required |
+| M1 | Qwen3.5-9B (Unsloth GGUF) | GGUF | 8001 | ~6 GB | Medium-scale anchor; reasoning model; `--jinja --cache-ram 0` required |
+| M2 | Qwen2.5-Coder-1.5B-Instruct (GGUF) | GGUF | 8002 | ~1 GB | Small-scale anchor; standard quant (no UD variant) |
 | QWEN | Qwen3.5-35B-A3B (Unsloth GGUF) | GGUF | 8004 | ~24 GB | Judgement only; independent model |
 
 All models expose an **OpenAI-compatible API** (`/v1/chat/completions`).
 The pipeline connects to all via the `openai` Python library.
-Codegen order is fixed: M1 → M2 → M3. Judgement calls QWEN every iteration.
+Codegen order is fixed: M1 → M2. Judgement calls QWEN every iteration.
 
-In local mode, all roles (M1/M2/M3/QWEN) route to port 8001 (gpt-oss-20b).
+In local mode, all roles (M1/M2/QWEN) route to port 8001 (qwen3.5-9b). Note: qwen3.5-9b returns reasoning_content (chain-of-thought) which the client falls back to if content is empty.
 
 ---
 
@@ -57,7 +56,7 @@ In local mode, all roles (M1/M2/M3/QWEN) route to port 8001 (gpt-oss-20b).
 ```
 START
   ↓
-Sequential Router (M1 → M2 → M3)
+Sequential Router (M1 → M2)
   ↓
 Code Generation      ← improved_prompt fed back here on loop
   ↓
@@ -175,16 +174,17 @@ project/
 
 ## Key Architecture Decisions
 
-1. **Sequential model execution**: M1 → M2 → M3 run in order. When a model gets PASS,
+1. **Sequential model execution**: M1 → M2 run in order. When a model gets PASS,
    results are written to memory.md and the next model starts. No parallel execution.
-   Dominant model: Qwen3-Coder-Next (~46 GB) — minimum A100 80GB required on cloud.
+   Both are same-family Qwen models isolating model size as the controlled variable.
+   Largest concurrent memory footprint: ~M1 (6 GB) + QWEN (24 GB) ≈ 30 GB; likely reduces hardware requirement — may allow smaller than A100 80GB, pending verification with actual Vast.ai pricing.
 
 2. **Early exit — Severity Gate**: If Node 1 detects Bandit HIGH severity or CC > 20,
    the code is stopped before reaching the sandbox. On LOW severity (minor warnings),
    Node 2 is skipped, going directly to Node 3.
 
 3. **Loop target — active model**: The `improved_prompt` produced by Node 3
-   is sent back to the currently active model (M1, M2, or M3). The model does not change.
+   is sent back to the currently active model (M1 or M2). The model does not change.
 
 4. **Termination criteria**:
    - `max_iterations = 10` (independent counter per model)
@@ -192,12 +192,12 @@ project/
 
 5. **Environment via symlink** — no env flag needed at runtime:
    - `ln -sf .env.local .env` → Mac Mini M4 local debug (done once)
-   - `ln -sf .env.cloud .env`  → Vast.ai A100 production (done once)
+   - `ln -sf .env.cloud .env`  → Vast.ai production (done once)
    - Then just: `python main.py`
 
 6. **Model-specific required parameters**:
-   - gpt-oss-20b (M1): `--jinja` — required for Harmony chat template
-   - GLM-4.7-Flash (M3): `--repeat-penalty 1.0` — otherwise causes repetition loops
+   - Qwen3.5-9B (M1, cloud + local): `--jinja --cache-ram 0` — Qwen3.5-9B is a reasoning model that emits reasoning_content before content (client falls back if content is empty); the default 8 GiB prompt cache causes Metal GPU OOM when combined with the model's resident weights on local hardware.
+   - Qwen2.5-Coder-1.5B-Instruct (M2, cloud): No special flags required; only standard GGUF quants available (no Unsloth UD variant).
 
 ---
 
@@ -233,5 +233,4 @@ preserve the existing text and only add/update the affected code snippet or fiel
 - Copy `outputs/` to your local machine regularly when running on Vast.ai.
 - Node 2 sandbox uses `resource.setrlimit` — Linux only (Vast.ai runs Ubuntu).
 - Each phase has a dedicated `docs/*.md` file. Read the relevant doc if stuck.
-- gpt-oss-20b is not a split GGUF; it downloads as a single file.
-- Minimum A100 80GB required on Vast.ai for Qwen3-Coder-Next (~46 GB).
+- Hardware requirement on Vast.ai: largest concurrent memory ≈ 30 GB (M1 ~6 GB + QWEN ~24 GB), likely no longer requires A100 80GB but re-verification with current Vast.ai pricing is needed before finalizing a specific tier.

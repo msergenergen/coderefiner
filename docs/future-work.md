@@ -14,29 +14,41 @@ These can be incorporated into the current work with modest additional effort.
 
 ### T1. Small Model Framing — Efficiency vs. Scale
 
-**Core claim:**
+**Status (2026-09-30): promoted from future-work to the primary experimental
+design.** This item originally proposed extracting a size-vs-gain analysis as
+a *secondary* by-product of an evaluation built around three cross-vendor
+models (M1=gpt-oss-20b, M2=Qwen3-Coder-Next, M3=GLM-4.7-Flash). That design
+was replaced: the cloud registry (`config/models.py`) now has exactly two
+codegen models, both same-family Qwen models at two size tiers —
+M1=Qwen3.5-9B (medium anchor, ~6 GB) and M2=Qwen2.5-Coder-1.5B-Instruct
+(small anchor, ~1 GB) — with the judge (QWEN=Qwen3.5-35B-A3B) unchanged and
+independent. The reasoning: a three-cross-vendor-model comparison dilutes the
+paper's actual claim (the pipeline improves outcomes) into a "which model is
+better" question, and confounds model size with architecture/vendor
+differences. A same-family, two-size design isolates size as the controlled
+variable and makes T1's core claim — that structured feedback narrows the
+gap between a medium and a small model — the paper's primary, not
+secondary, empirical result. Full rationale: main.tex §IV-A, CLAUDE.md
+Models table, `config/models.py` module docstring.
+
+**Core claim (unchanged):**
 > Systematic multi-stage feedback can meaningfully improve task success rate
 > without increasing model size — challenging the assumption that better code
 > generation requires larger models.
 
-**Current status:**
-The benchmark design already supports this analysis. `benchmark/baseline.py` runs
-per-model (V0), and `benchmark/evaluator.py` runs per-model (V3). The data for this
-comparison is produced as a by-product of the main benchmark run — no additional
-experiment is required.
-
-**What to extract post-cloud:**
+**What to extract post-cloud (updated for the 2-model design):**
 
 ```
-M1 (gpt-oss-20b,  20B)   V0 TSR → V3 TSR   ΔTSR = ?
-M2 (Qwen3-Coder, ~30B)   V0 TSR → V3 TSR   ΔTSR = ?
-M3 (GLM-4.7,     ~18B)   V0 TSR → V3 TSR   ΔTSR = ?
+M1 (Qwen3.5-9B,            medium, ~9B)   V0 TSR → V3 TSR   ΔTSR = ?
+M2 (Qwen2.5-Coder-1.5B,    small,  ~1.5B) V0 TSR → V3 TSR   ΔTSR = ?
 ```
 
 **Key visualization:**
 Plot model size (B parameters) on the x-axis against pipeline contribution
-(ΔTSR = V3 − V0) on the y-axis. Expected pattern: larger gain for weaker models
-(pipeline matters more), smaller gain for stronger models (ceiling effect).
+(ΔTSR = V3 − V0) on the y-axis. Expected pattern: larger gain for the smaller
+model (pipeline matters more), smaller gain for the medium model (ceiling
+effect). With only two points this is a single-line comparison, not a curve
+— frame it as "does the gap narrow" rather than implying a fitted trend.
 
 **Academic positioning:**
 Connects to the test-time compute vs. model scale debate
@@ -173,6 +185,84 @@ the 50-question thesis benchmark.
 Frame the judge as a learned reward function for code quality.
 Test-time compute + learned reward signal is a novel combination;
 its code-specific instantiation does not exist in the literature.
+
+**Concrete phase roadmap (extends the existing `judge_training/` Faz 0–2 naming):**
+
+The current `judge_training/` subsystem (`build_dataset.py` → `train.py`)
+implements Faz 0 (cloud pipeline logging) through Faz 2 (QLoRA SFT). Faz 2 is
+pure teacher-imitation distillation: the training labels are the existing
+QWEN judge's own outputs, so the resulting model is capped at teacher
+quality — it cannot learn anything the teacher didn't already know, including
+whether its own `improved_prompt` actually worked downstream.
+
+- **Faz 3 — Preference pair construction (near-zero additional cost).**
+  Extend `build_dataset.py` to pair iterations sharing the same
+  `(problem, node1_*, node2_*, stripped_code)` state: label the
+  `improved_prompt` whose *next* iteration's `total_score` increased as
+  `chosen`, the one that didn't as `rejected`. Fully derivable from existing
+  `outputs/results/` iteration JSONs — no new pipeline runs required.
+- **Faz 4 — DPO training.** Swap `train.py`'s `SFTTrainer` for `trl`'s
+  `DPOTrainer`, initialized from the Faz 2 checkpoint (standard
+  SFT-then-preference-tuning pattern, as in RLHF/InstructGPT). Unlike Faz 2,
+  the optimization target is downstream success, not output similarity.
+- **Faz 5 (post-thesis) — GRPO online refinement.** Group Relative Policy
+  Optimization is a strong fit here because the pipeline already *is* the
+  RL environment: for a given state, sample K `improved_prompt` candidates
+  from the Faz 4 policy, roll each forward through one real
+  `codegen_node` → `static_analysis_node` → `sandbox_node` call, and use
+  the within-group relative ranking of the resulting deterministic score
+  (`metrics/scoring.py`) as the advantage signal — no separate critic/reward
+  model needed, unlike PPO. Scope to a small problem subset (~10–15, not the
+  full 50) given the per-step rollout cost; this is a follow-up publication
+  scope, not a thesis-timeline item.
+- **Evaluation.** Add a new ablation arm — V3+zero-shot-judge (current) vs.
+  V3+SFT-judge (Faz 2) vs. V3+DPO-judge (Faz 4) — using the same TSR/McNemar
+  methodology already established in `benchmark/analysis.py`.
+
+**Literature gap — update (2026-09-30):** the initial gap noted above (no
+references covering RL/preference-trained *judge* models) has been partially
+closed by a dedicated search, verified paper-by-paper against the live arXiv
+API (title + full author list matched, not taken from a search snippet).
+CodeRL [3] remains the closest code-specific RL precedent but applies RL with
+execution-based reward to the *generator*, not a judge/critic; Reflexion [7]
+and CRITIC [9] are training-free self-correction. None of the newly found
+references train a *code-specific* judge/critic via RL or preference
+learning either — this remains the genuine gap and the paper's claimed
+contribution — but the following now ground the *method*:
+
+- **DPO** — Rafailov et al., "Direct Preference Optimization: Your Language
+  Model is Secretly a Reward Model," NeurIPS 2023 (arXiv:2305.18290).
+- **RLHF pipeline template** — Dong et al., "RLHF Workflow: From Reward
+  Modeling to Online RLHF," TMLR 2024 (arXiv:2405.07863) — the reward-model
+  → online-RLHF pipeline this project's Faz 3/4 roadmap adapts.
+- **GRPO** — Deng et al., "Latent-GRPO" (arXiv:2604.27998, preprint) and
+  Zhang et al., "Scaf-GRPO," ICLR 2026 (arXiv:2510.19807) — GRPO variants
+  for the proposed Faz 5 online refinement.
+- **Verifiable-reward RL infrastructure** — Stojanovski et al., "Reasoning
+  Gym: Reasoning Environments for Reinforcement Learning with Verifiable
+  Rewards," NeurIPS 2025 Spotlight (arXiv:2505.24760).
+- **Process reward models (closest to "judge as reward function")** — Chen
+  et al., "From Mathematical Reasoning to Code: Generalization of Process
+  Reward Models in Test-Time Scaling" (arXiv:2506.00027, preprint); Zhao et
+  al., "GenPRM" (arXiv:2504.00891, preprint); Shao et al., "DeepSeekMath-V2:
+  Towards Self-Verifiable Mathematical Reasoning" (arXiv:2511.22570,
+  preprint) — a self-verifying judge component, conceptually close to P1's
+  "Reward Model as Judge" direction, though not code-specific.
+- **Judge fine-tuning generalization (general-purpose, not code)** — Singh
+  et al., "On the Shelf Life of Fine-Tuned LLM-Judges," ICLR 2026
+  (arXiv:2509.23542) — studies SFT vs. DPO-trained judges under distribution
+  shift; the closest existing work to this project's judge-training
+  question, but for general LLM judges, not code.
+- **Iterative refinement with deterministic feedback** — Bi et al.,
+  "Iterative Refinement of Project-Level Code Context for Precise Code
+  Generation with Compiler Feedback" (CoCoGen), arXiv:2403.16792, 2024 —
+  applies a similar deterministic-feedback loop at project scope; a claimed
+  ICSE 2024 venue could not be independently confirmed via arXiv metadata,
+  so cite as an arXiv preprint only.
+
+Four of these (GenPRM, DeepSeekMath-V2, Math→Code PRM, Latent-GRPO) are
+arXiv preprints without confirmed peer review as of this writing — cite
+accordingly, not as accepted publications.
 
 ---
 

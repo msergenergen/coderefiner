@@ -43,7 +43,7 @@ def run_variant_for_problem(
     variant: str,
 ) -> dict:
     """
-    Runs the M1→M2→M3 pipeline for a single problem with the given variant.
+    Runs the M1→M2 pipeline for a single problem with the given variant.
     Returns a summary dict with per-model status and score.
     """
     graph = build_graph(variant=variant)
