@@ -46,10 +46,18 @@ def codegen_node(state: PipelineState) -> PipelineState:
             {"role": "user",   "content": user_prompt},
         ],
         temperature=cfg.temperature,
-        max_tokens=2048,
+        # 4096 was too tight for a reasoning model: thinking consumed the
+        # budget before the closing ```python fence, so the fallback
+        # extraction returned the whole raw (unparseable) response as "code".
+        max_tokens=6144,
     )
 
-    raw_response = response.choices[0].message.content
+    message = response.choices[0].message
+    # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a separate
+    # reasoning_content field and can leave `content` empty if max_tokens is
+    # exhausted during "thinking" — fall back to reasoning_content so a
+    # response is still extracted rather than silently returning nothing.
+    raw_response = message.content or getattr(message, "reasoning_content", None) or ""
     code = _extract_code(raw_response)
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)

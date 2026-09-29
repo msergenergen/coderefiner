@@ -126,7 +126,14 @@ def _collect_issues(
         line = issue.get("line_number", "?")
         issues.append(f"Security [{sev}] line {line}: {text}")
     for imp in forbidden:
-        issues.append(f"Forbidden import: `{imp}` — not in whitelist.")
+        if imp == "syntax_error":
+            issues.append(
+                "Code failed to parse (SyntaxError) — likely truncated or "
+                "malformed generation. Produce a complete, syntactically valid "
+                "Python solution."
+            )
+        else:
+            issues.append(f"Forbidden import: `{imp}` — not in whitelist.")
     for err in mypy.get("errors", []):
         issues.append(f"Type error (mypy): {err}")
     for issue in ruff.get("issues", []):
@@ -145,16 +152,27 @@ def _decide_severity(
     """
     Makes a severity decision based on thresholds.
     Priority: HIGH > LOW > OK
+
+    A bare SyntaxError (the "syntax_error" sentinel from check_imports) is not
+    treated as a real forbidden import: reasoning models can be truncated by
+    max_tokens mid-generation, leaving an unparseable-but-harmless fragment.
+    Routing that to HIGH permanently stops the run instead of letting the
+    Judge push the model to retry — real forbidden imports (subprocess, etc.)
+    still hard-stop as before.
     """
+    real_forbidden = [imp for imp in forbidden_imports if imp != "syntax_error"]
+
     # HIGH — critical, do not send to sandbox
     if bandit_high_count > 0:
         return "HIGH"
-    if forbidden_imports:
+    if real_forbidden:
         return "HIGH"
     if cc > 20:
         return "HIGH"
 
     # LOW — warnings present, skip Node 2
+    if "syntax_error" in forbidden_imports:
+        return "LOW"
     if mi < 40:
         return "LOW"
     if halstead > 2000:

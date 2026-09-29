@@ -271,32 +271,33 @@ Sonraki iterasyonlar (improved_prompt doluysa):
 
 ```python
 """
-LangGraph Node 0: Kod Üretimi
+LangGraph Node 0: Code Generation
 
-Aktif modele problemi gönderir, üretilen kodu parse eder
-ve state'e yazar.
+Sends the problem to the active model, parses the generated code,
+and writes it to state.
 """
 import re
+import time
 from pipeline.state import PipelineState
-from models.client import generate, health_check
+from models.client import get_client, get_model_name, get_temperature, health_check
 from models.prompts import build_system_prompt, build_user_prompt
-from dataset.splitter import format_problem
 
 
 def codegen_node(state: PipelineState) -> PipelineState:
     """
-    Aktif modelden kod üretir.
+    Generates code from the active model.
 
-    Giriş  (state'ten okur): active_model, problem, improved_prompt
-    Çıktı  (state'e yazar):  generated_code, iteration (artırılır)
+    Reads from state: active_model, problem, node3_improved_prompt
+    Writes to state:  generated_code, iteration (incremented), timing, tokens
     """
     model_id = state["active_model"]
+    t0 = time.perf_counter()
 
     # Server health check
     if not health_check(model_id):
         raise RuntimeError(
-            f"{model_id} server'ına ulaşılamıyor. "
-            f"llama.cpp server'ını başlattığından emin ol."
+            f"Cannot reach {model_id} server. "
+            f"Make sure the llama.cpp server is running."
         )
 
     # Build prompt
@@ -306,33 +307,85 @@ def codegen_node(state: PipelineState) -> PipelineState:
     user_prompt = build_user_prompt(state["problem"])
 
     # Generate code
-    raw_response = generate(
-        model_id=model_id,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
+    from config import model_registry
+    cfg    = model_registry.get(model_id)
+    client = get_client(model_id)
+
+    response = client.chat.completions.create(
+        model=cfg.model_name,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        temperature=cfg.temperature,
+        # 4096 was too tight for a reasoning model: thinking consumed the
+        # budget before the closing ```python fence, so the fallback
+        # extraction returned the whole raw (unparseable) response as "code".
+        max_tokens=6144,
     )
 
-    # Extract ```python ... ``` block
+    message = response.choices[0].message
+    # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a separate
+    # reasoning_content field and can leave `content` empty if max_tokens is
+    # exhausted during "thinking" — fall back to reasoning_content so a
+    # response is still extracted rather than silently returning nothing.
+    raw_response = message.content or getattr(message, "reasoning_content", None) or ""
     code = _extract_code(raw_response)
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    timing = dict(state.get("timing", {}))
+    timing["codegen_ms"] = elapsed_ms
+    timing["total_ms"] = sum(
+        timing.get(k, 0)
+        for k in ("codegen_ms", "node1_ms", "node2_ms", "node3_ms")
+    )
+
+    tokens = dict(state.get("tokens", {}))
+    if response.usage:
+        tokens["codegen_prompt"]     = response.usage.prompt_tokens
+        tokens["codegen_completion"] = response.usage.completion_tokens
+        tokens["total"] = (
+            tokens.get("codegen_prompt", 0) + tokens.get("codegen_completion", 0) +
+            tokens.get("judgement_prompt", 0) + tokens.get("judgement_completion", 0)
+        )
 
     return {
         **state,
         "generated_code": code,
-        "iteration": state.get("iteration", 0) + 1,
+        "iteration":      state.get("iteration", 0) + 1,
+        "timing":         timing,
+        "tokens":         tokens,
     }
 
 
 def _extract_code(response: str) -> str:
     """
-    Modelin yanıtından ```python ... ``` bloğunu çıkarır.
-    Blok bulunamazsa tüm yanıtı döner.
+    Extracts the ```python ... ``` block from the model's response.
+    Returns the full response if no block is found.
     """
-    pattern = r"```python\s*(.*?)```"
-    match = re.search(pattern, response, re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    # Take the last ```python...``` block (guard against lcb_runner bug)
+    matches = re.findall(r"```python\s*(.*?)```", response, re.DOTALL)
+    if matches:
+        return matches[-1].strip()
+    # Backtick block without language tag
+    matches = re.findall(r"```\s*(.*?)```", response, re.DOTALL)
+    if matches:
+        return matches[-1].strip()
     return response.strip()
 ```
+
+**2026-09-30 düzeltme — `max_tokens` 4096 → 6144:** 100-problem pilot koşusunda
+(`run_20260930_000556`) 27 iterasyondan 5'i (~%19) codegen tamamlamasını tam
+olarak 4096 token sınırında bitirdi — reasoning model olan qwen3.5-9b önce
+`reasoning_content` (chain-of-thought) üretip sonra kodu yazdığı için, sınıra
+takılan üretimler kapanan ` ```python ` fence'ini hiç göremeden kesiliyordu.
+`_extract_code()` kapanmamış bloğu bulamayınca ham (parse edilemeyen) metni
+"kod" olarak döndürüyor, bu da Node 1'de bir `SyntaxError` sentinel'ine ve —
+düzeltilmeden önce — kalıcı `STOP_HIGH`'a yol açıyordu (bkz. problem 3298,
+`docs/node1.md`'deki not). `max_tokens`'ın artırılması kesilme sıklığını
+azaltır; kalıcı durdurma riski ise `docs/node1.md`'deki severity düzeltmesiyle
+ayrıca giderildi.
 
 ---
 

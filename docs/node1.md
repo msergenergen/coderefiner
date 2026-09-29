@@ -32,13 +32,29 @@ pip install radon lizard bandit mypy ruff
 | Cognitive Complexity | ≤ 15 | — (informational only) |
 | Halstead Volume | ≤ 1000 | > 2000 → LOW |
 | Bandit HIGH severity | 0 | Her bulgu → HIGH |
-| Non-whitelisted import | 0 | Any finding → HIGH |
+| Non-whitelisted import (gerçek) | 0 | Any finding → HIGH |
+| Bare SyntaxError (`check_imports`'ın döndürdüğü `"syntax_error"` sentinel) | — | → LOW (HIGH değil) |
 
 **Severity decision (priority order):**
-1. Bandit HIGH or non-whitelisted import → `HIGH` → STOP
+1. Bandit HIGH or *real* non-whitelisted import → `HIGH` → STOP
 2. CC > 20 → `HIGH` → STOP
-3. MI < 40 veya Halstead > 2000 → `LOW` → Node 2 atla
+3. `"syntax_error"` sentinel (kod parse edilemiyor), MI < 40, veya Halstead > 2000 → `LOW` → Node 2 atla
 4. Hepsi OK → `OK` → Node 2'ye devam
+
+**2026-09-30 düzeltme — sözdizimi hatası artık HIGH tetiklemiyor:** `check_imports()`
+bir `SyntaxError` yakaladığında `["syntax_error"]` sentinel'i döndürür. Önceden
+`_decide_severity` bunu gerçek bir yasak import gibi işleyip `HIGH`'a
+yönlendiriyordu — bu da `log_severity_stop → END` ile kalıcı bir durdurmaya
+yol açıyordu. Ancak reasoning model (qwen3.5-9b), `max_tokens` sınırına
+"düşünme" (`reasoning_content`) aşamasında takılırsa, kapanan ` ``` ` fence'i
+hiç üretemeden kesiliyor; `_extract_code()` de kapanmamış bloğu bulamayınca
+ham (parse edilemeyen) metni "kod" olarak döndürüyordu. Sonuç: zararsız bir
+üretim kesintisi, gerçek bir güvenlik ihlaliymiş gibi kalıcı STOP'a dönüşüyordu
+(bkz. problem 3298, M1 iter 2, run `run_20260930_000556`). Artık bu sentinel
+`LOW`'a yönlendiriliyor — Node 2 atlanır (parse edilemeyen kod zaten
+çalıştırılamaz) ama Node 3 yine de çalışır ve model normal `LOOP` akışıyla
+tekrar dener. Gerçek yasak import'lar (`subprocess`, `socket` vb.) hâlâ
+`HIGH` olarak durduruluyor.
 
 ---
 
@@ -382,7 +398,14 @@ def _collect_issues(
         line = issue.get("line_number", "?")
         issues.append(f"Security [{sev}] line {line}: {text}")
     for imp in forbidden:
-        issues.append(f"Forbidden import: `{imp}` — not in whitelist.")
+        if imp == "syntax_error":
+            issues.append(
+                "Code failed to parse (SyntaxError) — likely truncated or "
+                "malformed generation. Produce a complete, syntactically valid "
+                "Python solution."
+            )
+        else:
+            issues.append(f"Forbidden import: `{imp}` — not in whitelist.")
     for err in mypy.get("errors", []):
         issues.append(f"Type error (mypy): {err}")
     for issue in ruff.get("issues", []):
@@ -401,16 +424,23 @@ def _decide_severity(
     """
     Threshold'lara göre severity kararı verir.
     Öncelik: HIGH > LOW > OK
+
+    "syntax_error" sentinel'i gerçek bir yasak import değildir (bkz. yukarıdaki
+    2026-09-30 notu) — HIGH'a değil LOW'a yönlendirilir.
     """
+    real_forbidden = [imp for imp in forbidden_imports if imp != "syntax_error"]
+
     # HIGH — critical, do not send to sandbox
     if bandit_high_count > 0:
         return "HIGH"
-    if forbidden_imports:
+    if real_forbidden:
         return "HIGH"
     if cc > 20:
         return "HIGH"
 
     # LOW — warnings present, skip Node 2
+    if "syntax_error" in forbidden_imports:
+        return "LOW"
     if mi < 40:
         return "LOW"
     if halstead > 2000:

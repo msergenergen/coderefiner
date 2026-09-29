@@ -414,27 +414,91 @@ def _fallback_prompt(
     return "\n".join(parts)
 
 
-def _parse_judgement(raw: str) -> dict:
-    """LLM yanıtından JSON çıkarır."""
-    match = re.search(r"```(?:json)?\s*(.*?)```", raw, re.DOTALL)
-    json_str = match.group(1).strip() if match else raw.strip()
+def _find_json_objects(text: str) -> list:
+    """
+    Brace-depth taraması ile tam { ... } alt dizilerini bulur; string literal
+    içindeki süslü parantezleri saymaz.
+    """
+    objects = []
+    depth = 0
+    start = None
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    objects.append(text[start:i + 1])
+    return objects
 
-    try:
-        data = json.loads(json_str)
+
+def _parse_judgement(raw: str) -> dict:
+    """
+    LLM yanıtından JSON çıkarır. Sırasıyla dener:
+      1. ``` ``` fence içindeki { ... }
+      2. Brace-depth taramasıyla bulunan tam nesneler (son bulunandan başlar)
+      3. Ham metnin tamamı
+    """
+    candidates = []
+
+    match = re.search(r"```\w*\s*(\{.*?\})\s*```", raw, re.DOTALL)
+    if match:
+        candidates.append(match.group(1).strip())
+
+    candidates.extend(reversed(_find_json_objects(raw)))
+    candidates.append(raw.strip())
+
+    for json_str in candidates:
+        if not json_str:
+            continue
+        try:
+            data = json.loads(json_str)
+        except (json.JSONDecodeError, ValueError):
+            continue
         return {
-            "algorithm_choice":            max(0, min(10, int(data.get("algorithm_choice", 5)))),
+            "algorithm_choice":       max(0, min(10, int(data.get("algorithm_choice", 5)))),
             "error_handling":         max(0, min(10, int(data.get("error_handling", 5)))),
             "failure_reasons":        data.get("failure_reasons", []),
             "improved_system_prompt": data.get("improved_system_prompt", ""),
         }
-    except (json.JSONDecodeError, ValueError):
-        return {
-            "algorithm_choice":            5,
-            "error_handling":         5,
-            "failure_reasons":        ["json_parse_error"],
-            "improved_system_prompt": "",
-        }
+
+    return {
+        "algorithm_choice":       5,
+        "error_handling":         5,
+        "failure_reasons":        ["json_parse_error"],
+        "improved_system_prompt": "",
+    }
 ```
+
+**2026-09-30 düzeltme — greedy regex bug:** Judge prompt'u, değerlendirilen
+Python kodunun tamamını (dict/set/f-string süslü parantezleri dahil) JSON
+isteminden ÖNCE gömüyor. Eski `re.search(r"\{.*\}", raw, re.DOTALL)` açgözlü
+eşleşmesi, metindeki İLK `{`'den SON `}`'ye kadar her şeyi yakalıyordu —
+model kodu tekrar/alıntı ettiğinde (reasoning model olduğu için sık
+oluyor) bu, gerçek JSON çıktısını da içine alan ama kendisi geçersiz
+(parse edilemeyen) dev bir blok üretiyordu. 100-problem pilot koşusunda
+iterasyonların ~%26'sında (`outputs/results/2026-09-30`, run
+`run_20260930_000556`) bu `json_parse_error`'a düşüyor, her seferinde
+`improved_system_prompt` boş dönüyor ve codegen modeli o iterasyonda
+hiçbir spesifik geri bildirim almadan tekrar deniyordu. Brace-depth
+taraması bu sorunu ortadan kaldırıyor: yalnızca tam, dengeli `{...}`
+nesnelerini aday olarak alır ve en son bulunandan (muhtemel nihai cevap)
+başlayarak dener.
 
 ---
 

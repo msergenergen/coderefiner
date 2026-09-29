@@ -222,9 +222,14 @@ def _get_llm_judgement(
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=cfg.temperature,
-            max_tokens=1024,
+            max_tokens=3072,
         )
-        raw = response.choices[0].message.content
+        message = response.choices[0].message
+        # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a
+        # separate reasoning_content field and can leave `content` empty
+        # if max_tokens is exhausted during "thinking" — fall back to
+        # reasoning_content so _parse_judgement has something to work with.
+        raw = message.content or getattr(message, "reasoning_content", None) or ""
         result = _parse_judgement(raw)
 
         # Store token counts so judgement_node can write them to state
@@ -379,44 +384,86 @@ def _fallback_prompt(
     return "\n".join(parts)
 
 
+def _find_json_objects(text: str) -> list:
+    """
+    Scans for complete top-level {...} substrings by brace-depth, honoring
+    string literals so braces inside quoted strings don't affect nesting.
+
+    Needed because the judge prompt embeds the submitted Python source (which
+    itself contains {}/dict/set/f-string braces) ahead of the verdict. A naive
+    greedy `\\{.*\\}` regex spans from the first brace anywhere in the text to
+    the last one, swallowing the quoted code and producing unparseable JSON
+    even when the model's actual verdict object was well-formed on its own.
+    """
+    objects = []
+    depth = 0
+    start = None
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    objects.append(text[start:i + 1])
+    return objects
+
+
 def _parse_judgement(raw: str) -> dict:
     """
     Extracts JSON from the LLM response.
 
     Tries in order:
       1. ``` ... ``` fenced block (any language tag: json, python, or none)
-      2. First { ... } JSON object in the raw text
+      2. Complete top-level {...} objects found by brace-depth scanning,
+         tried last-to-first (the verdict is expected to follow any
+         reasoning/code the model echoes ahead of it)
       3. Full raw text stripped
     """
-    json_str = None
+    candidates = []
 
     # 1. Any fenced block — skip optional language identifier (json / python / etc.)
     match = re.search(r"```\w*\s*(\{.*?\})\s*```", raw, re.DOTALL)
     if match:
-        json_str = match.group(1).strip()
+        candidates.append(match.group(1).strip())
 
-    # 2. Largest { ... } block in the raw text (handles plain JSON with no fences)
-    if not json_str:
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
-            json_str = match.group(0).strip()
+    # 2. Balanced {...} objects, most-likely-final-answer first
+    candidates.extend(reversed(_find_json_objects(raw)))
 
     # 3. Fallback: use the full text as-is
-    if not json_str:
-        json_str = raw.strip()
+    candidates.append(raw.strip())
 
-    try:
-        data = json.loads(json_str)
+    for json_str in candidates:
+        if not json_str:
+            continue
+        try:
+            data = json.loads(json_str)
+        except (json.JSONDecodeError, ValueError):
+            continue
         return {
             "algorithm_choice":       max(0, min(10, int(data.get("algorithm_choice", 5)))),
             "error_handling":         max(0, min(10, int(data.get("error_handling", 5)))),
             "failure_reasons":        data.get("failure_reasons", []),
             "improved_system_prompt": data.get("improved_system_prompt", ""),
         }
-    except (json.JSONDecodeError, ValueError):
-        return {
-            "algorithm_choice":       5,
-            "error_handling":         5,
-            "failure_reasons":        ["json_parse_error"],
-            "improved_system_prompt": "",
-        }
+
+    return {
+        "algorithm_choice":       5,
+        "error_handling":         5,
+        "failure_reasons":        ["json_parse_error"],
+        "improved_system_prompt": "",
+    }
