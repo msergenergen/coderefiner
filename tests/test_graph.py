@@ -90,17 +90,22 @@ class TestStripBeforeJudgement:
         assert result["node2_ram_mb"] == 0.0
         assert result["node2_timed_out"] is False
 
-    def test_preserves_existing_node2_values(self, base_state):
-        # If node2 fields already exist (shouldn't normally happen on this path,
-        # but the function must not clobber real data if it does), keep them.
+    def test_resets_stale_node2_values_from_prior_iteration(self, base_state):
+        # state is threaded across iterations within one model/problem run, so
+        # on iteration 2+ these keys DO already exist — holding the PREVIOUS
+        # iteration's real sandbox result, not a fresh default. This path must
+        # discard them: keeping a prior 75% pass rate would show the Judge a
+        # passing test rate for code that was never executed this iteration
+        # (confirmed missing on problem 3298, run_20260930_000556, before this
+        # fix — see log_severity_stop_node's docstring for the sibling bug).
         state = base_state(
             generated_code=CLEAN_CODE_WITH_COMMENTS,
             node2_pass_rate=0.75, node2_passed_count=3, node2_total_count=4,
         )
         result = _strip_before_judgement(state)
-        assert result["node2_pass_rate"] == 0.75
-        assert result["node2_passed_count"] == 3
-        assert result["node2_total_count"] == 4
+        assert result["node2_pass_rate"] == 0.0
+        assert result["node2_passed_count"] == 0
+        assert result["node2_total_count"] == 0
 
     def test_strips_comments_from_generated_code(self, base_state):
         state = base_state(generated_code=CLEAN_CODE_WITH_COMMENTS)

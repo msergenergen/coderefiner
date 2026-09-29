@@ -251,6 +251,19 @@ def _should_extend(state: PipelineState, threshold: float) -> bool:
 
 ## 4. pipeline/graph.py
 
+**2026-09-30 düzeltme — `_strip_before_judgement`'ta stale state:** Bu node
+(LOW severity'de sandbox atlandığında çağrılır) node2 alanlarını
+`state.get(key, default)` ile "initialize" ediyordu — ama `state` bir
+model/problem koşusu boyunca iterasyonlar arasında taşınan AYNI dict
+olduğundan, anahtar zaten mevcutsa (iterasyon 2+'de her zaman mevcut)
+`.get()` varsayılanı değil, ÖNCEKİ iterasyonun gerçek sandbox sonucunu
+döndürüyordu. Örnek: iterasyon N-1 testlerin %80'ini geçmişken, iterasyon N
+(ör. sözdizimi hatası nedeniyle) LOW'a yönlendirilirse, Judge'a o kodun hiç
+çalışmadığı hâlde "%80 geçti" gösteriliyordu. Artık literal varsayılanlarla
+(`0.0`, `0`, `[]`, `False`) sıfırlanıyor — kod için bkz. `pipeline/graph.py`.
+Aynı desenin bir kardeşi `memory/logger.py::log_severity_stop_node`'da da
+düzeltildi (bkz. `docs/memory-logging.md`).
+
 ```python
 """
 LangGraph StateGraph tanımı.

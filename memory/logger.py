@@ -329,6 +329,15 @@ def log_severity_stop_node(state: PipelineState) -> PipelineState:
     """
     LangGraph node: logs on severity HIGH.
     Timing and tokens are partial since Node 2/3 did not run.
+
+    node2_*/node3_* are reset to defaults before logging — `state` is threaded
+    across iterations, so on iteration 2+ these keys hold the PREVIOUS
+    iteration's real results (Node 2/3 didn't run this iteration, so nothing
+    overwrote them). Without this reset, a STOP_HIGH row/JSON can show a
+    stale non-zero pass rate or judge score from an earlier iteration as if
+    it belonged to the code that actually triggered the stop (confirmed on
+    problem 3298, iter 2, run_20260930_000556 — its node2/node3 blocks were
+    byte-for-byte identical to iter 1's).
     """
     run_id = state.get("run_id", "unknown")
     timing = state.get("timing", {"codegen_ms": 0, "node1_ms": 0,
@@ -336,6 +345,24 @@ def log_severity_stop_node(state: PipelineState) -> PipelineState:
     tokens = state.get("tokens", {"codegen_prompt": 0, "codegen_completion": 0,
                                    "judgement_prompt": 0, "judgement_completion": 0,
                                    "total": 0})
+    state = {
+        **state,
+        "node2_pass_rate":            0.0,
+        "node2_passed_count":         0,
+        "node2_total_count":          0,
+        "node2_failed_cases":         [],
+        "node2_crash_count":          0,
+        "node2_test_diversity_score": 1.0,
+        "node2_lcb_available":        False,
+        "node2_cpu_ms":               0.0,
+        "node2_ram_mb":               0.0,
+        "node2_timed_out":            False,
+        "node3_total_score":          0.0,
+        "node3_pass":                 False,
+        "node3_score_breakdown":      {},
+        "node3_failure_reasons":      [],
+        "node3_improved_prompt":      "",
+    }
 
     json_path = _write_iteration_json(state, "STOP_HIGH", run_id, timing, tokens)
     total_ms  = timing.get("total_ms", 0)

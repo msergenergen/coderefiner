@@ -269,9 +269,14 @@ def _get_llm_judgement(
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=cfg.temperature,
-            max_tokens=1024,
+            max_tokens=3072,
         )
-        raw = response.choices[0].message.content
+        message = response.choices[0].message
+        # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a
+        # separate reasoning_content field and can leave `content` empty
+        # if max_tokens is exhausted during "thinking" — fall back to
+        # reasoning_content so _parse_judgement has something to work with.
+        raw = message.content or getattr(message, "reasoning_content", None) or ""
         result = _parse_judgement(raw)
 
         if hasattr(response, "usage") and response.usage:
@@ -283,7 +288,20 @@ def _get_llm_judgement(
 
         return result
 
-    except Exception:
+    except Exception as e:
+        # 2026-09-30: this used to swallow the exception silently. A scan of
+        # the pilot run found 5/30 iterations (~17%, all with 0 token usage
+        # recorded — i.e. the request itself failed, not JSON parsing) hit
+        # this fallback, which hardcodes algorithm_choice/error_handling to
+        # the scale midpoint. Now logged via loguru so the cause (context
+        # overflow, connection error, etc.) is diagnosable instead of only
+        # visible as an opaque "judgement_llm_error" in the output JSON.
+        logger.warning(
+            "Judge LLM call failed — using rule-based fallback | "
+            "question_id={} model={} iter={} difficulty={} | {}: {}",
+            question_id, JUDGEMENT_MODEL, iteration, difficulty,
+            type(e).__name__, str(e)[:200],
+        )
         return {
             "algorithm_choice":       5,
             "error_handling":         5,
@@ -402,11 +420,16 @@ def _fallback_prompt(
         parts.append("")
 
     if failed_cases:
+        # 2026-09-30: bound each field. LCB inputs can be large arrays —
+        # unbounded reprs on 2-3 failed cases could push this whole fallback
+        # prompt past judgement_node's _MAX_IMPROVED_PROMPT_CHARS (2000),
+        # which then truncated it mid-sentence before reaching codegen.
+        _trim = lambda v: repr(v)[:150]
         parts.append("Your previous solution failed these test cases:")
         for case in failed_cases[:3]:
             parts.append(
-                f"  - Input {case['input']!r} → "
-                f"expected {case['expected']!r}, got {case['got']!r}"
+                f"  - Input {_trim(case['input'])} → "
+                f"expected {_trim(case['expected'])}, got {_trim(case['got'])}"
             )
         parts.append("")
 

@@ -42,20 +42,29 @@ def _next_model_node(state: PipelineState) -> PipelineState:
 def _strip_before_judgement(state: PipelineState) -> PipelineState:
     """
     Used when sandbox is skipped (LOW severity in V3, or entire V2 variant).
-    Initializes node2 fields to safe defaults then strips comments.
+    Resets node2 fields to safe defaults then strips comments.
+
+    Must assign literal defaults, not `state.get(key, default)` — state is
+    the same dict threaded across iterations within one model/problem run,
+    so `.get()` silently returns the PREVIOUS iteration's real sandbox
+    result instead of a default whenever the key already exists (which it
+    always does after iteration 1). Concretely: if iteration N-1 passed 80%
+    of tests and iteration N is skipped to LOW (e.g. a syntax-error
+    fallback — see nodes/static_analysis.py), the Judge would otherwise be
+    shown iteration N-1's 80% pass rate for code that never even ran.
     """
     updated = {
         **state,
-        "node2_pass_rate":            state.get("node2_pass_rate", 0.0),
-        "node2_passed_count":         state.get("node2_passed_count", 0),
-        "node2_total_count":          state.get("node2_total_count", 0),
-        "node2_failed_cases":         state.get("node2_failed_cases", []),
-        "node2_crash_count":          state.get("node2_crash_count", 0),
-        "node2_test_diversity_score": state.get("node2_test_diversity_score", 1.0),
-        "node2_lcb_available":        state.get("node2_lcb_available", False),
-        "node2_cpu_ms":               state.get("node2_cpu_ms", 0.0),
-        "node2_ram_mb":               state.get("node2_ram_mb", 0.0),
-        "node2_timed_out":            state.get("node2_timed_out", False),
+        "node2_pass_rate":            0.0,
+        "node2_passed_count":         0,
+        "node2_total_count":          0,
+        "node2_failed_cases":         [],
+        "node2_crash_count":          0,
+        "node2_test_diversity_score": 1.0,
+        "node2_lcb_available":        False,
+        "node2_cpu_ms":               0.0,
+        "node2_ram_mb":               0.0,
+        "node2_timed_out":            False,
     }
     return strip_comments_node(updated)
 

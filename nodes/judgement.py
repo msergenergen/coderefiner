@@ -10,6 +10,7 @@ Critical design decisions:
 import json
 import re
 import time
+from loguru import logger
 from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
 from models.client import get_client, get_model_name, get_temperature
@@ -120,6 +121,7 @@ def judgement_node(state: PipelineState) -> PipelineState:
         timed_out=state.get("node2_timed_out", False),
         difficulty=state["difficulty"],
         iteration=state["iteration"],
+        question_id=state.get("question_id", "?"),
     )
 
     total = round(
@@ -198,6 +200,7 @@ def _get_llm_judgement(
     timed_out: bool,
     difficulty: str,
     iteration: int,
+    question_id: str = "?",
 ) -> dict:
     user_prompt = _build_judgement_prompt(
         numeric_scores=numeric_scores,
@@ -242,8 +245,22 @@ def _get_llm_judgement(
 
         return result
 
-    except Exception:
-        # LLM error → do not stop pipeline, use rule-based fallback
+    except Exception as e:
+        # LLM error → do not stop pipeline, use rule-based fallback.
+        # Logged (not silently swallowed) because this fallback hardcodes
+        # algorithm_choice/error_handling to the scale midpoint (5/10) — if it
+        # fires often for a specific problem, that problem's score is a rule-
+        # based approximation, not a real judge verdict. A prior scan found
+        # this fired on 5/30 pilot iterations (~17%), all with 0 token usage
+        # recorded — i.e. the request itself failed (e.g. context overflow
+        # or connection error), not a JSON-parsing failure — and the previous
+        # bare `except Exception:` gave no way to tell which.
+        logger.warning(
+            "Judge LLM call failed — using rule-based fallback | "
+            "question_id={} model={} iter={} difficulty={} | {}: {}",
+            question_id, JUDGEMENT_MODEL, iteration, difficulty,
+            type(e).__name__, str(e)[:200],
+        )
         return {
             "algorithm_choice":       5,
             "error_handling":         5,
@@ -367,11 +384,15 @@ def _fallback_prompt(
         parts.append("")
 
     if failed_cases:
+        # Bound each field — LCB inputs can be large arrays; without this,
+        # 2-3 failed cases can push the whole fallback prompt past
+        # _MAX_IMPROVED_PROMPT_CHARS, which then truncates it mid-sentence.
+        _trim = lambda v: repr(v)[:150]
         parts.append("Your previous solution failed these test cases:")
         for case in failed_cases[:3]:
             parts.append(
-                f"  - Input {case['input']!r} → "
-                f"expected {case['expected']!r}, got {case['got']!r}"
+                f"  - Input {_trim(case['input'])} → "
+                f"expected {_trim(case['expected'])}, got {_trim(case['got'])}"
             )
         parts.append("")
 

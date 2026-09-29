@@ -89,9 +89,17 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# lcb_runner — official LCB evaluation engine (not on PyPI, not in
+# requirements.txt). Without this, sandbox/lcb_eval.py silently falls back
+# to a basic subprocess evaluator and node2_lcb_available stays False —
+# confirmed happening on every local pilot run to date (see docs/node2.md).
+git clone https://github.com/LiveCodeBench/LiveCodeBench.git /tmp/LiveCodeBench
+pip install -e /tmp/LiveCodeBench
+
 # Verify
 python -c "import langgraph; print('LangGraph OK')"
 python -c "import radon, bandit, lizard; print('Metrics OK')"
+python -c "from lcb_runner.evaluation.utils_execute import check_correctness; print('lcb_runner OK')"
 ```
 
 ### A6. Create .env.local
@@ -307,11 +315,20 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# lcb_runner — official LCB evaluation engine (not on PyPI, not in
+# requirements.txt). Without this, sandbox/lcb_eval.py silently falls back
+# to a basic subprocess evaluator and node2_lcb_available stays False —
+# using the official grader for the final thesis results is a methodological
+# requirement (see docs/node2.md), so this step must not be skipped on cloud.
+git clone https://github.com/LiveCodeBench/LiveCodeBench.git /workspace/LiveCodeBench
+pip install -e /workspace/LiveCodeBench
+
 # Verify
 python -c "import langgraph; print('LangGraph OK')"
 python -c "import radon, bandit, lizard; print('Metrics OK')"
 python -c "import mypy, ruff; print('Linting OK')" 2>/dev/null || \
     python -c "import subprocess, sys; subprocess.run([sys.executable, '-m', 'mypy', '--version']); print('mypy OK')"
+python -c "from lcb_runner.evaluation.utils_execute import check_correctness; print('lcb_runner OK')"
 ```
 
 ### B6. Create .env.cloud
