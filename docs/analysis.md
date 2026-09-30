@@ -449,11 +449,16 @@ full hidden test set (public + private) with `sandbox/lcb_eval._fallback_evaluat
 - **Process stats:** severity-gate distribution, syntax-error share, truncated generations,
   judge-call failures, JSON fallbacks, token ratio (all iterations / first iteration).
 
-**Outputs** (in `--out`):
-- `results.tex` — `\newcommand` macros (`\rN`, `\rVo`, `\rVt`, `\rP`, `\rRubPrec`, per-difficulty and
-  per-platform variants, `...En` variants with a decimal point for the English abstract) and
-  `\resultsTable`. Numbers use the Turkish decimal comma (`{,}`) and a math minus.
-- `sekil2.pdf` — grayscale success@k curve (overall and per difficulty).
+**Outputs** (in `--out`, which is the Overleaf project root):
+- `veri/sonuclar.tex` — `\newcommand` macros (`\rN`, `\rVo`, `\rVt`, `\rP`, `\rRubPrec`, per-difficulty and
+  per-platform variants, `...En` variants with a decimal point for the English abstract).
+  Numbers use the Turkish decimal comma (`{,}`) and a math minus.
+- `cizelgeler/cizelge2-sonuclar.tex` — tabular body of the results table (caption/label are in
+  `bolumler/05-bulgular.tex`).
+- `sekiller/sekil2-yineleme-butcesi.pdf` — grayscale success@k curve (overall and per difficulty).
+
+Paper project layout: `main.tex` (preamble + `\input` order), `bolumler/00-…07-*.tex` (sections),
+`sekiller/`, `cizelgeler/`, `veri/`, `kaynaklar.tex`, `OKUBENI.md`.
 
 Because the sample order is seeded-random, a completed prefix of the 150-problem run is itself a
 random subsample; the paper reports `\rN` completed problems.
