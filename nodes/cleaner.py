@@ -65,8 +65,17 @@ def strip_comments(code: str) -> str:
 
         return cleaned.strip()
 
-    except tokenize.TokenError:
-        # Syntax error: return original code, do not stop pipeline
+    except (tokenize.TokenError, SyntaxError, IndentationError):
+        # Malformed code: tokenize.generate_tokens() raises TokenError for
+        # things like an unterminated string, but a genuinely broken
+        # indentation level (e.g. truncated LLM output cut off mid-block)
+        # raises IndentationError/SyntaxError instead — both must be caught
+        # here, not just TokenError, or a single malformed generation kills
+        # the whole pipeline run instead of just skipping comment-stripping
+        # for that one iteration. Confirmed: this exact gap crashed a live
+        # 150-problem run (IndentationError: "unindent does not match any
+        # outer indentation level") once syntax-error code started reaching
+        # this node via the LOW-severity path (see nodes/static_analysis.py).
         return code
 
 

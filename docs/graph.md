@@ -632,6 +632,18 @@ Models:  {'M1': 'gpt-oss-20b', 'M2': 'qwen3-coder-next', ...}
 
 ## 7. nodes/cleaner.py
 
+**2026-09-30 düzeltme — sadece `tokenize.TokenError` yakalamak yetersizdi:**
+Bu commit'in başında `_decide_severity()`, "syntax_error" sentinel'ini
+HIGH yerine LOW'a yönlendirecek şekilde değiştirildi — bu da parse
+edilemeyen kodun artık `strip_comments_node`'a (ve dolayısıyla
+`tokenize.generate_tokens()`'a) ulaşabileceği anlamına geliyordu; önceden
+bu kod hiçbir zaman buraya gelmiyordu (doğrudan `log_severity_stop`'a
+gidiyordu). `tokenize.generate_tokens()` bozuk girinti seviyelerinde
+`tokenize.TokenError` değil `IndentationError`/`SyntaxError` fırlatıyor —
+bu ikisi yakalanmadığı için canlı bir 150-problemlik koşuyu 13.6 saatin
+sonunda (`IndentationError: unindent does not match any outer indentation
+level`) çökertti. Artık üçü de yakalanıyor.
+
 ```python
 """
 Judgement öncesi yorum temizleyici.
@@ -701,7 +713,7 @@ def strip_comments(code: str) -> str:
 
         return cleaned.strip()
 
-    except tokenize.TokenError:
+    except (tokenize.TokenError, SyntaxError, IndentationError):
         # Syntax error: return original code, do not stop pipeline
         return code
 

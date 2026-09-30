@@ -54,6 +54,16 @@ class TestStripComments:
         result = strip_comments(broken)
         assert isinstance(result, str)
 
+    def test_indentation_error_returns_original(self):
+        # tokenize.generate_tokens() raises IndentationError (not
+        # tokenize.TokenError) for a bad dedent — a bare `except
+        # tokenize.TokenError` misses this and crashes the caller. This
+        # exact pattern crashed a live 150-problem run once syntax-error
+        # code started reaching strip_comments via the LOW-severity path.
+        broken = "def f():\n    x = 1\n  - Else:\n        pass\n"
+        result = strip_comments(broken)
+        assert result == broken
+
     def test_empty_code(self):
         assert strip_comments("") == ""
 
