@@ -36,7 +36,12 @@ if [ "$ENV_VAL" = "local" ]; then
         exit 1
     fi
 
-    echo "→ Local mode: starting qwen3.5-9b on port 8001 (Apple Metal)..."
+    # llama-server splits --ctx-size evenly across slots, so scale it with
+    # the slot count to keep 8192 tokens per request. Pair LOCAL_PARALLEL=N
+    # with N main.py processes (SHARD_COUNT=N, SHARD_INDEX=0..N-1).
+    PARALLEL=${LOCAL_PARALLEL:-1}
+
+    echo "→ Local mode: starting qwen3.5-9b on port 8001 (Apple Metal, $PARALLEL slot(s))..."
     pkill -f "llama-server" 2>/dev/null || true
     sleep 2
 
@@ -44,9 +49,9 @@ if [ "$ENV_VAL" = "local" ]; then
         --model "$MODEL_PATH" \
         --port 8001 \
         --host 0.0.0.0 \
-        --ctx-size 8192 \
+        --ctx-size $((8192 * PARALLEL)) \
         --n-gpu-layers 99 \
-        --parallel 1 \
+        --parallel "$PARALLEL" \
         --cache-ram 0 \
         --jinja \
         --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0

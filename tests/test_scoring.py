@@ -145,3 +145,23 @@ class TestComputeNumericScores:
             mi=0.0, cc=999.0, bandit_high=True, bandit_medium_count=10,
         )
         assert result["numeric_total"] == 0.0
+
+    def test_unexecuted_code_gets_no_efficiency_credit(self):
+        # Sandbox skipped → cpu_ms/ram_mb are 0 because nothing ran, not
+        # because the code is fast; must not earn the full 20 points.
+        result = compute_numeric_scores(
+            pass_rate=0.0, cpu_ms=0.0, ram_mb=0.0,
+            mi=80.0, cc=5.0, bandit_high=False, executed=False,
+        )
+        assert result["efficiency"] == 0.0
+        assert result["quality"] > 0.0
+
+    def test_unparseable_code_gets_no_quality_or_security_credit(self):
+        # radon/bandit fall back to MI=100, CC=0, no findings on a
+        # SyntaxError — those defaults must not become 20 + 15 points.
+        result = compute_numeric_scores(
+            pass_rate=0.0, cpu_ms=0.0, ram_mb=0.0,
+            mi=100.0, cc=0.0, bandit_high=False,
+            executed=False, parsed=False,
+        )
+        assert result["numeric_total"] == 0.0

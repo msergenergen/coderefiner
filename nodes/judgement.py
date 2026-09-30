@@ -7,6 +7,7 @@ Critical design decisions:
   3. Failing test cases (input/expected/got) are included verbatim in the prompt.
   4. Judgement model (Judge) is independent of the code generation models (M1/M2/M3).
 """
+import ast
 import json
 import re
 import time
@@ -109,6 +110,8 @@ def judgement_node(state: PipelineState) -> PipelineState:
         cc=state.get("node1_cc", 0.0),
         bandit_high=state.get("node1_bandit_high", False),
         bandit_medium_count=state.get("node1_bandit_medium_count", 0),
+        executed=state.get("node2_total_count", 0) > 0,
+        parsed=_parses(state.get("generated_code", "")),
     )
 
     llm_scores = _get_llm_judgement(
@@ -336,11 +339,15 @@ def _build_judgement_prompt(
     if failed_cases:
         lines += ["", "## Failing Test Cases (up to 5)"]
         for i, case in enumerate(failed_cases, 1):
+            # LCB stress-test inputs can be thousands of characters; untrimmed,
+            # a single case pushed the judge prompt past the 8192-token server
+            # context (observed: 9935 tokens on problem 3620 → HTTP 400 →
+            # rule-based fallback instead of a real judgement).
             lines += [
                 f"\nCase {i}:",
-                f"  Input:    {case['input']}",
-                f"  Expected: {case['expected']}",
-                f"  Got:      {case['got'] or '(no output)'}",
+                f"  Input:    {_clip(case['input'])}",
+                f"  Expected: {_clip(case['expected'])}",
+                f"  Got:      {_clip(case['got']) or '(no output)'}",
             ]
             if case.get("error"):
                 lines.append(f"  Error:    {case['error'][:200]}")
@@ -355,6 +362,21 @@ def _build_judgement_prompt(
     ]
 
     return "\n".join(lines)
+
+
+def _parses(code: str) -> bool:
+    try:
+        ast.parse(code)
+        return True
+    except (SyntaxError, ValueError):
+        return False
+
+
+def _clip(value, limit: int = 200) -> str:
+    text = str(value) if value is not None else ""
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}… [{len(text) - limit} more chars truncated]"
 
 
 def _fallback_prompt(

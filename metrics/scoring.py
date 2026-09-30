@@ -42,9 +42,18 @@ def compute_numeric_scores(
     cc: float,
     bandit_high: bool,
     bandit_medium_count: int = 0,
+    executed: bool = True,
+    parsed: bool = True,
 ) -> dict:
     """
     Computes the 4 numerically calculable dimensions.
+
+    A dimension that could not be measured scores 0, not full marks:
+      executed=False (sandbox skipped) → efficiency 0, since cpu_ms/ram_mb
+        are 0 only because nothing ran;
+      parsed=False (SyntaxError) → quality and security 0, since radon and
+        bandit fail on unparseable code and their fallbacks (MI=100, CC=0,
+        no findings) would otherwise award the maximum.
 
     Returns:
         {
@@ -56,12 +65,12 @@ def compute_numeric_scores(
         }
     """
     acc  = compute_accuracy_score(pass_rate)
-    eff  = compute_efficiency_score(cpu_ms, ram_mb)
-    qual = compute_quality_score(mi, cc)
+    eff  = compute_efficiency_score(cpu_ms, ram_mb) if executed else 0.0
+    qual = compute_quality_score(mi, cc) if parsed else 0.0
     sec  = compute_security_score(
         high_count=1 if bandit_high else 0,
         medium_count=bandit_medium_count,
-    )
+    ) if parsed else 0.0
     return {
         "accuracy":      acc,
         "efficiency":    eff,

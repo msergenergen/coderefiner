@@ -2,6 +2,8 @@
 Pipeline entry point.
 Runs M1 → M2 → M3 sequentially for each LCB problem.
 """
+import os
+
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -140,6 +142,15 @@ def main():
         sample_size=settings.lcb_sample_size,
     )
     logger.info(f"{len(rows)} problems loaded.")
+
+    # Optional sharding so N processes can share one llama-server started with
+    # --parallel N. Slicing happens after the seeded sample, so the union of
+    # all shards is exactly the same problem set as a single-process run.
+    shard_count = int(os.getenv("SHARD_COUNT", "1"))
+    shard_index = int(os.getenv("SHARD_INDEX", "0"))
+    if shard_count > 1:
+        rows = rows[shard_index::shard_count]
+        logger.info(f"Shard {shard_index}/{shard_count}: {len(rows)} problems.")
 
     all_results = []
     for row in rows:

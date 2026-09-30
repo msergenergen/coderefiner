@@ -191,6 +191,7 @@ class TestJudgementNode:
             difficulty="easy",
             node1_mi=100.0, node1_cc=0.0, node1_bandit_high=False,
             node2_pass_rate=1.0, node2_cpu_ms=0.0, node2_ram_mb=0.0,
+            node2_total_count=5,
         )
         result = judgement_node(state)
         # numeric_total(80) + algorithm_choice(8) + error_handling(8) = 96 >= easy(80)
@@ -198,13 +199,15 @@ class TestJudgementNode:
         assert result["node3_pass"] is True
 
     def test_zero_accuracy_hard_gates_fail_even_if_total_high(self, base_state, monkeypatch):
-        # LOW-severity path: Node 2 never ran, pass_rate defaults to 0.0 -> accuracy 0.0.
-        # hard's threshold is 60 — total(75) clears it, but accuracy==0 must still block PASS.
+        # Sandbox ran but every test failed -> accuracy 0.0, while efficiency,
+        # quality, security and the judge are all maxed. hard's threshold is
+        # 60 — total(75) clears it, but accuracy==0 must still block PASS.
         self._patch_llm(monkeypatch, algorithm_choice=10, error_handling=10)
         state = base_state(
             difficulty="hard",
             node1_mi=100.0, node1_cc=0.0, node1_bandit_high=False,
             node2_pass_rate=0.0, node2_cpu_ms=0.0, node2_ram_mb=0.0,
+            node2_total_count=5,
         )
         result = judgement_node(state)
         assert result["node3_total_score"] >= 60   # score alone would clear hard's threshold
@@ -250,3 +253,22 @@ class TestJudgementNode:
         result = judgement_node(state)
         assert result["run_id"] == "abc123"
         assert result["active_model"] == "M2"
+
+
+class TestClipAndParse:
+
+    def test_clip_leaves_short_values_untouched(self):
+        from nodes.judgement import _clip
+        assert _clip("[1, 2, 3]") == "[1, 2, 3]"
+
+    def test_clip_truncates_long_stress_inputs(self):
+        from nodes.judgement import _clip
+        out = _clip("9" * 7508)
+        assert out.startswith("9" * 200)
+        assert "7308 more chars truncated" in out
+        assert len(out) < 300
+
+    def test_parses_detects_syntax_errors(self):
+        from nodes.judgement import _parses
+        assert _parses("def f():\n    return 1\n")
+        assert not _parses("def f(:\n")
