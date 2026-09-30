@@ -179,6 +179,12 @@ Single server; all roles (M1/M2/QWEN) route to this port:
 # llama server listening at http://0.0.0.0:8001
 ```
 
+> **Paralel slot (`LOCAL_PARALLEL`)** — `scripts/start_model.sh` reads
+> `PARALLEL=${LOCAL_PARALLEL:-1}` and sets `--ctx-size $((8192 * PARALLEL)) --parallel $PARALLEL`
+> so every slot keeps an 8192-token window. On the Mac Mini M4 (16 GB), 2–3 slots gave
+> no throughput gain (~20 t/s total vs. ~16 t/s single) and pushed the machine into swap
+> (0.4–1 t/s decode). Keep the default of 1 locally.
+
 ### A9. Local Verification
 
 ```bash

@@ -768,3 +768,19 @@ llm_scores = _get_llm_judgement(
 - `memory/logger.py` → the `generated_code` field in JSON
 - `nodes/sandbox.py` → the code used during test execution
 - `nodes/static_analysis.py` → the code used for metric computation
+
+---
+
+## Sharding (`main.py`)
+
+`main.py` can split the sampled problem list across processes:
+
+```python
+shard_count = int(os.getenv("SHARD_COUNT", "1"))
+shard_index = int(os.getenv("SHARD_INDEX", "0"))
+rows = rows[shard_index::shard_count]
+```
+
+Each shard is an independent process writing to the same `outputs/` tree under its own `run_id`.
+On the local M4 setup sharding gives no speed-up (the single llama.cpp slot is the bottleneck), so the
+official runs use `SHARD_COUNT=1`.

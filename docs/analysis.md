@@ -421,3 +421,39 @@ for (q, m), group in groupby(rows_sorted, key=lambda r: (r["q_id"], r["model"]))
         if delta != 0:
             print(f"{q} | {m} | Δscore: {delta:+.1f} ({first_score:.1f} → {last_score:.1f})")
 ```
+
+---
+
+## 9. Paper Results — `benchmark/paper_results.py`
+
+Produces every number, the results table and the budget curve used in the ELECO paper, from the
+iteration JSONs of one or more runs.
+
+```bash
+python -m benchmark.paper_results --run-ids run_20260930_222527 --out ~/Desktop/eleco2026-bildiri
+```
+
+**Protocol (leakage-free).** The refinement loop only ever sees the public example tests
+(`nodes/sandbox.py` Phase 1). `paper_results.py` re-grades the code of *every* iteration offline on the
+full hidden test set (public + private) with `sandbox/lcb_eval._fallback_evaluate`
+(8 threads, cached in `outputs/results/hidden_eval_cache.json`; `STOP_HIGH` iterations count as 0).
+
+- **Strict accuracy** = hidden `pass_rate == 1.0`.
+- **V0** = iteration 1 of the same run (single-shot baseline under identical prompt/token budget);
+  **V3** = the code delivered at the last iteration.
+- **Paired test:** exact (binomial) McNemar on the discordant counts b (only V3 correct) and c (only V0 correct);
+  **95% CIs:** Wilson.
+- **success@k:** strict accuracy of the code delivered with a budget of k iterations
+  (carry-forward of the last iteration for problems that stopped earlier).
+- **Rubric precision / recall:** judge `PASS` decisions versus hidden-test correctness, per iteration.
+- **Process stats:** severity-gate distribution, syntax-error share, truncated generations,
+  judge-call failures, JSON fallbacks, token ratio (all iterations / first iteration).
+
+**Outputs** (in `--out`):
+- `results.tex` — `\newcommand` macros (`\rN`, `\rVo`, `\rVt`, `\rP`, `\rRubPrec`, per-difficulty and
+  per-platform variants, `...En` variants with a decimal point for the English abstract) and
+  `\resultsTable`. Numbers use the Turkish decimal comma (`{,}`) and a math minus.
+- `sekil2.pdf` — grayscale success@k curve (overall and per difficulty).
+
+Because the sample order is seeded-random, a completed prefix of the 150-problem run is itself a
+random subsample; the paper reports `\rN` completed problems.

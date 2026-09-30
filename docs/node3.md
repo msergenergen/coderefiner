@@ -269,7 +269,7 @@ def _get_llm_judgement(
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=cfg.temperature,
-            max_tokens=3072,
+            max_tokens=4096,
         )
         message = response.choices[0].message
         # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a
@@ -522,6 +522,26 @@ hiçbir spesifik geri bildirim almadan tekrar deniyordu. Brace-depth
 taraması bu sorunu ortadan kaldırıyor: yalnızca tam, dengeli `{...}`
 nesnelerini aday olarak alır ve en son bulunandan (muhtemel nihai cevap)
 başlayarak dener.
+
+### 4.1 Robustness Updates
+
+- **Triple-quoted fields.** The judge sometimes writes `"improved_system_prompt": """..."""`
+  (Python style). `_parse_judgement` first tries every balanced `{...}` candidate on the raw text,
+  then on a repaired copy where `re.sub(r'"""(.*?)"""', lambda m: json.dumps(m.group(1)), raw, flags=re.DOTALL)`
+  turns those blocks into valid JSON strings. `json.loads(..., strict=False)` also tolerates raw
+  newlines inside strings; non-dict results are skipped.
+- **Context overflow.** Failing-case `input` / `expected` / `got` fields are passed through
+  `_clip(value, limit=200)` in `_build_judgement_prompt`; stress-test inputs of several thousand
+  characters previously pushed the judge prompt past the 8192-token window.
+- **`max_tokens=4096`** for the judge call (was 3072), because the reasoning model spends part of
+  the budget on `reasoning_content`.
+- **Error logging.** A failed judge call logs
+  `question_id`, model, iteration and difficulty with the exception type before falling back to
+  `_fallback_prompt` (whose reprs are trimmed to 150 chars).
+- **Unmeasured dimensions score 0.** `judgement_node` calls
+  `compute_numeric_scores(..., executed=state["node2_total_count"] > 0, parsed=_parses(code))`:
+  code that never reached the sandbox gets 0 efficiency, and code that does not parse (`ast.parse`)
+  gets 0 quality and 0 security instead of the defaults derived from empty metrics.
 
 ---
 
