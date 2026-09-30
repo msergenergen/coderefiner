@@ -256,6 +256,11 @@ def _write_iteration_json(state: PipelineState, status: str,
         # problem is the formatted problem statement — training context.
         # all_tests are reference tests used as rubric ground truth.
         "training": {
+            # generated_code (not stripped_code) is what the hidden-test
+            # evaluation in benchmark/paper_results.py re-executes: on the
+            # STOP_HIGH path strip_comments never runs, so stripped_code there
+            # still belongs to the previous iteration.
+            "generated_code": state.get("generated_code", ""),
             "stripped_code": state.get("stripped_code", ""),
             "problem":       state.get("problem", ""),
             "all_tests":     state.get("problem_row", {}).get("all_tests", []),

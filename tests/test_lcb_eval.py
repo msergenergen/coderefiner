@@ -75,3 +75,50 @@ class TestFallbackBehavior:
         )
         assert result["pass_rate"] == 1.0
         assert result["lcb_available"] is True
+
+
+class TestLocalLcbCompatibleEvaluator:
+    """The local evaluator must grade LeetCode-style problems by calling the
+    starter method (as lcb_runner does), not by comparing stdout text."""
+
+    STARTER = "class Solution:\n    def total(self, k: int, nums: List[int]) -> bool:\n        "
+
+    def _row(self, inputs, outputs, starter=""):
+        return {"all_tests": {"input": inputs, "output": outputs}, "starter_code": starter}
+
+    def test_functional_method_called_with_json_args(self):
+        from sandbox.lcb_eval import _fallback_evaluate
+        code = (
+            "class Solution:\n"
+            "    def total(self, k: int, nums: List[int]) -> bool:\n"
+            "        return sum(nums) == k\n"
+        )
+        row = self._row(["3\n[1, 2]", "4\n[1, 2]"], ["true", "false"], self.STARTER)
+        res = _fallback_evaluate(code, row, timeout=10)
+        assert res["pass_rate"] == 1.0, res["failed_cases"]
+
+    def test_functional_ignores_unguarded_stdin_harness(self):
+        # Top-level input() raises EOFError on the empty stdin, but Solution is
+        # already defined by then, so the method must still be graded.
+        from sandbox.lcb_eval import _fallback_evaluate
+        code = (
+            "class Solution:\n"
+            "    def total(self, k, nums):\n"
+            "        return sum(nums) == k\n"
+            "k = int(input())\n"
+        )
+        row = self._row(["3\n[1, 2]"], ["true"], self.STARTER)
+        assert _fallback_evaluate(code, row, timeout=10)["pass_rate"] == 1.0
+
+    def test_functional_missing_class_fails_cleanly(self):
+        from sandbox.lcb_eval import _fallback_evaluate
+        row = self._row(["3\n[1, 2]"], ["true"], self.STARTER)
+        res = _fallback_evaluate("print('true')\n", row, timeout=10)
+        assert res["pass_rate"] == 0.0
+        assert res["failed_cases"][0]["error"]
+
+    def test_stdio_compares_lines_and_decimals(self):
+        from sandbox.lcb_eval import _stdio_match
+        assert _stdio_match("1\n2.00  \n", "1.0\n2")
+        assert not _stdio_match("abc", "abd")
+        assert not _stdio_match("1\n2", "1")

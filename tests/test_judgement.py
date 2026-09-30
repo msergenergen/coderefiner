@@ -272,3 +272,24 @@ class TestClipAndParse:
         from nodes.judgement import _parses
         assert _parses("def f():\n    return 1\n")
         assert not _parses("def f(:\n")
+
+
+class TestParseTripleQuotedPrompt:
+
+    def test_python_triple_quoted_field_is_repaired(self):
+        from nodes.judgement import _parse_judgement
+        raw = (
+            '{\n  "algorithm_choice": 4,\n  "error_handling": 5,\n'
+            '  "failure_reasons": ["dp off by one"],\n'
+            '  "improved_system_prompt": """Fix the DP.\n'
+            'Case "leetscode" -> expected 1.\nUse {dict} carefully."""\n}'
+        )
+        out = _parse_judgement(raw)
+        assert out["failure_reasons"] == ["dp off by one"]
+        assert out["algorithm_choice"] == 4
+        assert 'Case "leetscode"' in out["improved_system_prompt"]
+
+    def test_raw_newline_inside_string_is_tolerated(self):
+        from nodes.judgement import _parse_judgement
+        raw = '{"algorithm_choice": 7, "error_handling": 6, "failure_reasons": [], "improved_system_prompt": "line one\nline two"}'
+        assert _parse_judgement(raw)["algorithm_choice"] == 7

@@ -31,10 +31,19 @@ def sandbox_node(state: PipelineState) -> PipelineState:
     edge_cases  = state.get("edge_cases", [])
     pub_inputs  = state.get("test_inputs", [])   # public_tests["input"]
 
-    # ── Phase 1: lcb_runner correctness ──────────────────────────────────
+    # ── Phase 1: correctness on the PUBLIC tests only ─────────────────────
+    # The loop (score, PASS decision, failing cases shown to the judge) may
+    # only see the examples a user would also have. The private LCB tests
+    # are reserved for the final, offline evaluation
+    # (benchmark/paper_results.py); feeding them back here would let the
+    # refinement loop optimise against the very tests it is scored on.
+    feedback_row = {
+        **problem_row,
+        "all_tests": problem_row.get("public_tests") or problem_row.get("all_tests", {}),
+    }
     faz1 = lcb_evaluate(
         code=code,
-        problem_row=problem_row,
+        problem_row=feedback_row,
         edge_cases=edge_cases,
         timeout=10,
     )

@@ -136,59 +136,164 @@ def _compute_diversity(crash_count: int, edge_cases: list) -> float:
     return round(max(0.0, score), 3)
 
 
+# Mirrors lcb_runner's import header so starter-code signatures such as
+# `List[int]` resolve even when the model omits `from typing import List`.
+_LCB_IMPORT_HEADER = (
+    "from string import *\nfrom re import *\nfrom datetime import *\n"
+    "from collections import *\nfrom heapq import *\nfrom bisect import *\n"
+    "from copy import *\nfrom math import *\nfrom random import *\n"
+    "from statistics import *\nfrom itertools import *\nfrom functools import *\n"
+    "from operator import *\nfrom io import *\nfrom sys import *\nfrom json import *\n"
+    "from builtins import *\nfrom typing import *\n"
+    "import string, re, datetime, collections, heapq, bisect, copy, math, random\n"
+    "import statistics, itertools, functools, operator, io, sys, json\n"
+    "sys.setrecursionlimit(50000)\n"
+)
+
+_RESULT_MARKER = "__LCB_RESULT__"
+
+# Runs the candidate as a module (not __main__, so a stdin harness under
+# `if __name__ == "__main__"` stays inert), then calls the starter-code
+# method with the JSON-decoded arguments, as lcb_runner does for
+# LeetCode-style ("functional") tests.
+_CALL_DRIVER = r"""
+import json, sys
+src_path, args_path, method = sys.argv[1], sys.argv[2], sys.argv[3]
+ns = {"__name__": "__lcb_candidate__"}
+try:
+    exec(compile(open(src_path).read(), "solution.py", "exec"), ns)
+except SystemExit:
+    pass
+except BaseException:
+    if "Solution" not in ns:
+        raise
+args = json.load(open(args_path))
+pred = getattr(ns["Solution"](), method)(*args)
+if isinstance(pred, tuple):
+    pred = list(pred)
+sys.stdout.write("\n" + MARKER + json.dumps(pred))
+""".replace("MARKER", repr(_RESULT_MARKER))
+
+
+def _stripped_lines(text: str) -> list:
+    return [line.strip() for line in text.strip().split("\n")]
+
+
+def _stdio_match(got: str, expected: str) -> bool:
+    """lcb_runner's stdio grading: line-wise after strip, then numeric
+    tokens compared as Decimals so that e.g. "1.0" matches "1"."""
+    from decimal import Decimal, InvalidOperation
+    got_lines, exp_lines = _stripped_lines(got), _stripped_lines(expected)
+    if len(got_lines) != len(exp_lines):
+        return False
+    for g, e in zip(got_lines, exp_lines):
+        if g == e:
+            continue
+        try:
+            if [Decimal(t) for t in g.split()] != [Decimal(t) for t in e.split()]:
+                return False
+        except (InvalidOperation, ValueError):
+            return False
+    return True
+
+
+def _starter_method(starter_code: str) -> Optional[str]:
+    import re
+    match = re.search(r"def\s+(\w+)\s*\(\s*self", starter_code or "")
+    return match.group(1) if match else None
+
+
 def _fallback_evaluate(
     code: str,
     problem_row: dict,
     timeout: int,
 ) -> dict:
     """
-    Simple subprocess evaluator used when lcb_runner is not installed.
-    This fallback should not run in the thesis environment;
-    the setup verification script catches this case.
+    Local LCB-compatible evaluator (used because lcb_runner is not installed).
+
+    - LeetCode problems (starter code present, "functional" tests): the
+      starter method is called directly with json.loads of each input line
+      and the result is compared with json.loads(expected output).
+    - AtCoder/Codeforces problems ("stdin" tests): the program reads the
+      input from stdin; stdout is compared line by line as in lcb_runner.
+
+    Earlier versions compared raw stdout strings for both kinds, so a
+    correct LeetCode method failed unless the model also wrote a stdin
+    harness whose printed output matched the JSON text exactly (Python's
+    `True` vs JSON `true`, quoted strings, ...). In a 52-problem run that
+    left LeetCode strict accuracy at 7.7% against 69.2% on AtCoder.
     """
+    import json
+    import os
     import subprocess
+    import sys
     import tempfile
 
     all_inputs  = problem_row["all_tests"]["input"]
     all_outputs = problem_row["all_tests"]["output"]
+    method      = _starter_method(problem_row.get("starter_code", ""))
 
     results      = []
     failed_cases = []
+    tmp_files    = []
 
-    with tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False
-    ) as f:
-        f.write(code)
-        tmp = f.name
+    def _tmp(content: str, suffix: str) -> str:
+        with tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False) as f:
+            f.write(content)
+        tmp_files.append(f.name)
+        return f.name
 
     try:
+        if method:
+            src    = _tmp(_LCB_IMPORT_HEADER + code, ".py")
+            driver = _tmp(_CALL_DRIVER, ".py")
+        else:
+            src = _tmp(code, ".py")
+
         for inp, expected in zip(all_inputs, all_outputs):
+            got, error, passed = "", None, False
             try:
-                proc = subprocess.run(
-                    ["python3", tmp],
-                    input=inp, capture_output=True,
-                    text=True, timeout=timeout,
-                )
-                got    = proc.stdout.strip()
-                passed = (got == expected.strip())
-                error  = proc.stderr.strip() if proc.returncode != 0 else None
+                if method:
+                    args_path = _tmp(json.dumps([json.loads(l) for l in inp.split("\n")]), ".json")
+                    proc = subprocess.run(
+                        [sys.executable, driver, src, args_path, method],
+                        stdin=subprocess.DEVNULL, capture_output=True,
+                        text=True, timeout=timeout,
+                    )
+                    if _RESULT_MARKER in proc.stdout:
+                        got = proc.stdout.rsplit(_RESULT_MARKER, 1)[1].strip()
+                        passed = json.loads(got) == json.loads(expected)
+                    else:
+                        error = proc.stderr.strip()[-500:] or "no result"
+                else:
+                    proc = subprocess.run(
+                        [sys.executable, src],
+                        input=inp, capture_output=True,
+                        text=True, timeout=timeout,
+                    )
+                    got    = proc.stdout.strip()
+                    passed = _stdio_match(got, expected)
+                    if proc.returncode != 0:
+                        error = proc.stderr.strip()[-500:]
             except subprocess.TimeoutExpired:
                 got, passed, error = "", False, "timeout"
+            except (ValueError, OSError) as e:
+                passed, error = False, str(e)[:200]
 
-            results.append({"passed": passed, "got": got, "error": error})
+            results.append(passed)
             if not passed and len(failed_cases) < 5:
                 failed_cases.append({
                     "input": inp, "expected": expected,
                     "got": got, "error": error,
                 })
     finally:
-        import os
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        for path in tmp_files:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
-    passed = sum(1 for r in results if r["passed"])
+    passed = sum(results)
     total  = len(results)
 
     return {

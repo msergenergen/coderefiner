@@ -45,9 +45,12 @@ Output format:
 - Do not include any text, explanation, or comments outside the markers
 
 I/O format:
-- Read all input from stdin using input() or sys.stdin
-- Write all output to stdout using print()
-- Do not wrap your solution in a function unless the problem explicitly requires it
+- If the problem gives Starter Code (a class with a method signature),
+  implement exactly that class and method: it is called directly with the
+  test arguments and its return value is checked, so do not read stdin
+  and do not print the result
+- Otherwise read all input from stdin using input() or sys.stdin and
+  write all output to stdout using print()
 - Do not include any print() calls for debugging or examples
 
 Correctness:

@@ -228,7 +228,7 @@ def _get_llm_judgement(
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=cfg.temperature,
-            max_tokens=3072,
+            max_tokens=4096,
         )
         message = response.choices[0].message
         # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a
@@ -477,25 +477,32 @@ def _parse_judgement(raw: str) -> dict:
          reasoning/code the model echoes ahead of it)
       3. Full raw text stripped
     """
+    # The judge often writes improved_system_prompt as a Python triple-quoted
+    # string ("""...""") instead of a JSON string; observed on every
+    # non-truncated json_parse_error in a 141-call sample. Re-encode those
+    # spans as JSON strings and retry before giving up.
+    repaired = re.sub(r'"""(.*?)"""', lambda m: json.dumps(m.group(1)), raw, flags=re.DOTALL)
+
     candidates = []
-
-    # 1. Any fenced block — skip optional language identifier (json / python / etc.)
-    match = re.search(r"```\w*\s*(\{.*?\})\s*```", raw, re.DOTALL)
-    if match:
-        candidates.append(match.group(1).strip())
-
-    # 2. Balanced {...} objects, most-likely-final-answer first
-    candidates.extend(reversed(_find_json_objects(raw)))
-
-    # 3. Fallback: use the full text as-is
-    candidates.append(raw.strip())
+    for text in ([raw, repaired] if repaired != raw else [raw]):
+        # 1. Any fenced block — skip optional language identifier (json / python / etc.)
+        match = re.search(r"```\w*\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if match:
+            candidates.append(match.group(1).strip())
+        # 2. Balanced {...} objects, most-likely-final-answer first
+        candidates.extend(reversed(_find_json_objects(text)))
+        # 3. Fallback: use the full text as-is
+        candidates.append(text.strip())
 
     for json_str in candidates:
         if not json_str:
             continue
         try:
-            data = json.loads(json_str)
+            # strict=False tolerates raw newlines/tabs inside strings
+            data = json.loads(json_str, strict=False)
         except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(data, dict):
             continue
         return {
             "algorithm_choice":       max(0, min(10, int(data.get("algorithm_choice", 5)))),
