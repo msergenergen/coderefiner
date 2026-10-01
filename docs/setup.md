@@ -213,6 +213,10 @@ ENV=local python main.py
 
 ## ORTAM B — Vast.ai GPU (Cloud)
 
+> **Güncel ve önerilen yol: `CLOUD_README.md`** (tek model, yargıç = M1, token bütçesi, paralel parçalar,
+> sonuçların Mac'te değerlendirilmesi). Aşağıdaki bölüm ilk üç modelli plan içindir. `lcb_runner`
+> kurulsa bile `LCB_EVALUATOR=local` varsayılanı yerel değerlendiriciyi kullanır.
+
 ### B1. Vast.ai Instance Selection
 
 **Instance requirements** — Concurrent largest models: Qwen3.5-9B (M1, ~6 GB) + Qwen3.5-35B-A3B (judge, ~24 GB) ≈ 30 GB.

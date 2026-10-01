@@ -800,5 +800,6 @@ earlier one for the same problem.
   inside `judgement_node` (`docs/node3.md` §4.2); re-checking it in the gate would override a judge
   `ACCEPT`. The threshold is still passed to the trend extension.
 - New state fields: `node3_verdict`, `node3_verdict_reason`, `node3_verdict_source`.
+- Filters in `main.py` apply in the order `MAX_PROBLEMS` → `SKIP_QIDS` → `SHARD_*` (shards of a capped run partition exactly that set).
 - `MAX_PROBLEMS=N` keeps the first N problems of the seeded sample (the 50-problem runs use the
-  same first 50 as the 150-problem run; list in `outputs/results/sample50_qids.txt`).
+  same first 50 as the 150-problem run; list in `benchmark/sample50_qids.txt`).

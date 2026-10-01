@@ -450,7 +450,7 @@ but correct), `\rPubWrong`, mean judge points for hidden-correct vs. hidden-wron
 ```bash
 python -m benchmark.paper_results --run-ids run_20261001_102445 \
     --baseline-run-ids run_20260930_222527 run_20261001_070529 \
-    --qid-file outputs/results/sample50_qids.txt --out ~/Desktop/eleco2026-bildiri
+    --qid-file benchmark/sample50_qids.txt --out ~/Desktop/eleco2026-bildiri
 ```
 
 **Protocol (leakage-free).** The refinement loop only ever sees the public example tests

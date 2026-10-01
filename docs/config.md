@@ -153,8 +153,13 @@ settings = PipelineSettings()
 | `CODEGEN_MAX_TOKENS` | `6144` | Output cap for code generation. The Qwen3.5-9B model card recommends 81,920 for competition programming (32,768 for most queries); 6144 is a local-hardware compromise (~16 tok/s on the M4) |
 | `JUDGE_MAX_TOKENS` | `4096` | Output cap for the judge call |
 
+| `LCB_EVALUATOR` | `local` | `local`: project's LCB-compatible evaluator (all reported results). `lcb_runner`: official runner if installed |
+
 Run-shaping variables read in `main.py`: `MAX_PROBLEMS` (first N of the seeded sample),
-`SKIP_QIDS` (resume), `SHARD_COUNT` / `SHARD_INDEX` (parallel shards).
+`SKIP_QIDS` (resume), `SHARD_COUNT` / `SHARD_INDEX` (parallel shards) — applied in this order,
+so shards of a capped/resumed run never overlap. Cloud server sizing: `PARALLEL` and `CTX_PER_SLOT`
+for `scripts/start_model.sh M1` (context per slot must cover prompt + `CODEGEN_MAX_TOKENS`).
+Step-by-step cloud procedure: `CLOUD_README.md`.
 
 ## 4. config/thresholds.py
 

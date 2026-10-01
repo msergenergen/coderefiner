@@ -648,3 +648,16 @@ Faz 2 — timed_out:   False
 **Edge case'ler:**
 - Cases with `output=None` are not included in `pass_rate` calculation.
 - `crash_count` is reported separately in the Node 3 prompt.
+
+
+---
+
+## Evaluator selection (`LCB_EVALUATOR`)
+
+`lcb_evaluate()` uses the LCB-compatible evaluator in `sandbox/lcb_eval.py`
+(`_fallback_evaluate`) unless `LCB_EVALUATOR=lcb_runner` **and** `lcb_runner` is importable.
+Default `local`: every reported result (Mac runs and the offline hidden-test grading in
+`benchmark/paper_results.py`) used this evaluator, so a cloud machine that happens to have
+`lcb_runner` installed must not silently switch graders. Correctness timeout stays 10 s per test
+and at most 5 failing cases are passed to the judge (both fixed in code; `SANDBOX_TIMEOUT_SEC`
+only affects the runtime measurement in `sandbox/runner.py`).

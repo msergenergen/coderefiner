@@ -143,14 +143,11 @@ def main():
     )
     logger.info(f"{len(rows)} problems loaded.")
 
-    # Optional sharding so N processes can share one llama-server started with
-    # --parallel N. Slicing happens after the seeded sample, so the union of
-    # all shards is exactly the same problem set as a single-process run.
-    shard_count = int(os.getenv("SHARD_COUNT", "1"))
-    shard_index = int(os.getenv("SHARD_INDEX", "0"))
-    if shard_count > 1:
-        rows = rows[shard_index::shard_count]
-        logger.info(f"Shard {shard_index}/{shard_count}: {len(rows)} problems.")
+    # Optional cap: first N problems of the seeded sample (e.g. a 50-problem run).
+    max_problems = int(os.getenv("MAX_PROBLEMS", "0"))
+    if max_problems > 0:
+        rows = rows[:max_problems]
+        logger.info(f"Limiting to the first {len(rows)} problems of the sample.")
 
     # Optional resume: skip problems already finished in an earlier run
     # (comma-separated question_ids). Order of the seeded sample is kept.
@@ -159,11 +156,14 @@ def main():
         rows = [r for r in rows if r.get("question_id", r.get("id")) not in skip]
         logger.info(f"Skipping {len(skip)} finished problems; {len(rows)} remain.")
 
-    # Optional cap: first N problems of the seeded sample (e.g. a 50-problem run).
-    max_problems = int(os.getenv("MAX_PROBLEMS", "0"))
-    if max_problems > 0:
-        rows = rows[:max_problems]
-        logger.info(f"Limiting to the first {len(rows)} problems of the sample.")
+    # Optional sharding so N processes can share one llama-server started with
+    # --parallel N. Slicing happens last (after MAX_PROBLEMS / SKIP_QIDS), so
+    # the union of all shards is exactly the single-process problem set.
+    shard_count = int(os.getenv("SHARD_COUNT", "1"))
+    shard_index = int(os.getenv("SHARD_INDEX", "0"))
+    if shard_count > 1:
+        rows = rows[shard_index::shard_count]
+        logger.info(f"Shard {shard_index}/{shard_count}: {len(rows)} problems.")
 
     all_results = []
     for row in rows:

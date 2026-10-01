@@ -40,7 +40,8 @@ def lcb_evaluate(
             "lcb_available":        bool,
         }
     """
-    if not LCB_AVAILABLE:
+    from config import settings
+    if not LCB_AVAILABLE or settings.lcb_evaluator != "lcb_runner":
         return _fallback_evaluate(code, problem_row, timeout)
 
     all_inputs  = problem_row["all_tests"]["input"]

@@ -34,6 +34,10 @@ class PipelineSettings:
     lcb_split:       str = os.getenv("LCB_SPLIT",       "test")
     lcb_difficulty:  str = os.getenv("LCB_DIFFICULTY",  "all")
     lcb_sample_size: int = int(os.getenv("LCB_SAMPLE_SIZE", 50))
+    # "local"      → LCB-compatible evaluator in sandbox/lcb_eval.py (all reported results)
+    # "lcb_runner" → the official lcb_runner, if installed
+    # Pinned so a cloud machine with lcb_runner installed grades exactly like the Mac.
+    lcb_evaluator:   str = os.getenv("LCB_EVALUATOR", "local").lower()
 
     # ── Output ─────────────────────────────────────────────────────────────
     output_dir:        str = os.getenv("OUTPUT_DIR",        "outputs/results")

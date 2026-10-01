@@ -80,12 +80,16 @@ case $MODEL in
 M1)
     MODEL_PATH=$(first_shard "$MODELS/qwen3.5-9b")
     [ -z "$MODEL_PATH" ] && { echo "Model not found: $MODELS/qwen3.5-9b/*.gguf"; exit 1; }
-    echo "→ Starting Qwen3.5-9B — medium anchor (port 8001) — $MODEL_PATH"
+    # PARALLEL slots share --ctx-size; CTX_PER_SLOT must cover prompt + output
+    # (e.g. CODEGEN_MAX_TOKENS=32768 → CTX_PER_SLOT=40960). See CLOUD_README.md.
+    PARALLEL=${PARALLEL:-1}
+    CTX_PER_SLOT=${CTX_PER_SLOT:-16384}
+    echo "→ Starting Qwen3.5-9B — medium anchor (port 8001) — $MODEL_PATH ($PARALLEL slot(s) × $CTX_PER_SLOT ctx)"
     stop_server
     $LLAMA \
         --model "$MODEL_PATH" \
         --port 8001 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
+        --ctx-size $((CTX_PER_SLOT * PARALLEL)) --parallel "$PARALLEL" --n-gpu-layers 99 \
         --cache-ram 0 \
         --jinja \
         --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
