@@ -35,7 +35,9 @@ def iteration_gate(state: PipelineState) -> str:
     "loop_to_codegen"    → LOOP     — retry with same model (or trend extension)
     """
     threshold = PASS_THRESHOLDS[state["difficulty"]]
-    passed    = state["node3_total_score"] >= threshold and state["node3_pass"]
+    # node3_pass is the single PASS decision (judge verdict or rubric; see
+    # nodes/judgement.py). threshold is still used by the trend extension.
+    passed    = state["node3_pass"]
 
     if passed:
         return "write_memory_final"

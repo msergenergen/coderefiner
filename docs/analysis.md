@@ -436,6 +436,23 @@ python -m benchmark.paper_results --run-ids run_20260930_222527 --out ~/Desktop/
 **Multiple runs.** `--run-ids` accepts several runs; if a problem appears in more than one, the
 chronologically latest run supersedes the earlier attempt entirely (even while still in progress).
 
+**Comparing two judge-decision designs.**
+`--baseline-run-ids` analyses a second set of runs on the *same* problems (restricted to the
+main run's completed problems), writes its macros with a `q` prefix (`\qVt`, `\qRubPrec`, …) and a
+paired McNemar on the delivered code of the two designs (`\rDn`, `\rDb` = only main correct,
+`\rDc` = only baseline correct, `\rDp`). The results table then shows `V3_P` (rubric/score
+decision) and `V3_Y` (judge verdict) side by side. `--qid-file` restricts both to a fixed problem
+list. Judge-decision metrics on iterations that passed every public test: `\rPubN`, `\rPubRej`
+(rejected), `\rPubRejGood` (rejected and actually wrong on hidden tests), `\rPubRejBad` (rejected
+but correct), `\rPubWrong`, mean judge points for hidden-correct vs. hidden-wrong code
+(`\rLlmOk`, `\rLlmBad`), share of decisions made by the judge itself (`\rVerdictJudge`).
+
+```bash
+python -m benchmark.paper_results --run-ids run_20261001_102445 \
+    --baseline-run-ids run_20260930_222527 run_20261001_070529 \
+    --qid-file outputs/results/sample50_qids.txt --out ~/Desktop/eleco2026-bildiri
+```
+
 **Protocol (leakage-free).** The refinement loop only ever sees the public example tests
 (`nodes/sandbox.py` Phase 1). `paper_results.py` re-grades the code of *every* iteration offline on the
 full hidden test set (public + private) with `sandbox/lcb_eval._fallback_evaluate`

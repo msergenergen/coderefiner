@@ -145,6 +145,17 @@ settings = PipelineSettings()
 
 ---
 
+### Judge decision and token budgets
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `JUDGE_DECISION` | `verdict` | `verdict`: judge's ACCEPT/REJECT is final (public tests are a precondition). `rubric`: rubric total ≥ difficulty threshold (earlier design, ablation baseline). See `docs/node3.md` §4.2 |
+| `CODEGEN_MAX_TOKENS` | `6144` | Output cap for code generation. The Qwen3.5-9B model card recommends 81,920 for competition programming (32,768 for most queries); 6144 is a local-hardware compromise (~16 tok/s on the M4) |
+| `JUDGE_MAX_TOKENS` | `4096` | Output cap for the judge call |
+
+Run-shaping variables read in `main.py`: `MAX_PROBLEMS` (first N of the seeded sample),
+`SKIP_QIDS` (resume), `SHARD_COUNT` / `SHARD_INDEX` (parallel shards).
+
 ## 4. config/thresholds.py
 
 ```python

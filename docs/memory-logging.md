@@ -217,6 +217,18 @@ Together with `node3` outputs (scores, failure_reasons, improved_prompt), every 
 
 ---
 
+### 4.1 File naming and verdict fields (2026-10-01)
+
+Iteration files are named `{model}_iter{n}_{run_id}.json`. Before this change the name was
+`{model}_iter{n}.json` inside the dated folder, so two runs on the same day overwrote each other's
+iterations for the same problem (files of `run_20260930_222527` / `run_20261001_070529` written on
+2026-10-01 were copied to `outputs/results/2026-10-01_baseline_runA_runB/` before the next run
+reached them). `read_iteration(..., run_id=None)` returns the newest match and still reads the old
+names. `benchmark/paper_results.py` de-duplicates on `(run_id, question_id, iter)`.
+
+The `node3` block now also carries `verdict`, `verdict_reason` and `verdict_source`
+(see `docs/node3.md` §4.2). PASS/STOP_MAX status uses `node3_pass` only.
+
 ## 5. memory/logger.py
 
 ```python

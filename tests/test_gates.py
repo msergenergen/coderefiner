@@ -61,8 +61,14 @@ class TestIterationGate:
         ("medium", 70),
         ("hard",   60),
     ])
-    def test_below_threshold_loops(self, difficulty, threshold):
+    def test_gate_follows_node3_pass_not_score(self, difficulty, threshold):
+        # The PASS decision is made once in judgement_node (judge verdict or
+        # rubric); the gate must not re-apply the score threshold, or it would
+        # override a judge ACCEPT on a below-threshold score.
         state = self._state(score=threshold - 1, passed=True,
+                            iteration=3, difficulty=difficulty)
+        assert iteration_gate(state) == "write_memory_final"
+        state = self._state(score=threshold + 10, passed=False,
                             iteration=3, difficulty=difficulty)
         assert iteration_gate(state) == "loop_to_codegen"
 

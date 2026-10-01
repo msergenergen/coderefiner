@@ -204,7 +204,9 @@ def _write_iteration_json(state: PipelineState, status: str,
         _dated_output_dir(), "iterations", q_id
     )
     os.makedirs(dir_path, exist_ok=True)
-    file_path = os.path.join(dir_path, f"{model}_iter{iter_n}.json")
+    # run_id in the file name: several runs on the same day would otherwise
+    # overwrite each other's iterations for the same problem.
+    file_path = os.path.join(dir_path, f"{model}_iter{iter_n}_{state.get('run_id', 'run')}.json")
 
     payload = {
         "run_id":      run_id,
@@ -249,6 +251,9 @@ def _write_iteration_json(state: PipelineState, status: str,
             "breakdown":       state.get("node3_score_breakdown", {}),
             "failure_reasons": state.get("node3_failure_reasons", []),
             "improved_prompt": state.get("node3_improved_prompt", ""),
+            "verdict":         state.get("node3_verdict", ""),
+            "verdict_reason":  state.get("node3_verdict_reason", ""),
+            "verdict_source":  state.get("node3_verdict_source", ""),
         },
 
         # Fields required for judge model training (Prometheus-style SFT).
@@ -288,8 +293,7 @@ def log_iteration_node(state: PipelineState) -> PipelineState:
     Also maintains score_history and pass_rate_history for trend-aware extension.
     """
     from config import thresholds, settings
-    threshold = thresholds.node3.for_difficulty(state["difficulty"])
-    passed    = state["node3_total_score"] >= threshold and state["node3_pass"]
+    passed    = state["node3_pass"]  # single PASS decision, see nodes/judgement.py
 
     if passed:
         status = "PASS"
@@ -367,6 +371,9 @@ def log_severity_stop_node(state: PipelineState) -> PipelineState:
         "node3_score_breakdown":      {},
         "node3_failure_reasons":      [],
         "node3_improved_prompt":      "",
+        "node3_verdict":              "",
+        "node3_verdict_reason":       "",
+        "node3_verdict_source":       "",
     }
 
     json_path = _write_iteration_json(state, "STOP_HIGH", run_id, timing, tokens)
@@ -420,16 +427,21 @@ def read_memory(path: Optional[str] = None) -> list:
 
 
 def read_iteration(q_id: str, model: str, iter_n: int,
-                   date: str = None) -> Optional[dict]:
+                   date: str = None, run_id: str = None) -> Optional[dict]:
     """
     Reads the JSON detail for a specific iteration.
     date: YYYY-MM-DD string; defaults to today.
+    run_id: which run; defaults to the most recently written one.
     """
+    import glob
     date_dir = date or datetime.now().strftime("%Y-%m-%d")
-    path = os.path.join(
-        settings.output_dir, date_dir, "iterations", q_id, f"{model}_iter{iter_n}.json"
-    )
-    if not os.path.exists(path):
+    base = os.path.join(settings.output_dir, date_dir, "iterations", q_id)
+    pattern = f"{model}_iter{iter_n}_{run_id}.json" if run_id else f"{model}_iter{iter_n}_*.json"
+    paths = sorted(glob.glob(os.path.join(base, pattern)), key=os.path.getmtime)
+    if not paths:
+        legacy = os.path.join(base, f"{model}_iter{iter_n}.json")  # pre-run_id files
+        paths = [legacy] if os.path.exists(legacy) and not run_id else []
+    if not paths:
         return None
-    with open(path, encoding="utf-8") as f:
+    with open(paths[-1], encoding="utf-8") as f:
         return json.load(f)

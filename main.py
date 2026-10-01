@@ -159,6 +159,12 @@ def main():
         rows = [r for r in rows if r.get("question_id", r.get("id")) not in skip]
         logger.info(f"Skipping {len(skip)} finished problems; {len(rows)} remain.")
 
+    # Optional cap: first N problems of the seeded sample (e.g. a 50-problem run).
+    max_problems = int(os.getenv("MAX_PROBLEMS", "0"))
+    if max_problems > 0:
+        rows = rows[:max_problems]
+        logger.info(f"Limiting to the first {len(rows)} problems of the sample.")
+
     all_results = []
     for row in rows:
         result = run_pipeline_for_problem(row, run_id)

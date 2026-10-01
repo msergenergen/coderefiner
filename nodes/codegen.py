@@ -9,6 +9,7 @@ import time
 from pipeline.state import PipelineState
 from models.client import get_client, get_model_name, get_temperature, health_check
 from models.prompts import build_system_prompt, build_user_prompt
+from config import settings
 
 
 def codegen_node(state: PipelineState) -> PipelineState:
@@ -49,7 +50,7 @@ def codegen_node(state: PipelineState) -> PipelineState:
         # 4096 was too tight for a reasoning model: thinking consumed the
         # budget before the closing ```python fence, so the fallback
         # extraction returned the whole raw (unparseable) response as "code".
-        max_tokens=6144,
+        max_tokens=settings.codegen_max_tokens,
     )
 
     message = response.choices[0].message

@@ -793,3 +793,12 @@ sample while keeping its order. It was used on 2026-10-01 when the PASS gate cha
 trajectory never hit a partial-pass PASS were kept, and the 5 affected problems plus the remaining
 ones were run as `run_20261001_070529`. `benchmark/paper_results.py` lets a later run supersede an
 earlier one for the same problem.
+
+### PASS decision and `MAX_PROBLEMS` (2026-10-01)
+
+- `iteration_gate` routes on `state["node3_pass"]` only. The score threshold is applied (if at all)
+  inside `judgement_node` (`docs/node3.md` §4.2); re-checking it in the gate would override a judge
+  `ACCEPT`. The threshold is still passed to the trend extension.
+- New state fields: `node3_verdict`, `node3_verdict_reason`, `node3_verdict_source`.
+- `MAX_PROBLEMS=N` keeps the first N problems of the seeded sample (the 50-problem runs use the
+  same first 50 as the 150-problem run; list in `outputs/results/sample50_qids.txt`).

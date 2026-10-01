@@ -124,7 +124,7 @@ class TestIterationJson:
                 node3_pass=False, run_id="r"
             ))
 
-        json_path = tmp_path / "iterations" / "q_001" / "M1_iter1.json"
+        json_path = tmp_path / "iterations" / "q_001" / "M1_iter1_r.json"
         assert json_path.exists()
 
     def test_json_content_correct(self, tmp_path, base_state):
@@ -140,7 +140,7 @@ class TestIterationJson:
                 node3_improved_prompt="Check for empty list."
             ))
 
-        data = json.load(open(tmp_path / "iterations" / "q_001" / "M1_iter1.json"))
+        data = json.load(open(tmp_path / "iterations" / "q_001" / "M1_iter1_r_42.json"))
         assert data["run_id"]  == "r_42"
         assert data["status"]  == "LOOP"
         assert data["node3"]["improved_prompt"] == "Check for empty list."

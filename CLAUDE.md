@@ -70,7 +70,7 @@ Node 2: Sandbox & Execution  (lcb_runner correctness + cpu_ms · ram_mb)
   ↓
 strip_comments          ← removes comments before judgement (bias prevention)
   ↓
-Node 3: Judgement LLM  (100-point rubric + improved_prompt)
+Node 3: Judgement LLM  (rubric as evidence + ACCEPT/REJECT verdict + improved_prompt)
   ↓
 log_iteration           ← writes to memory.md + iterations/JSON
   ↓

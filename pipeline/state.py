@@ -55,6 +55,9 @@ class PipelineState(TypedDict):
     node3_score_breakdown: dict        # {"accuracy": 0, "efficiency": 0, "quality": 0, "security": 0, "algorithm_choice": 0, "error_handling": 0}
     node3_failure_reasons: list
     node3_improved_prompt: str         # Completely rewritten every iteration
+    node3_verdict:         str         # "ACCEPT" / "REJECT" from the judge ("" if absent)
+    node3_verdict_reason:  str         # judge's justification for the verdict
+    node3_verdict_source:  str         # "judge" | "fallback_rubric" | "rubric_mode"
 
     # ── Performance metrics (each node writes its own duration) ─────────
     timing: dict

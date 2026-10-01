@@ -127,8 +127,8 @@ class TestBuildJudgementPrompt:
             node1_issues=[], failed_cases=[], halstead=10.0, timed_out=False,
             difficulty="easy", iteration=1,
         )
-        # problem truncated to 800 chars, code to 8000 chars (see source slices)
-        assert "P" * 801 not in prompt
+        # problem cut to 1500 chars (head + constraints), code to 8000 chars
+        assert "P" * 1501 not in prompt
         assert len([c for c in prompt if c == "x"]) < 8100
 
     def test_failed_cases_rendered_with_fix_hints(self):
@@ -307,3 +307,54 @@ class TestParseTripleQuotedPrompt:
         from nodes.judgement import _parse_judgement
         raw = '{"algorithm_choice": 7, "error_handling": 6, "failure_reasons": [], "improved_system_prompt": "line one\nline two"}'
         assert _parse_judgement(raw)["algorithm_choice"] == 7
+
+
+class TestJudgeVerdict:
+
+    def _patch(self, monkeypatch, verdict, mode="verdict"):
+        canned = {"algorithm_choice": 8, "error_handling": 8, "failure_reasons": [],
+                  "improved_system_prompt": "p", "verdict": verdict, "verdict_reason": "r",
+                  "_judgement_prompt_tokens": 1, "_judgement_completion_tokens": 1}
+        monkeypatch.setattr(judgement, "_get_llm_judgement", lambda **kw: dict(canned))
+        import dataclasses
+        monkeypatch.setattr(judgement, "settings",
+                            dataclasses.replace(judgement.settings, judge_decision=mode))
+
+    def _state(self, base_state, pass_rate=1.0, total_count=5, **kw):
+        return base_state(difficulty="easy", node1_mi=100.0, node1_cc=0.0,
+                          node1_bandit_high=False, node2_pass_rate=pass_rate,
+                          node2_cpu_ms=0.0, node2_ram_mb=0.0,
+                          node2_total_count=total_count, **kw)
+
+    def test_judge_reject_overrides_high_score(self, base_state, monkeypatch):
+        self._patch(monkeypatch, "REJECT")
+        out = judgement_node(self._state(base_state))
+        assert out["node3_total_score"] >= 80
+        assert out["node3_pass"] is False
+        assert out["node3_verdict_source"] == "judge"
+
+    def test_judge_accept_passes_with_all_public_tests(self, base_state, monkeypatch):
+        self._patch(monkeypatch, "ACCEPT")
+        out = judgement_node(self._state(base_state))
+        assert out["node3_pass"] is True and out["node3_verdict"] == "ACCEPT"
+
+    def test_accept_cannot_override_failing_public_test(self, base_state, monkeypatch):
+        self._patch(monkeypatch, "ACCEPT")
+        out = judgement_node(self._state(base_state, pass_rate=0.8))
+        assert out["node3_pass"] is False
+
+    def test_missing_verdict_falls_back_to_rubric(self, base_state, monkeypatch):
+        self._patch(monkeypatch, "")
+        out = judgement_node(self._state(base_state))
+        assert out["node3_verdict_source"] == "fallback_rubric"
+        assert out["node3_pass"] is True   # total 96 >= easy 80
+
+    def test_rubric_mode_ignores_verdict(self, base_state, monkeypatch):
+        self._patch(monkeypatch, "REJECT", mode="rubric")
+        out = judgement_node(self._state(base_state))
+        assert out["node3_pass"] is True and out["node3_verdict_source"] == "rubric_mode"
+
+    def test_parse_verdict_normalised(self):
+        out = _parse_judgement('{"verdict": "accept", "verdict_reason": "ok"}')
+        assert out["verdict"] == "ACCEPT"
+        assert _parse_judgement('{"verdict": "maybe"}')["verdict"] == ""

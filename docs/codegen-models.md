@@ -389,6 +389,12 @@ ayrıca giderildi.
 
 ---
 
+### Output budget
+
+`codegen_node` uses `max_tokens=settings.codegen_max_tokens` (`CODEGEN_MAX_TOKENS`, default 6144).
+Locally ~46% of generation calls hit this cap (73% on hard problems), which is why it is
+configurable for cloud runs; see `docs/config.md`.
+
 ## 5. pipeline/router.py
 
 ```python

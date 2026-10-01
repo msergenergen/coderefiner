@@ -550,6 +550,46 @@ başlayarak dener.
 
 ---
 
+### 4.2 Judge Verdict — Final Decision (`JUDGE_DECISION=verdict`, default)
+
+**Why.** Measured on the first 50 problems of the 150-problem sample (rubric-threshold
+decision, `run_20260930_222527` + `run_20261001_070529`): of the 45 iterations that passed every
+public test, the rubric rejected **none**, yet 7 of them failed the hidden tests. The judge's
+own 20 points did not separate correct from wrong code (mean 14.2 vs 13.9). With 80 of 100 points
+deterministic, the LLM judge effectively never decided anything. The project's premise is
+LLM-as-a-Judge, so the judge must own the final decision.
+
+**Design.** Deterministic evidence stays (it protects against hallucinated acceptance), but it
+becomes *evidence in the judge's prompt*, not the decision:
+
+| Layer | Role |
+|---|---|
+| Public tests (Node 2) | Precondition: all must pass (`_public_precondition`; not applied to variant V2, which has no execution) |
+| Metrics + rubric total (Node 1/2/3) | Evidence shown to the judge; still logged and used by the trend extension |
+| Judge verdict | Final decision: `ACCEPT` / `REJECT` + `verdict_reason` |
+
+`_decide_pass(state, total, threshold, verdict)` returns `(passed, verdict_source)`:
+
+- `judge` — `passed = precondition and verdict == "ACCEPT"`
+- `fallback_rubric` — judge gave no usable verdict (LLM error / unparseable JSON):
+  `passed = precondition and total >= threshold`, so the run never stalls
+- `rubric_mode` — `JUDGE_DECISION=rubric` (the earlier design, kept for the ablation)
+
+Prompt rules for the verdict (system prompt, item 5): test results and metrics are facts and must
+not be contradicted; any failing visible test ⇒ `REJECT`; if all visible tests pass, `ACCEPT`
+unless the judge can name a concrete defect the tests miss (an input allowed by the constraints
+that breaks the code, or a complexity that cannot meet the constraints); style/metrics alone are
+not grounds for rejection; a `REJECT` must cite the input/constraint, and the improved prompt must
+describe it. `_problem_excerpt` keeps the statement head **and** its Constraints section (the old
+800-char cut usually dropped the constraints the judge needs).
+
+`node3_pass` is now the single PASS decision: `iteration_gate` and `log_iteration_node` no longer
+re-check `total_score >= threshold` (that would override a judge `ACCEPT`).
+
+New state / JSON fields: `node3_verdict`, `node3_verdict_reason`, `node3_verdict_source`
+(`node3.verdict`, `node3.verdict_reason`, `node3.verdict_source` in the iteration JSON).
+`max_tokens` comes from `settings.judge_max_tokens` (`JUDGE_MAX_TOKENS`, default 4096).
+
 ## 5. models/client.py — Judge Model Registration
 
 Add to the `_MODEL_CONFIG` dict in `models/client.py`:

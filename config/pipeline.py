@@ -50,6 +50,20 @@ class PipelineSettings:
     # Default: "QWEN" — change to any registered model (e.g. "M3") to swap.
     judge_model: str = os.getenv("JUDGE_MODEL", "QWEN")
 
+    # ── Judge decision mechanism ──────────────────────────────────────────
+    # "verdict" → the judge gives an explicit, justified ACCEPT/REJECT; the
+    #             deterministic metrics and test results are evidence in its
+    #             prompt, and passing every public test is a precondition.
+    # "rubric"  → PASS when the 100-point rubric total clears the difficulty
+    #             threshold (with the same public-test precondition).
+    judge_decision: str = os.getenv("JUDGE_DECISION", "verdict").lower()
+
+    # ── Token budgets (per call) ──────────────────────────────────────────
+    # Local default 6144 is ~7.5% of the 81,920 output tokens the Qwen3.5
+    # model card recommends for competition programming; raise on cloud GPUs.
+    codegen_max_tokens: int = int(os.getenv("CODEGEN_MAX_TOKENS", 6144))
+    judge_max_tokens:   int = int(os.getenv("JUDGE_MAX_TOKENS", 4096))
+
     # ── Trend-aware extension ─────────────────────────────────────────────
     # When enabled, iteration_gate allows up to max_extension_iters additional
     # iterations beyond max_iterations if the score shows a genuine upward trend.
