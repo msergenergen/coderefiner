@@ -365,7 +365,7 @@ def write_tex(res: dict, path: str, table_path: str,
     lines += [f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in m.items()]
     # English-abstract variants: decimal point instead of the Turkish comma.
     lines += [f"\\newcommand{{\\{k}En}}{{{v.replace('{,}', '.')}}}"
-              for k, v in m.items() if k in ("rVo", "rVt", "rRubPrec", "rP", "qVt")]
+              for k, v in m.items() if k in ("rVo", "rVt", "rRubPrec", "rP", "qVt", "qRubPrec")]
 
     body = []
     for d, tr in DIFFS + [("all", "Toplam")]:
@@ -427,8 +427,10 @@ def plot_curve(res: dict, path: str) -> None:
     ax.set_xticks(ks)
     ax.set_ylim(0, 100)
     ax.grid(axis="y", linestyle="-", linewidth=0.3, alpha=0.5)
-    ax.legend(loc="upper left", ncol=2, frameon=False, handlelength=2.2,
-              columnspacing=0.8, borderaxespad=0.2)
+    # The 30-65% band is usually empty (easy/medium curves sit high, hard
+    # low), so the legend goes there instead of over the curves.
+    ax.legend(loc="center right", bbox_to_anchor=(1.0, 0.45), ncol=2, frameon=False,
+              handlelength=2.2, columnspacing=0.8, borderaxespad=0.2)
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     fig.tight_layout(pad=0.3)
