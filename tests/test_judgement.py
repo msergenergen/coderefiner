@@ -213,6 +213,20 @@ class TestJudgementNode:
         assert result["node3_total_score"] >= 60   # score alone would clear hard's threshold
         assert result["node3_pass"] is False        # hard gate still blocks it
 
+    def test_partial_public_pass_cannot_pass(self, base_state, monkeypatch):
+        # 4/5 public tests pass and every other dimension is maxed: the total
+        # clears easy's threshold, but failing any visible test must block PASS.
+        self._patch_llm(monkeypatch, algorithm_choice=10, error_handling=10)
+        state = base_state(
+            difficulty="easy",
+            node1_mi=100.0, node1_cc=0.0, node1_bandit_high=False,
+            node2_pass_rate=0.8, node2_cpu_ms=0.0, node2_ram_mb=0.0,
+            node2_total_count=5,
+        )
+        result = judgement_node(state)
+        assert result["node3_total_score"] >= 80
+        assert result["node3_pass"] is False
+
     def test_below_threshold_fails(self, base_state, monkeypatch):
         self._patch_llm(monkeypatch, algorithm_choice=0, error_handling=0)
         state = base_state(

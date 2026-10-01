@@ -136,10 +136,13 @@ def judgement_node(state: PipelineState) -> PipelineState:
 
     from pipeline.gates import PASS_THRESHOLDS
     threshold = PASS_THRESHOLDS[state["difficulty"]]
-    # Hard gate: zero test pass rate → cannot PASS regardless of other scores.
-    # A solution that produces no correct output must not be marked as passing,
-    # even if static analysis and LLM scores are high.
-    passed = total >= threshold and numeric["accuracy"] > 0.0
+    # Hard gate: code that fails any visible (public) test cannot PASS,
+    # regardless of the rubric total. Partial pass rates used to clear the
+    # threshold on quality/security/judge points alone, stopping the loop on
+    # code already known to be wrong. Requires the sandbox to have run.
+    all_public_passed = (state.get("node2_total_count", 0) > 0
+                         and state.get("node2_pass_rate", 0.0) >= 1.0)
+    passed = total >= threshold and all_public_passed
 
     node3_ms = int((time.perf_counter() - t0) * 1000)
     timing = dict(state.get("timing", {}))

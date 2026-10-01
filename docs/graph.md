@@ -784,3 +784,12 @@ rows = rows[shard_index::shard_count]
 Each shard is an independent process writing to the same `outputs/` tree under its own `run_id`.
 On the local M4 setup sharding gives no speed-up (the single llama.cpp slot is the bottleneck), so the
 official runs use `SHARD_COUNT=1`.
+
+### Resuming a run (`SKIP_QIDS`)
+
+`SKIP_QIDS` (comma-separated question ids) removes already finished problems from the seeded
+sample while keeping its order. It was used on 2026-10-01 when the PASS gate changed from
+`accuracy > 0` to "all public tests pass": the 46 problems of `run_20260930_222527` whose
+trajectory never hit a partial-pass PASS were kept, and the 5 affected problems plus the remaining
+ones were run as `run_20261001_070529`. `benchmark/paper_results.py` lets a later run supersede an
+earlier one for the same problem.

@@ -152,6 +152,13 @@ def main():
         rows = rows[shard_index::shard_count]
         logger.info(f"Shard {shard_index}/{shard_count}: {len(rows)} problems.")
 
+    # Optional resume: skip problems already finished in an earlier run
+    # (comma-separated question_ids). Order of the seeded sample is kept.
+    skip = {q.strip() for q in os.getenv("SKIP_QIDS", "").split(",") if q.strip()}
+    if skip:
+        rows = [r for r in rows if r.get("question_id", r.get("id")) not in skip]
+        logger.info(f"Skipping {len(skip)} finished problems; {len(rows)} remain.")
+
     all_results = []
     for row in rows:
         result = run_pipeline_for_problem(row, run_id)

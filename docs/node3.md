@@ -221,7 +221,12 @@ def judgement_node(state: PipelineState) -> PipelineState:
 
     from pipeline.gates import PASS_THRESHOLDS
     threshold = PASS_THRESHOLDS[state["difficulty"]]
-    passed = total >= threshold
+    # Hard gate: every public (visible) test must pass; the rubric total only
+    # decides among solutions that clear it. (Earlier versions required only
+    # accuracy > 0, which accepted code failing some visible tests.)
+    all_public_passed = (state.get("node2_total_count", 0) > 0
+                         and state.get("node2_pass_rate", 0.0) >= 1.0)
+    passed = total >= threshold and all_public_passed
 
     return {
         **state,

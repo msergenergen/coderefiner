@@ -433,6 +433,9 @@ iteration JSONs of one or more runs.
 python -m benchmark.paper_results --run-ids run_20260930_222527 --out ~/Desktop/eleco2026-bildiri
 ```
 
+**Multiple runs.** `--run-ids` accepts several runs; if a problem appears in more than one, the
+chronologically latest run supersedes the earlier attempt entirely (even while still in progress).
+
 **Protocol (leakage-free).** The refinement loop only ever sees the public example tests
 (`nodes/sandbox.py` Phase 1). `paper_results.py` re-grades the code of *every* iteration offline on the
 full hidden test set (public + private) with `sandbox/lcb_eval._fallback_evaluate`

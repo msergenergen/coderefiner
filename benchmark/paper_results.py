@@ -33,14 +33,17 @@ MAX_ITER = 5
 
 
 def load_problems(run_ids: set, results_root: str) -> dict:
-    by_q = defaultdict(list)
+    by_run = defaultdict(lambda: defaultdict(list))
     for path in glob.glob(os.path.join(results_root, "*", "iterations", "*", "*.json")):
         with open(path) as f:
             d = json.load(f)
         if d.get("run_id") in run_ids:
-            by_q[d["question_id"]].append(d)
+            by_run[d["question_id"]][d["run_id"]].append(d)
     problems = {}
-    for qid, iters in by_q.items():
+    for qid, runs in by_run.items():
+        # A problem re-run in a later run (run ids sort chronologically)
+        # supersedes the earlier attempt entirely, even while still in progress.
+        iters = runs[max(runs)]
         iters.sort(key=lambda x: x["iter"])
         if iters[-1]["status"] in TERMINAL:
             problems[qid] = iters
