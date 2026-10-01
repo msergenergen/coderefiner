@@ -206,10 +206,23 @@ def analyse(problems: dict, meta: dict) -> dict:
                     for it in judged)
     json_err = sum("json_parse_error" in (it["node3"].get("failure_reasons") or [])
                    for it in judged)
-    truncated = sum(
-        it["tokens"].get("codegen_completion", 0) >= 6144
-        or it["tokens"].get("codegen_prompt", 0) + it["tokens"].get("codegen_completion", 0) >= 8190
-        for it in all_iters)
+    def is_trunc(it):
+        t = it["tokens"]
+        return (t.get("codegen_completion", 0) >= 6144
+                or t.get("codegen_prompt", 0) + t.get("codegen_completion", 0) >= 8190)
+
+    def unparsed(it):
+        return any("failed to parse" in s for s in it["node1"].get("issues", []))
+
+    truncated = sum(is_trunc(it) for it in all_iters)
+    trunc_by_diff = {}
+    for d, _ in DIFFS:
+        sel = [it for r in rows if r["diff"] == d for it in r["iters"]]
+        trunc_by_diff[d] = sum(is_trunc(it) for it in sel) / len(sel) if sel else 0.0
+    # Gain decomposition: problems fixed by refinement (b) whose first attempt
+    # was an unparseable (cut-off) generation vs. runnable-but-wrong code.
+    gained = [r for r in rows if not r["v0"] and r["v3"]]
+    b_unparsed = sum(unparsed(r["iters"][0]) for r in gained)
 
     # rubric PASS (decided on public tests) vs held-out strict correctness
     executed = [it for it in all_iters if it["status"] != "STOP_HIGH"]
@@ -229,6 +242,8 @@ def analyse(problems: dict, meta: dict) -> dict:
         "judge_err": judge_err / len(judged) if judged else 0.0,
         "json_err": json_err / len(judged) if judged else 0.0,
         "truncated": truncated / len(all_iters),
+        "trunc_by_diff": trunc_by_diff,
+        "b_unparsed": b_unparsed, "b_fixed": len(gained) - b_unparsed,
         "rub_prec": tp / (tp + fp) if tp + fp else 0.0,
         "rub_rec": tp / (tp + fn) if tp + fn else 0.0,
         "rub_fp": fp, "rub_tp": tp, "rub_fn": fn,
@@ -270,7 +285,9 @@ def write_tex(res: dict, path: str, table_path: str) -> None:
         "rJudgeErr": pct(pr["judge_err"]), "rJsonErr": pct(pr["json_err"]),
         "rTrunc": pct(pr["truncated"]),
         "rRubPrec": pct(pr["rub_prec"]), "rRubRec": pct(pr["rub_rec"]),
-        "rRubFp": str(pr["rub_fp"]), "rRubAcc": str(pr["rub_tp"] + pr["rub_fp"]), "rRubTp": str(pr["rub_tp"]), "rRubFn": str(pr["rub_fn"]),
+        "rRubFp": str(pr["rub_fp"]), "rRubAcc": str(pr["rub_tp"] + pr["rub_fp"]), "rBTrunc": str(pr["b_unparsed"]), "rBFix": str(pr["b_fixed"]),
+        "rTruncKolay": pct(pr["trunc_by_diff"]["easy"]), "rTruncOrta": pct(pr["trunc_by_diff"]["medium"]),
+        "rTruncZor": pct(pr["trunc_by_diff"]["hard"]), "rRubTp": str(pr["rub_tp"]), "rRubFn": str(pr["rub_fn"]),
         "rRegressed": str(pr["regressed"]),
         "rEver": pct(pr["ever"]),
         "rTokRatio": num(pr["tok_ratio"], 1),

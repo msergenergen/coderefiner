@@ -449,6 +449,8 @@ full hidden test set (public + private) with `sandbox/lcb_eval._fallback_evaluat
 - **success@k:** strict accuracy of the code delivered with a budget of k iterations
   (carry-forward of the last iteration for problems that stopped earlier).
 - **Rubric precision / recall:** judge `PASS` decisions versus hidden-test correctness, per iteration.
+- **Gain decomposition:** of the problems only V3 solves (b), how many had an unparseable (cut-off) first attempt (`\rBTrunc`) vs. runnable-but-wrong code (`\rBFix`).
+- **Truncation by difficulty:** `\rTruncKolay/Orta/Zor` — share of codegen calls hitting the 6144-token output cap or the 8192 context.
 - **Process stats:** severity-gate distribution, syntax-error share, truncated generations,
   judge-call failures, JSON fallbacks, token ratio (all iterations / first iteration).
 
