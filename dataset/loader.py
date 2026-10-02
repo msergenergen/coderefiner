@@ -19,6 +19,8 @@ def load_lcb(
     split: str = "test",
     difficulty: str = "all",
     sample_size: int = None,
+    date_from: str = "",
+    date_to: str = "",
 ) -> list:
     """
     Loads, cleans, and merges test cases from the LCB dataset.
@@ -27,6 +29,10 @@ def load_lcb(
         split:       "test" | "val"
         difficulty:  "all" | "easy" | "medium" | "hard"
         sample_size: None = all, int = first N examples
+        date_from / date_to: optional "YYYY-MM" bounds (inclusive) on the
+                     problem's contest_date. Used to evaluate only problems
+                     released after a model's release date (LCB's
+                     contamination protocol; docs/dataset.md §10).
 
     Returns:
         List of dicts with keys:
@@ -44,6 +50,9 @@ def load_lcb(
     for item in ds:
         if difficulty != "all" and item["difficulty"] != difficulty:
             continue
+        month = (item.get("contest_date") or "")[:7]
+        if (date_from and month < date_from) or (date_to and month > date_to):
+            continue
 
         public  = _parse_public_tests(item.get("public_test_cases",  "[]"))
         private = _parse_private_tests(item.get("private_test_cases", ""))
@@ -56,6 +65,7 @@ def load_lcb(
             "title":        item["question_title"],
             "content":      _clean_html(item["question_content"]),
             "difficulty":   item["difficulty"],
+            "contest_date": (item.get("contest_date") or "")[:10],
             "starter_code": item.get("starter_code", ""),
             "public_tests":  public,
             "private_tests": private,

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starts a single model server — stops the previous one first.
 #
-# Local (Mac Mini):  argument is optional; always starts gpt-oss-20b on port 8001
+# Local (Mac Mini):  argument is optional; always starts qwen3.5-9b on port 8001
 #   bash scripts/start_model.sh
 #   bash scripts/start_model.sh M1   # same result
 #
@@ -59,7 +59,7 @@ if [ "$ENV_VAL" = "local" ]; then
     exit 0
 fi
 
-# ── Cloud mode (Vast.ai A100) ─────────────────────────────────────────────────
+# ── Cloud mode (Vast.ai GPU) ─────────────────────────────────────────────────
 LLAMA=/workspace/llama.cpp/llama-server
 MODELS=/workspace/models
 

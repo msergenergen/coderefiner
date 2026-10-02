@@ -31,6 +31,9 @@ def mypy_check(code: str) -> dict:
             [
                 sys.executable, "-m", "mypy", tmp,
                 "--ignore-missing-imports",
+                # "Need type annotation" is not a defect in a contest solution;
+                # it crowded the judge's evidence and drew style-only REJECTs.
+                "--disable-error-code", "var-annotated",
                 "--no-error-summary",
                 "--no-pretty",
             ],
@@ -77,6 +80,10 @@ def ruff_check(code: str) -> dict:
             [
                 sys.executable, "-m", "ruff", "check", tmp,
                 "--select", "E,W,F",
+                # Pure formatting (trailing/blank-line whitespace, final
+                # newline, line length) says nothing about correctness and
+                # used to fill all 5 issue slots, hiding e.g. F821.
+                "--ignore", "W291,W292,W293,W391,E501",
                 "--output-format", "json",
                 "--quiet",
             ],

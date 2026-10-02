@@ -98,3 +98,10 @@ class TestStripCommentsNode:
         result = strip_comments_node(state)
         assert result["iteration"]  == 3
         assert result["difficulty"] == "hard"
+
+
+
+def test_line_structure_is_preserved():
+    from nodes.cleaner import strip_comments
+    code = "def f(n):\n    # explain\n    total = 0  # running sum\n    return total\n"
+    assert strip_comments(code) == "def f(n):\n    total = 0\n    return total"

@@ -1,14 +1,16 @@
 # setup.md — Kurulum Rehberi
 
-Two environments are defined:
+> Son güncelleme: 2026-10-02.
 
-| Environment | Purpose | Hardware | ENV flag |
+| Ortam | Amaç | Donanım | Nasıl seçilir |
 |-------|------|---------|----------|
-| **local** | Debug, pipeline validation | Mac Mini M4 16GB | `ENV=local` |
-| **cloud** | Thesis benchmark | Vast.ai GPU ~30GB | `ENV=cloud` |
+| **openrouter** | Ana deney (sızıntısız) | Yok — API | `scripts/run_openrouter.sh` (`config/openrouter.env` + `.env.openrouter` anahtarı) |
+| **local** | ELECO bildirisi deneyi, geliştirme | Mac mini M4 16 GB | `ln -sf .env.local .env` |
+| **cloud** | İsteğe bağlı: yerel deneyin büyük bütçeli tekrarı | Kiralık GPU (Vast.ai) | `ln -sf .env.cloud .env` |
 
-Both environments follow the same installation sequence:
-`System tools → llama.cpp → Project + Python env → Model download → Server start → Verification`
+Ortak adımlar: Python ortamı (A5) her yol için gerekir. OpenRouter için ek kurulum yoktur:
+anahtar + `CLOUD_README.md` §A. Yerel yol: `Sistem araçları → llama.cpp → Proje → Model → Sunucu → Doğrulama`
+(A1–A9; tek komut: `bash scripts/local_setup.sh`).
 
 ---
 
@@ -79,8 +81,8 @@ cp build/bin/llama-* .
 
 ```bash
 cd ~
-git clone https://github.com/<kullanici>/llm-judge-refinement.git
-cd llm-judge-refinement
+git clone https://github.com/<kullanici>/llm-code-refinement.git
+cd llm-code-refinement
 
 # Python virtual environment
 python3.11 -m venv .venv
@@ -89,45 +91,38 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# lcb_runner — official LCB evaluation engine (not on PyPI, not in
-# requirements.txt). Without this, sandbox/lcb_eval.py silently falls back
-# to a basic subprocess evaluator and node2_lcb_available stays False —
-# confirmed happening on every local pilot run to date (see docs/node2.md).
-git clone https://github.com/LiveCodeBench/LiveCodeBench.git /tmp/LiveCodeBench
-pip install -e /tmp/LiveCodeBench
+# lcb_runner is NOT needed: every reported result uses the pinned local
+# LCB-compatible evaluator (LCB_EVALUATOR=local, sandbox/lcb_eval.py).
 
 # Verify
 python -c "import langgraph; print('LangGraph OK')"
 python -c "import radon, bandit, lizard; print('Metrics OK')"
-python -c "from lcb_runner.evaluation.utils_execute import check_correctness; print('lcb_runner OK')"
+python -m dataset.verify     # "Window 2025-01..2025-04: 182 problems"
+pytest -q                    # 272 passed, 1 skipped
 ```
 
 ### A6. Create .env.local
 
 ```bash
+# Exact contents used for the ELECO paper runs: docs/config.md §6
+# (or let scripts/local_setup.sh write a template).
 cat > .env.local << 'EOF'
-# ── Environment ───────────────────────────────────────────────────
 ENV=local
-
-# ── Single server — all roles go here ────────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
 LOCAL_CODEGEN_MODEL=qwen3.5-9b
 LOCAL_JUDGEMENT_MODEL=qwen3.5-9b
 LLAMA_API_KEY=local
-
-# ── Pipeline — keep short for debug ──────────────────────────────
-MAX_ITERATIONS=3
+PIPELINE_MODELS=M1
+JUDGE_MODEL=QWEN
+MAX_ITERATIONS=5
+TREND_EXTENSION_ENABLED=false
 SANDBOX_TIMEOUT_SEC=15
 SANDBOX_MEMORY_LIMIT_MB=256
 SANDBOX_FLAKINESS_RUNS=2
 SANDBOX_MAX_FAILED_CASES=3
-
-# ── LiveCodeBench ─────────────────────────────────────────────────
 LCB_SPLIT=test
-LCB_DIFFICULTY=easy
-LCB_SAMPLE_SIZE=5
-
-# ── Output ────────────────────────────────────────────────────────
+LCB_DIFFICULTY=all
+LCB_SAMPLE_SIZE=150
 OUTPUT_DIR=outputs/results
 MEMORY_LOG_PATH=outputs/memory.md
 PIPELINE_LOG_PATH=outputs/pipeline.log
@@ -205,321 +200,28 @@ print('Local mod: ', model_registry.is_local())       # True
 # Dataset verification
 python dataset/verify.py
 
-# Run pipeline (5 easy questions)
-ENV=local python main.py
+# Run pipeline on 2 problems
+MAX_PROBLEMS=2 python main.py
 ```
 
 ---
 
-## ORTAM B — Vast.ai GPU (Cloud)
+## ORTAM B — Kiralık GPU (isteğe bağlı)
 
-> **Güncel ve önerilen yol: `CLOUD_README.md`** (tek model, yargıç = M1, token bütçesi, paralel parçalar,
-> sonuçların Mac'te değerlendirilmesi). Aşağıdaki bölüm ilk üç modelli plan içindir. `lcb_runner`
-> kurulsa bile `LCB_EVALUATOR=local` varsayılanı yerel değerlendiriciyi kullanır.
-
-### B1. Vast.ai Instance Selection
-
-**Instance requirements** — Concurrent largest models: Qwen3.5-9B (M1, ~6 GB) + Qwen3.5-35B-A3B (judge, ~24 GB) ≈ 30 GB.
-A100 80GB is likely no longer required; may allow smaller/cheaper GPU tier. Re-verification with actual Vast.ai pricing is needed before finalizing specific tier recommendation:
-
-| Parameter | Minimum | Recommended |
-|-----------|---------|----------|
-| GPU VRAM | ~32 GB (likely allows smaller tier than A100 80GB) | 48–80 GB |
-| System RAM | 64 GB | 128 GB |
-| Disk | 300 GB | 500 GB |
-| CPU | 8 vCPU | 16 vCPU |
-| Network | 500 Mbps | 1 Gbps |
-
-**Filters in the Vast.ai interface:**
-
-```
-Disk Space:  ≥ 300 GB
-RAM:         ≥ 64 GB
-GPU RAM:     ≥ 80 GB
-Reliability: ≥ 0.95
-CUDA:        ≥ 12.1
-Image:       nvidia/cuda:12.1.0-base-ubuntu22.04
-```
-
-**Add SSH key:** Vast.ai → Account → SSH Keys → paste your local public key:
-
-```bash
-cat ~/.ssh/id_rsa.pub
-```
-
-### B2. SSH Connection
-
-```bash
-# Copy the SSH command from the Vast.ai console, example:
-ssh -p 12345 root@ssh6.vast.ai
-
-# First step: start tmux (session persists if connection drops)
-tmux new -s main
-# To reconnect: tmux attach -t main
-```
-
-### B3. Sistem Paketleri
-
-```bash
-apt-get update && apt-get install -y \
-    git \
-    curl \
-    wget \
-    htop \
-    tmux \
-    tree \
-    build-essential \
-    cmake \
-    ninja-build \
-    libssl-dev \
-    libffi-dev \
-    libcurl4-openssl-dev \
-    pciutils \
-    python3.11 \
-    python3.11-venv \
-    python3.11-dev \
-    python3-pip
-
-# Verify
-python3.11 --version   # Python 3.11.x
-cmake --version        # cmake 3.x.x
-nvidia-smi             # A100 görünmeli
-```
-
-### B4. llama.cpp — CUDA ile Derleme
-
-```bash
-cd /workspace
-
-git clone https://github.com/ggml-org/llama.cpp
-cd llama.cpp
-
-cmake -B build \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DGGML_CUDA=ON
-
-cmake --build build \
-    --config Release \
-    -j$(nproc) \
-    --clean-first \
-    --target llama-cli llama-server
-
-cp build/bin/llama-* .
-
-# Verify
-./llama-cli --version
-./llama-server --version
-```
-
-### B5. Proje Kurulumu
-
-```bash
-cd /workspace
-git clone git@github.com:msergenergen/llm-code-refinement.git
-cd llm-code-refinement
-
-# Python virtual environment
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# lcb_runner — official LCB evaluation engine (not on PyPI, not in
-# requirements.txt). Without this, sandbox/lcb_eval.py silently falls back
-# to a basic subprocess evaluator and node2_lcb_available stays False —
-# using the official grader for the final thesis results is a methodological
-# requirement (see docs/node2.md), so this step must not be skipped on cloud.
-git clone https://github.com/LiveCodeBench/LiveCodeBench.git /workspace/LiveCodeBench
-pip install -e /workspace/LiveCodeBench
-
-# Verify
-python -c "import langgraph; print('LangGraph OK')"
-python -c "import radon, bandit, lizard; print('Metrics OK')"
-python -c "import mypy, ruff; print('Linting OK')" 2>/dev/null || \
-    python -c "import subprocess, sys; subprocess.run([sys.executable, '-m', 'mypy', '--version']); print('mypy OK')"
-python -c "from lcb_runner.evaluation.utils_execute import check_correctness; print('lcb_runner OK')"
-```
-
-### B6. Create .env.cloud
-
-```bash
-cat > .env.cloud << 'EOF'
-# ── Environment ───────────────────────────────────────────────────
-ENV=cloud
-
-# ── Model server URLs ─────────────────────────────────────────────
-M1_BASE_URL=http://localhost:8001/v1
-M2_BASE_URL=http://localhost:8002/v1
-QWEN_BASE_URL=http://localhost:8004/v1
-LLAMA_API_KEY=local
-
-# ── Pipeline ──────────────────────────────────────────────────────
-MAX_ITERATIONS=10
-PIPELINE_MODELS=M1,M2
-SANDBOX_TIMEOUT_SEC=10
-SANDBOX_MEMORY_LIMIT_MB=512
-SANDBOX_FLAKINESS_RUNS=5
-SANDBOX_MAX_FAILED_CASES=5
-
-# ── LiveCodeBench ─────────────────────────────────────────────────
-LCB_SPLIT=test
-LCB_DIFFICULTY=all
-LCB_SAMPLE_SIZE=50
-
-# ── Output ────────────────────────────────────────────────────────
-OUTPUT_DIR=outputs/results
-MEMORY_LOG_PATH=outputs/memory.md
-PIPELINE_LOG_PATH=outputs/pipeline.log
-EOF
-
-# Symlink — .env always points to the active environment file
-ln -sf .env.cloud .env
-
-mkdir -p outputs/results
-
-# .gitignore — never commit env files
-grep -qxF '.env'       .gitignore 2>/dev/null || echo '.env'       >> .gitignore
-grep -qxF '.env.local' .gitignore 2>/dev/null || echo '.env.local' >> .gitignore
-grep -qxF '.env.cloud' .gitignore 2>/dev/null || echo '.env.cloud' >> .gitignore
-```
-
-### B7. Model Download
-
-`huggingface-cli` is installed inside the venv — activate it first.
-
-```bash
-source /workspace/llm-code-refinement/.venv/bin/activate
-
-mkdir -p /workspace/models
-cd /workspace/models
-```
-
-Download each model in a separate tmux window — takes time, can run in parallel:
-
-```bash
-# M1 — Qwen3.5-9B (~6 GB)
-tmux new-window -n "dl-m1"
-huggingface-cli download unsloth/Qwen3.5-9B-GGUF \
-    --include "*UD-Q4_K_XL*" \
-    --local-dir ./qwen3.5-9b
-
-# M2 — Qwen2.5-Coder-1.5B-Instruct (~1 GB)
-tmux new-window -n "dl-m2"
-huggingface-cli download unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF \
-    --include "*Q4_K_M*" \
-    --local-dir ./qwen2.5-coder-1.5b
-
-# Judgement — Qwen3.5-35B-A3B (~24 GB)
-tmux new-window -n "dl-qwen"
-huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
-    --include "*UD-Q4_K_XL*" \
-    --local-dir ./qwen3.5-35b
-```
-
-Verify after download completes:
-
-```bash
-du -sh /workspace/models/*/   # ~31 GB toplam
-ls /workspace/models/qwen3.5-9b/*.gguf
-ls /workspace/models/qwen2.5-coder-1.5b/*.gguf
-ls /workspace/models/qwen3.5-35b/*.gguf
-```
-
-> If the download is interrupted, run the same `huggingface-cli download` command to resume.
-
-### B8. Create scripts/start_model.sh
-
-The script is already in the repository — no need to recreate it on the cloud instance.
-Just make it executable after cloning:
-
-```bash
-chmod +x /workspace/llm-code-refinement/scripts/start_model.sh
-```
-
-Key behaviours built into the script:
-- Detects `ENV` from `.env` automatically (local vs cloud)
-- Uses `sort | head -1` to select only the first GGUF shard — Unsloth UD quants may be split across multiple files; llama.cpp discovers the remaining shards automatically
-- Prints the resolved model path before starting so you can verify which file was picked
-- Exits with a clear error if no `.gguf` file is found in the model directory
-
-### B9. Cloud Verification
-
-Verify in order — each step must be green before proceeding to the next:
-
-```bash
-cd /workspace/llm-code-refinement
-source .venv/bin/activate
-
-# 1. Python dependencies
-python -c "import langgraph, radon, bandit, lizard, openai; print('Deps OK')"
-
-# 2. Linting tools (mypy + ruff)
-python -m mypy --version && python -m ruff --version && echo 'Linting OK'
-
-# 3. ENV verification
-python -c "
-from config import settings, model_registry, thresholds
-assert settings.env == 'cloud', 'ENV hatalı!'
-assert model_registry.M1.model_name   == 'qwen3.5-9b',                'M1 model hatalı'
-assert model_registry.M2.model_name   == 'qwen2.5-coder-1.5b-instruct', 'M2 model hatalı'
-assert model_registry.QWEN.model_name == 'qwen3.5-35b-a3b',             'QWEN model hatalı'
-assert thresholds.node3.easy   == 80,  'easy threshold hatalı'
-assert thresholds.node3.medium == 70,  'medium threshold hatalı'
-assert thresholds.node3.hard   == 60,  'hard threshold hatalı'
-assert thresholds.node2.cpu_limit_ms == 2000.0, 'cpu_limit_ms hatalı'
-print('Config OK — ENV=cloud, modeller ve eşikler doğru')
-"
-
-# 4. Ablation variant smoke-test (graph builds without error)
-python -c "
-from pipeline.graph import build_graph
-for v in ('V1', 'V2', 'V3'):
-    build_graph(v)
-    print(f'  {v} graph OK')
-print('Ablation variants OK')
-"
-
-# 5. Dataset
-python dataset/verify.py
-
-# 6. Are model files present?
-for d in qwen3.5-9b qwen2.5-coder-1.5b qwen3.5-35b; do
-    count=$(ls /workspace/models/$d/*.gguf 2>/dev/null | wc -l)
-    echo "$d: $count GGUF files"
-done
-# Each line should show ≥ 1
-
-# 7. M1 server test (first start: run start_model.sh M1 in new tmux window)
-bash scripts/start_model.sh M1 &
-sleep 15   # server starts
-
-curl -s http://localhost:8001/v1/models | python -m json.tool
-curl -s http://localhost:8001/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -d '{"model":"qwen3.5-9b","messages":[{"role":"user","content":"print(42)"}],"max_tokens":30}' \
-    | python -c "import sys,json; r=json.load(sys.stdin); print('M1 OK:', r['choices'][0]['message']['content'][:50])"
-```
+Adım adım rehber: `CLOUD_README.md` §B (makine seçimi, CUDA ile llama.cpp, `.env.cloud`,
+model indirme, paralel parçalar, sonuçların Mac'te değerlendirilmesi). Tek komutluk kurulum:
+`bash scripts/cloud_setup.sh` (yalnızca Qwen3.5-9B'yi indirir; M2 ve ayrı yargıç için
+`MODELS_EXTRA=1`). Eski üç modelli plan (Qwen3.5-35B-A3B yargıç, M1 → M2 sırası) artık
+kullanılmıyor.
 
 ---
 
-## Development → Production Migration Order
+## Çalıştırma sırası
 
 ```
-1. ENV=local (Mac Mini)
-   5 easy questions → pipeline flow, gates, memory.md verified
-
-2. ENV=cloud, M1 only (Qwen3.5-9B)
-   5 questions → Vast.ai + llama.cpp setup verified
-
-3. ENV=cloud, M1 + M2
-   10 questions → full two-model codegen sequence verified
-
-4. ENV=cloud, tam pipeline (M1+M2+QWEN)
-   50 questions → thesis main benchmark
-
-5. Ablation
-   Single model / node disable variants
+1. pytest -q + python -m dataset.verify             (her ortam)
+2. OpenRouter: smoke → pilot 20 → baseline → run    (ana deney, CLOUD_README.md §A)
+3. Yerel: MAX_PROBLEMS=2 python main.py → tam koşu  (ek düzen)
 ```
 
 ---
@@ -527,7 +229,7 @@ curl -s http://localhost:8001/v1/chat/completions \
 ## Dikkat Edilecekler
 
 **For both environments:**
-- The `.env` file must not be committed to `git` — add it to `.gitignore`
+- `.env*` files (except `.env.openrouter.example`) must not be committed — they are in `.gitignore`
 - Copy the `outputs/` directory to your local machine regularly
 
 **Local (Mac Mini):**
@@ -538,4 +240,11 @@ curl -s http://localhost:8001/v1/chat/completions \
 - **Stop** the instance when not in use — billed hourly
 - Instance may freeze when disk is full: monitor with `df -h`
 - If download is interrupted, the same `huggingface-cli download` command resumes it
-- `QWEN_BASE_URL` points to the judgement model — must not be the same port as the M1 server
+- With `JUDGE_MODEL=M1` the judge uses the M1 server; set `QWEN_BASE_URL` only for a separate judge server
+
+**OpenRouter:**
+- The key lives only in `.env.openrouter`; never paste it into chats or commit it
+- `scripts/run_openrouter.sh status` shows spend against `API_BUDGET_USD`
+- `LOG_TAG=_x scripts/run_openrouter.sh run` gives new runs distinct log names while older runs are still writing theirs
+- `scripts/run_openrouter.sh judge-replay MODEL PROVIDER NAME --run-ids …` re-judges the recorded public-passing attempts with another judge, without generating code (`docs/analysis.md` §11)
+- Optional Langfuse tracing: add `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` (and `LANGFUSE_BASE_URL`) to `.env.openrouter`; check with `scripts/run_openrouter.sh langfuse-check` (`langfuse` is in `requirements.txt`)

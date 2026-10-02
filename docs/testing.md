@@ -1,5 +1,31 @@
 # testing.md — Test Stratejisi
 
+> **Güncel envanter (2026-10-02).** `pytest -q` → **272 passed, 1 skipped**. Aşağıdaki bölümlerdeki
+> test kopyaları açıklama amaçlıdır ve bazıları eskidir; doğru kaynak `tests/` dizinidir.
+
+| Dosya | Test | Kapsam |
+|---|---|---|
+| `test_tracing.py` | 5 | Langfuse: anahtarsız kapalı, gerçek SDK + bellek içi dışa aktarıcıyla üretim düğümü (model, token, maliyet, oturum), deterministik iz kimliği, hatalı çağrının ERROR kaydı, skorlar ve gizli test yüklemesi, izleme hatasının koşuyu bozmaması |
+| `test_api_client.py` | 17 | `models/client.chat()` (akış, gerekçe yedeği, maliyet defteri, bütçe sınırı, yeniden deneme), üretici/yargıç örnekleme ayarları (DeepSeek-V3 top_p gönderilmez; Qwen2.5-72B generation_config), sağlayıcı ikilisi kontrolü, pass@k / filt@k, geri bildirimde kod sızıntısı, gizli notlamada ilk hatada durma, yargıç isteminde metriklerin kanıt olarak sunulması, aynı run_id paylaşan taban/hat maliyetlerinin ayrılması, `--compare` eşleştirmesi, `--latex` makro ve çizelge çıktısı |
+| `test_judge_replay.py` | 6 | Çevrimdışı yargıç tekrarı: açık testleri geçen ve gizli sonucu bilinen denemelerin seçimi, istemin hattaki yargıç istemiyle aynı kurulması, kararsız yanıtın rubrik yedeğiyle KABUL sayılması, kabul isabeti, McNemar yönü, tam koşu süre tahmini |
+| `test_judgement.py` | 38 | Yargıç: ayrıştırma, yedek yönerge, verdict kuralları, `BudgetExceeded` yutulmaz |
+| `test_gates.py` | 33 | severity / iteration gate, trend uzatması |
+| `test_scoring.py` | 27 | 100 puanlık rubrik |
+| `test_metrics.py` | 28 | CC, MI, Halstead, Bandit, severity, import whitelist |
+| `test_prompts.py` | 19 | Dört katmanlı üretim istemi; onarımda önceki çözümün gösterilmesi (`FEEDBACK_INCLUDE_CODE`, açık/kapalı) |
+| `test_dataset.py` | 15 | HTML temizleme, biçimleme, tarih penceresi |
+| `test_cleaner.py` | 13 | Yorum temizleme |
+| `test_lcb_eval.py` | 12 | Yerel LCB uyumlu değerlendirici |
+| `test_graph.py` | 11 | Graf kurulumu (V1/V2/V3) |
+| `test_edge_cases.py` | 11 | Kural tabanlı uç durumlar |
+| `test_logger.py` | 9 | memory.md, iterasyon JSON (run_id'li adlar) |
+| `test_router.py` | 7 | Sıralı model yönlendirici |
+| `test_baseline.py` | 6 | `benchmark/legacy/baseline.py` kod çıkarma (eski) |
+| `test_nodes.py` | 6 | Düğüm durum dönüşümleri |
+| `test_runtime.py` | 6 | Çalışma zamanı ölçümü |
+
+Ağ bağlantısı gerektiren test yoktur; ücretli API çağrıları sahte istemciyle sınanır.
+
 ## 1. Test Layers
 
 | Layer | What Is Tested | Tool | When |
@@ -1276,7 +1302,7 @@ These checks must pass before the full benchmark.
 ENV=cloud LCB_SAMPLE_SIZE=5 LCB_DIFFICULTY=easy \
     python -m benchmark.evaluator --variant V4 --tag pilot_step1
 
-# Step 2: M1 + M3 (excluding Qwen3-Coder-Next), 10 questions
+# Step 2 (eski plan): ikinci üretici modelle 10 soru — güncel sıra: CLOUD_README.md §A
 # Temporarily set M2 equal to M3 in config/models.py, then revert
 ENV=cloud LCB_SAMPLE_SIZE=10 \
     python -m benchmark.evaluator --variant V4 --tag pilot_step2
@@ -1370,7 +1396,7 @@ if pass_iters:
 
 ```python
 """
-Unit testler: benchmark/baseline.py
+Unit testler: benchmark/legacy/baseline.py (eski V0 çalıştırıcısı)
 _extract_code() — kod extraction doğruluğu.
 lcb_runner bağlantısı gerektirmez.
 """

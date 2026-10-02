@@ -1,12 +1,13 @@
 """
 Pipeline entry point.
-Runs M1 → M2 → M3 sequentially for each LCB problem.
+Runs the generators in PIPELINE_MODELS (default: M1 only) for each LCB problem.
 """
 import os
 
 from dotenv import load_dotenv
 from loguru import logger
 
+from models import tracing
 from pipeline.graph   import build_graph
 from pipeline.state   import PipelineState
 from config           import settings
@@ -35,7 +36,7 @@ _EMPTY_TOKENS = {
 
 def run_pipeline_for_problem(problem_row: dict, run_id: str) -> dict:
     """
-    Runs the full M1→M2→M3 pipeline for a single LCB problem.
+    Runs the pipeline for a single LCB problem, once per generator in PIPELINE_MODELS.
     Each model gets its own LangGraph invocation with a fresh initial state.
 
     Returns a summary dict with per-model status and score.
@@ -113,7 +114,10 @@ def run_pipeline_for_problem(problem_row: dict, run_id: str) -> dict:
             "final_status": "PENDING",
         }
 
-        final_state = graph.invoke(initial_state)
+        with tracing.problem_trace(run_id, question_id, model_id, difficulty,
+                                   judge_decision=settings.judge_decision,
+                                   feedback_include_code=settings.feedback_include_code):
+            final_state = graph.invoke(initial_state)
         status      = final_state["final_status"]
         score       = final_state.get("node3_total_score", 0.0)
 
@@ -140,6 +144,8 @@ def main():
         split=settings.lcb_split,
         difficulty=settings.lcb_difficulty,
         sample_size=settings.lcb_sample_size,
+        date_from=settings.lcb_date_from,
+        date_to=settings.lcb_date_to,
     )
     logger.info(f"{len(rows)} problems loaded.")
 
@@ -184,6 +190,7 @@ def main():
     total_runs = sum(status_counts.values())
     avg_score  = round(sum(scores) / len(scores), 1) if scores else 0.0
 
+    tracing.flush()
     logger.info("─" * 42)
     logger.info("Pipeline complete.")
     logger.info(f"  Problems  : {len(all_results)}")

@@ -1,5 +1,7 @@
 # future-work.md — Future Work Directions
 
+> **Durum (2026-10-02): plan.** Model adları eski seti anabilir (M3, gpt-oss-20b, Qwen3.5-35B yargıç). Güncel düzenler: ana deney DeepSeek-V3 + Qwen2.5-72B (OpenRouter), ek düzen Qwen3.5-9B. T1 (küçük model) için M2 = Qwen2.5-Coder-1.5B hâlâ kayıt defterinde, koşulmadı.
+
 ## Overview
 
 This document outlines future research directions that extend the current thesis work.

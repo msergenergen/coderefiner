@@ -8,10 +8,10 @@ class PipelineState(TypedDict):
 
     # ── Run and routing ────────────────────────────────────────────────
     run_id:         str          # Set in main.py by write_run_info()
-    active_model:   Literal["M1", "M2", "M3"]
+    active_model:   Literal["M1", "M2"]
     variant:        Literal["V1", "V2", "V3"]  # Ablation variant
     iteration:      int
-    max_iterations: int          # Fixed: 10
+    max_iterations: int          # settings.max_iterations (default 5)
 
     # ── Input ─────────────────────────────────────────────────────────
     problem:        str          # LCB problem text (format_problem output)

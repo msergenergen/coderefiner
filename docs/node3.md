@@ -10,7 +10,7 @@ write a **fully self-contained** improved system prompt for the next iteration.
 
 | Decision | Rationale |
 |-------|---------|
-| Judgement model = Judge (independent of M1/M2/M3) | Reduces self-enhancement bias risk [Zheng et al., 2023] |
+| Judge independent of the generator (main experiment: different model family) | Reduces self-enhancement bias risk [Zheng et al., 2023]; the local runs used the same model, a stated limitation |
 | `improved_prompt` is **completely rewritten** every iteration | Accumulated prompts produce contradictory instructions (semantic drift) |
 | Threshold table is **embedded** in the judgement prompt | So the Judge understands why `mi=48` is poor |
 | Failing test cases (input/expected/got) are **included verbatim** | Answers "why did it fail?" far better than numeric metrics alone |
@@ -40,19 +40,22 @@ desyncing from the threshold table shown to the Judge (`judgement_context_table(
 
 ```python
 """
-100 puanlık rubric hesaplama — sayısal boyutlar.
-Algorithm Choice (10p) ve Error Handling (10p) Judge modeli tarafından doldurulur.
+100-point rubric computation — numeric dimensions.
+Algorithm Choice (10p) and Error Handling (10p) are filled by the Judge model.
 """
 from config import thresholds
 
 
 def compute_accuracy_score(pass_rate: float) -> float:
-    """Doğruluk skoru: 0–25 puan."""
+    """Accuracy score: 0–25 points."""
     return round(pass_rate * 25, 2)
 
 
 def compute_efficiency_score(cpu_ms: float, ram_mb: float) -> float:
-    """Verimlilik skoru: 0–20 puan."""
+    """Efficiency score: 0–20 points.
+    Limits sourced from config.thresholds.node2 (cpu_limit_ms, ram_limit_mb)
+    so this formula can't silently desync from the threshold table shown to the judge.
+    """
     n2 = thresholds.node2
     cpu_score = max(0.0, 1 - cpu_ms / n2.cpu_limit_ms)
     ram_score = max(0.0, 1 - ram_mb / n2.ram_limit_mb)
@@ -60,14 +63,14 @@ def compute_efficiency_score(cpu_ms: float, ram_mb: float) -> float:
 
 
 def compute_quality_score(mi: float, cc: float) -> float:
-    """Kod kalitesi skoru: 0–20 puan."""
+    """Code quality score: 0–20 points."""
     mi_score = min(1.0, mi / 100)
     cc_score = max(0.0, 1 - cc / thresholds.node1.cc_hard_limit)
     return round((mi_score + cc_score) / 2 * 20, 2)
 
 
 def compute_security_score(high_count: int, medium_count: int) -> float:
-    """Güvenlik skoru: 0–15 puan."""
+    """Security score: 0–15 points."""
     score = 15 - (high_count * 15) - (medium_count * 3)
     return round(max(0.0, float(score)), 2)
 
@@ -80,9 +83,18 @@ def compute_numeric_scores(
     cc: float,
     bandit_high: bool,
     bandit_medium_count: int = 0,
+    executed: bool = True,
+    parsed: bool = True,
 ) -> dict:
     """
-    Sayısal olarak hesaplanabilen 4 boyutu hesaplar.
+    Computes the 4 numerically calculable dimensions.
+
+    A dimension that could not be measured scores 0, not full marks:
+      executed=False (sandbox skipped) → efficiency 0, since cpu_ms/ram_mb
+        are 0 only because nothing ran;
+      parsed=False (SyntaxError) → quality and security 0, since radon and
+        bandit fail on unparseable code and their fallbacks (MI=100, CC=0,
+        no findings) would otherwise award the maximum.
 
     Returns:
         {
@@ -94,12 +106,12 @@ def compute_numeric_scores(
         }
     """
     acc  = compute_accuracy_score(pass_rate)
-    eff  = compute_efficiency_score(cpu_ms, ram_mb)
-    qual = compute_quality_score(mi, cc)
+    eff  = compute_efficiency_score(cpu_ms, ram_mb) if executed else 0.0
+    qual = compute_quality_score(mi, cc) if parsed else 0.0
     sec  = compute_security_score(
         high_count=1 if bandit_high else 0,
         medium_count=bandit_medium_count,
-    )
+    ) if parsed else 0.0
     return {
         "accuracy":      acc,
         "efficiency":    eff,
@@ -117,53 +129,91 @@ def compute_numeric_scores(
 """
 LangGraph Node 3: Judgement LLM (Judge)
 
-Kritik tasarım kararları:
-  1. Her iterasyonda improved_prompt TAMAMEN YENİDEN YAZILIR — birikim yok.
-  2. Threshold tablosu system prompt'a gömülü.
-  3. Başarısız test case'ler (input/expected/got) prompt'a eklenir.
-  4. Judge modeli (QWEN) kod üreten modellerden (M1/M2/M3) bağımsız.
+Critical design decisions:
+  1. improved_prompt is COMPLETELY REWRITTEN every iteration — no accumulation.
+  2. Threshold table is embedded in the system prompt.
+  3. Failing test cases (input/expected/got) are included verbatim in the prompt.
+  4. Judgement model (Judge) is independent of the code generation models (M1/M2).
 """
+import ast
 import json
 import re
+import time
+from loguru import logger
 from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
-from models.client import generate
+from models.budget import BudgetExceeded
+from models.client import chat
+from config import model_registry, settings, thresholds
 
-JUDGEMENT_MODEL = "QWEN"
+# ── Rule-based fix hints for common static analysis issues ───────────────────
+# Each entry: (compiled regex, fix string or callable(match) -> str)
+_ISSUE_HINTS: list[tuple] = [
+    # mypy: undefined name from typing (e.g. List, Dict, Tuple, Optional)
+    (re.compile(r'Name "([A-Za-z]+)" is not defined'),
+     lambda m: f'Add `from typing import {m.group(1)}` as the first import line'),
+    # mypy: operand with None — uninitialized variable
+    (re.compile(r'Unsupported operand types.*None'),
+     lambda _: 'Initialize the variable to 0 or an empty collection before the loop, not None'),
+    # ruff F821 — same root as mypy name-defined
+    (re.compile(r'\[F821\].*Undefined name `([A-Za-z]+)`'),
+     lambda m: f'Add `from typing import {m.group(1)}` — `{m.group(1)}` is not a builtin in Python 3.9+'),
+    # ruff W293 — trailing whitespace on blank lines
+    (re.compile(r'\[W293\]'),
+     lambda _: 'Remove trailing whitespace from blank lines (run: sed -i "s/[[:space:]]*$//" your_file.py)'),
+    # ruff E501 — line too long
+    (re.compile(r'\[E501\].*[Ll]ine too long \((\d+)'),
+     lambda m: f'Line is {m.group(1)} chars — break it into two lines (max 88)'),
+    # ruff E302/E303 — missing blank lines
+    (re.compile(r'\[E30[23]\]'),
+     lambda _: 'Add the required blank lines between top-level definitions'),
+    # mypy return type mismatch
+    (re.compile(r'Incompatible return value type'),
+     lambda _: 'Return type does not match the annotation — check your return statement'),
+]
 
-# ── Threshold table — embedded context for the Judge model ──────────────────
-_THRESHOLD_CONTEXT = """
-## Metric Threshold Reference
 
-| Metric | Good | Acceptable | Poor |
-|--------|------|------------|------|
-| Cyclomatic Complexity (CC) | ≤ 5 | 6–10 | > 10 |
-| Maintainability Index (MI) | ≥ 85 | 65–85 | < 65 |
-| Halstead Volume | ≤ 500 | 500–1000 | > 1000 |
-| Test Pass Rate | ≥ 0.90 | 0.70–0.90 | < 0.70 |
-| Peak Memory | ≤ 256 MB | 256–512 MB | > 512 MB |
-| CPU Time | ≤ 2 s | 2–5 s | > 5 s |
+def _hint_for_issue(issue: str) -> str | None:
+    """Returns a concrete fix suggestion for a known issue pattern, or None."""
+    for pattern, fix in _ISSUE_HINTS:
+        m = pattern.search(issue)
+        if m:
+            return fix(m) if callable(fix) else fix
+    return None
 
-Bandit HIGH severity: zero tolerance — any finding is critical.
-MI < 65 means the code is hard to maintain and likely poorly structured.
-CC > 10 means the function has too many branches and is hard to test.
-"""
+# Configurable via .env: JUDGE_MODEL=QWEN (default)
+# Change to any registry key (M1/M2/QWEN) to swap the judge.
+JUDGEMENT_MODEL: str = settings.judge_model
 
 JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
 
 You evaluate Python solutions to competitive programming problems using static analysis
 results (Node 1) and sandbox execution results (Node 2).
 
-{_THRESHOLD_CONTEXT}
+{thresholds.judgement_context_table()}
 
 Your task:
 1. Assign "algorithm_choice" (0–10): Did the model choose an appropriate algorithm for the problem?
    - 0–3: Wrong approach (e.g. brute force where DP is required, O(n²) where O(n) exists)
-   - 4–6: Correct approach but suboptimal
+   - 4–6: Correct approach but suboptimal (unnecessary complexity, missed edge cases in design)
    - 7–10: Appropriate algorithm, well-suited to constraints and input size
 2. Assign "error_handling" (0–10): Does the code handle exceptions and edge cases?
 3. List specific "failure_reasons" — reference actual metric values and failing test cases
 4. Write a NEW, COMPLETE "improved_system_prompt" that replaces the previous one entirely.
+5. Decide the "verdict": "ACCEPT" or "REJECT". You are the final authority on whether
+   this solution is delivered; the pipeline stops on ACCEPT and asks for a new attempt on REJECT.
+   - The test results and metrics above are measured facts. Use them as evidence and never
+     contradict them (do not claim a passing test fails or vice versa).
+   - If any visible test failed or the code did not run, the verdict MUST be REJECT.
+   - If all visible tests passed, ACCEPT unless you can name a concrete defect the visible
+     tests do not cover: an input allowed by the stated constraints on which the code returns
+     a wrong answer or crashes (empty / minimum / maximum sizes, duplicates, boundary values,
+     special cases in the statement), or a time complexity that cannot meet the constraints.
+   - Style, readability or metric scores alone are NOT grounds for REJECT.
+   - "verdict_reason": one or two sentences. A REJECT must name the specific input or
+     constraint; an ACCEPT should state why the visible evidence is sufficient.
+   - On REJECT after all visible tests passed, the improved_system_prompt must describe the
+     defect and the input that exposes it.
 
 Rules for improved_system_prompt:
   - It must be SELF-CONTAINED: assume the model has seen NO previous instructions
@@ -171,6 +221,9 @@ Rules for improved_system_prompt:
   - Reference SPECIFIC metric violations: "CC is 14, reduce branching in the main loop"
   - Include at least 3 concrete, actionable instructions
   - Do NOT reference "previous attempts" or "last iteration"
+  - Do NOT write code or pseudo-code (no code blocks, no function bodies, no
+    line-by-line algorithm). Describe defects and required changes in words;
+    you may name a technique or a target complexity.
   - End with: "Output only Python code inside ```python ... ``` markers."
 
 Respond ONLY with valid JSON. No text outside the JSON object.
@@ -180,19 +233,23 @@ Schema:
   "algorithm_choice": <int 0-10>,
   "error_handling": <int 0-10>,
   "failure_reasons": ["<specific reason>", ...],
-  "improved_system_prompt": "<complete self-contained instructions>"
+  "improved_system_prompt": "<complete self-contained instructions>",
+  "verdict": "ACCEPT" | "REJECT",
+  "verdict_reason": "<one or two sentences>"
 }}"""
 
 
 def judgement_node(state: PipelineState) -> PipelineState:
     """
-    Node 3: Metrikleri ve başarısız test case'leri değerlendirir.
+    Node 3: Evaluates metrics and failing test cases.
 
-    Giriş  (state'ten okur): node1_*, node2_*, stripped_code, problem
-                              (generated_code değil — yorumlar kaldırılmış versiyon)
-    Çıktı  (state'e yazar):  node3_total_score, node3_pass,
-                              node3_failure_reasons, node3_improved_prompt
+    Reads from state: node1_*, node2_*, stripped_code, problem
+                      (not generated_code — comment-stripped version)
+    Writes to state:  node3_total_score, node3_pass,
+                      node3_failure_reasons, node3_improved_prompt
     """
+    t0 = time.perf_counter()
+
     numeric = compute_numeric_scores(
         pass_rate=state.get("node2_pass_rate", 0.0),
         cpu_ms=state.get("node2_cpu_ms", 0.0),
@@ -200,16 +257,23 @@ def judgement_node(state: PipelineState) -> PipelineState:
         mi=state.get("node1_mi", 100.0),
         cc=state.get("node1_cc", 0.0),
         bandit_high=state.get("node1_bandit_high", False),
+        bandit_medium_count=state.get("node1_bandit_medium_count", 0),
+        executed=state.get("node2_total_count", 0) > 0,
+        parsed=_parses(state.get("generated_code", "")),
     )
 
     llm_scores = _get_llm_judgement(
         numeric_scores=numeric,
-        code=state["stripped_code"],   # comments stripped — prevents bias
+        code=state.get("stripped_code", state.get("generated_code", "")),
         problem=state["problem"],
         node1_issues=state.get("node1_issues", []),
         failed_cases=state.get("node2_failed_cases", []),
+        halstead=state.get("node1_halstead", 0.0),
+        timed_out=state.get("node2_timed_out", False),
         difficulty=state["difficulty"],
         iteration=state["iteration"],
+        question_id=state.get("question_id", "?"),
+        run_id=state.get("run_id"),
     )
 
     total = round(
@@ -221,24 +285,92 @@ def judgement_node(state: PipelineState) -> PipelineState:
 
     from pipeline.gates import PASS_THRESHOLDS
     threshold = PASS_THRESHOLDS[state["difficulty"]]
-    # Hard gate: every public (visible) test must pass; the rubric total only
-    # decides among solutions that clear it. (Earlier versions required only
-    # accuracy > 0, which accepted code failing some visible tests.)
-    all_public_passed = (state.get("node2_total_count", 0) > 0
-                         and state.get("node2_pass_rate", 0.0) >= 1.0)
-    passed = total >= threshold and all_public_passed
+    passed, verdict_source = _decide_pass(
+        state, total=total, threshold=threshold, verdict=llm_scores.get("verdict", ""))
+
+    node3_ms = int((time.perf_counter() - t0) * 1000)
+    timing = dict(state.get("timing", {}))
+    timing["node3_ms"] = node3_ms
+    timing["total_ms"] = sum(
+        timing.get(k, 0)
+        for k in ("codegen_ms", "node1_ms", "node2_ms", "node3_ms")
+    )
+
+    # Write judgement token counts to state
+    tokens = dict(state.get("tokens", {}))
+    tokens["judgement_prompt"]     = llm_scores.pop("_judgement_prompt_tokens",     0)
+    tokens["judgement_completion"] = llm_scores.pop("_judgement_completion_tokens", 0)
+    tokens["total"] = (
+        tokens.get("codegen_prompt", 0)
+        + tokens.get("codegen_completion", 0)
+        + tokens["judgement_prompt"]
+        + tokens["judgement_completion"]
+    )
+
+    # Build score breakdown for logging
+    score_breakdown = {
+        "accuracy":         numeric["accuracy"],
+        "efficiency":       numeric["efficiency"],
+        "quality":          numeric["quality"],
+        "security":         numeric["security"],
+        "algorithm_choice": llm_scores["algorithm_choice"],
+        "error_handling":   llm_scores["error_handling"],
+    }
+
+    # Cap improved_prompt to prevent codegen context window growth over iterations.
+    # Judge max_tokens=1024 can produce ~800 tokens (~3200 chars) per iteration;
+    # without a cap this compounds and inflates codegen prompt tokens on every loop.
+    _MAX_IMPROVED_PROMPT_CHARS = 2000
+    improved_prompt = llm_scores["improved_system_prompt"]
+    if len(improved_prompt) > _MAX_IMPROVED_PROMPT_CHARS:
+        improved_prompt = improved_prompt[:_MAX_IMPROVED_PROMPT_CHARS]
 
     return {
         **state,
         "node3_total_score":      total,
         "node3_pass":             passed,
+        "node3_score_breakdown":  score_breakdown,
         "node3_failure_reasons":  llm_scores["failure_reasons"],
         # Completely rewritten — previous prompt is not inherited
-        "node3_improved_prompt":  llm_scores["improved_system_prompt"],
+        "node3_improved_prompt":  improved_prompt,
+        "node3_verdict":          llm_scores.get("verdict", ""),
+        "node3_verdict_reason":   llm_scores.get("verdict_reason", ""),
+        "node3_verdict_source":   verdict_source,
+        "timing":                 timing,
+        "tokens":                 tokens,
     }
 
 
-# ── Prompt construction ─────────────────────────────────────────────────────
+def _public_precondition(state: PipelineState) -> bool:
+    """Deterministic guard against hallucinated acceptance: every public test
+    must have passed. Variant V2 (no execution) has no test evidence, so the
+    guard does not apply there. Partial pass rates used to clear the rubric
+    threshold on quality/security/judge points alone, stopping the loop on
+    code already known to be wrong."""
+    if state.get("variant", "V3") == "V2":
+        return True
+    return (state.get("node2_total_count", 0) > 0
+            and state.get("node2_pass_rate", 0.0) >= 1.0)
+
+
+def _decide_pass(state: PipelineState, total: float, threshold: float,
+                 verdict: str) -> tuple[bool, str]:
+    """Returns (passed, verdict_source).
+
+    verdict mode: public-test precondition AND the judge's ACCEPT; if the judge
+                  gave no usable verdict (LLM error / unparseable JSON), fall
+                  back to the rubric threshold so the run never stalls.
+    rubric mode:  public-test precondition AND rubric total >= threshold.
+    """
+    precondition = _public_precondition(state)
+    if settings.judge_decision == "rubric":
+        return precondition and total >= threshold, "rubric_mode"
+    if verdict in ("ACCEPT", "REJECT"):
+        return precondition and verdict == "ACCEPT", "judge"
+    return precondition and total >= threshold, "fallback_rubric"
+
+
+# ── Prompt construction ───────────────────────────────────────────────────────
 
 def _get_llm_judgement(
     numeric_scores: dict,
@@ -250,6 +382,8 @@ def _get_llm_judgement(
     timed_out: bool,
     difficulty: str,
     iteration: int,
+    question_id: str = "?",
+    run_id: str | None = None,
 ) -> dict:
     user_prompt = _build_judgement_prompt(
         numeric_scores=numeric_scores,
@@ -264,43 +398,38 @@ def _get_llm_judgement(
     )
 
     try:
-        cfg    = model_registry.get(JUDGEMENT_MODEL)
-        client = get_client(JUDGEMENT_MODEL)
-
-        response = client.chat.completions.create(
-            model=cfg.model_name,
-            messages=[
+        res = chat(
+            JUDGEMENT_MODEL,
+            [
                 {"role": "system", "content": JUDGEMENT_SYSTEM_PROMPT},
                 {"role": "user",   "content": user_prompt},
             ],
-            temperature=cfg.temperature,
-            max_tokens=4096,
+            max_tokens=settings.judge_max_tokens,
+            tag={"question_id": question_id, "iteration": iteration, "run_id": run_id},
         )
-        message = response.choices[0].message
-        # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a
-        # separate reasoning_content field and can leave `content` empty
-        # if max_tokens is exhausted during "thinking" — fall back to
-        # reasoning_content so _parse_judgement has something to work with.
-        raw = message.content or getattr(message, "reasoning_content", None) or ""
-        result = _parse_judgement(raw)
+        # Reasoning models can leave `content` empty if max_tokens is
+        # exhausted during "thinking" — chat() then returns the reasoning
+        # so _parse_judgement has something to work with.
+        result = _parse_judgement(res.text)
 
-        if hasattr(response, "usage") and response.usage:
-            result["_judgement_prompt_tokens"]     = response.usage.prompt_tokens
-            result["_judgement_completion_tokens"] = response.usage.completion_tokens
-        else:
-            result.setdefault("_judgement_prompt_tokens",     0)
-            result.setdefault("_judgement_completion_tokens", 0)
+        # Store token counts so judgement_node can write them to state
+        result["_judgement_prompt_tokens"]     = res.prompt_tokens
+        result["_judgement_completion_tokens"] = res.completion_tokens
 
         return result
 
+    except BudgetExceeded:
+        raise   # spending cap reached: stop the run, never fake a verdict
     except Exception as e:
-        # 2026-09-30: this used to swallow the exception silently. A scan of
-        # the pilot run found 5/30 iterations (~17%, all with 0 token usage
-        # recorded — i.e. the request itself failed, not JSON parsing) hit
-        # this fallback, which hardcodes algorithm_choice/error_handling to
-        # the scale midpoint. Now logged via loguru so the cause (context
-        # overflow, connection error, etc.) is diagnosable instead of only
-        # visible as an opaque "judgement_llm_error" in the output JSON.
+        # LLM error → do not stop pipeline, use rule-based fallback.
+        # Logged (not silently swallowed) because this fallback hardcodes
+        # algorithm_choice/error_handling to the scale midpoint (5/10) — if it
+        # fires often for a specific problem, that problem's score is a rule-
+        # based approximation, not a real judge verdict. A prior scan found
+        # this fired on 5/30 pilot iterations (~17%), all with 0 token usage
+        # recorded — i.e. the request itself failed (e.g. context overflow
+        # or connection error), not a JSON-parsing failure — and the previous
+        # bare `except Exception:` gave no way to tell which.
         logger.warning(
             "Judge LLM call failed — using rule-based fallback | "
             "question_id={} model={} iter={} difficulty={} | {}: {}",
@@ -340,11 +469,11 @@ def _build_judgement_prompt(
 
     lines = [
         f"## Iteration {iteration} | Difficulty: {difficulty.upper()}",
-        f"> Pass rate target for {difficulty.upper()}: ≥ {_pr_target:.0%} is Good. "
-        f"Current pass rate: {pass_rate:.0%}",
+        f"> Visible tests passed: {pass_rate:.0%}. ACCEPT requires 100% "
+        f"(rubric 'Good' band for {difficulty.upper()}: ≥ {_pr_target:.0%}, scoring only).",
         "",
         "## Problem",
-        problem[:800],
+        _problem_excerpt(problem),
         "",
         "## Generated Code",
         "```python",
@@ -357,9 +486,14 @@ def _build_judgement_prompt(
     ]
 
     if node1_issues:
-        lines.append("- Issues:")
+        lines.append("- Quality findings (evidence; not grounds for REJECT on their own):")
+        seen_hints: set[str] = set()
         for issue in node1_issues:
             lines.append(f"  • {issue}")
+            hint = _hint_for_issue(issue)
+            if hint and hint not in seen_hints:
+                lines.append(f"    → Fix: {hint}")
+                seen_hints.add(hint)
     else:
         lines.append("- No issues detected.")
 
@@ -377,11 +511,15 @@ def _build_judgement_prompt(
     if failed_cases:
         lines += ["", "## Failing Test Cases (up to 5)"]
         for i, case in enumerate(failed_cases, 1):
+            # LCB stress-test inputs can be thousands of characters; untrimmed,
+            # a single case pushed the judge prompt past the 8192-token server
+            # context (observed: 9935 tokens on problem 3620 → HTTP 400 →
+            # rule-based fallback instead of a real judgement).
             lines += [
                 f"\nCase {i}:",
-                f"  Input:    {case['input']}",
-                f"  Expected: {case['expected']}",
-                f"  Got:      {case['got'] or '(no output)'}",
+                f"  Input:    {_clip(case['input'])}",
+                f"  Expected: {_clip(case['expected'])}",
+                f"  Got:      {_clip(case['got']) or '(no output)'}",
             ]
             if case.get("error"):
                 lines.append(f"  Error:    {case['error'][:200]}")
@@ -391,11 +529,51 @@ def _build_judgement_prompt(
     lines += [
         "",
         "Evaluate algorithm_choice (0–10) and error_handling (0–10).",
-        "Write a NEW, COMPLETE improved_system_prompt addressing the specific issues above.",
+        "Write a NEW, COMPLETE improved_system_prompt. Correctness comes first: failing tests,",
+        "and any input on which the code would be wrong, crash or too slow. Quality findings",
+        "come after that, briefly; do not ask for type annotations or renaming.",
+    ]
+    if failed_cases or pass_rate < 1.0:
+        lines.append("Visible tests failed, so the verdict must be REJECT.")
+    else:
+        lines.append(
+            "All visible tests passed. REJECT only if you can name a concrete input allowed by "
+            "the constraints on which this code is wrong or crashes, or a time complexity that "
+            "cannot meet the constraints; quality findings alone mean ACCEPT."
+        )
+    lines += [
+        "Give your verdict (ACCEPT / REJECT) with verdict_reason, following the rules.",
         "Respond with JSON only.",
     ]
 
     return "\n".join(lines)
+
+
+def _problem_excerpt(problem: str, head: int = 800, tail: int = 700) -> str:
+    """The judge needs the constraints to assess complexity and edge cases, but
+    LCB statements put them at the end. Keep the head and the constraints
+    section instead of a plain 800-char cut (8192-token context)."""
+    if len(problem) <= head + tail:
+        return problem
+    idx = problem.lower().rfind("constraints")
+    if idx == -1 or idx < head:
+        return problem[:head + tail]
+    return problem[:head] + "\n[...]\n" + problem[idx:idx + tail]
+
+
+def _parses(code: str) -> bool:
+    try:
+        ast.parse(code)
+        return True
+    except (SyntaxError, ValueError):
+        return False
+
+
+def _clip(value, limit: int = 200) -> str:
+    text = str(value) if value is not None else ""
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}… [{len(text) - limit} more chars truncated]"
 
 
 def _fallback_prompt(
@@ -404,8 +582,8 @@ def _fallback_prompt(
     timed_out: bool = False,
 ) -> str:
     """
-    LLM hatası durumunda kural tabanlı temel prompt üretir.
-    Judge modeli yetersiz kalırsa pipeline yine de devam eder.
+    Generates a rule-based basic prompt on LLM error.
+    Keeps the pipeline running even if the Judge model fails.
     """
     parts = [
         "You are an expert Python programmer solving a competitive programming problem.",
@@ -425,10 +603,9 @@ def _fallback_prompt(
         parts.append("")
 
     if failed_cases:
-        # 2026-09-30: bound each field. LCB inputs can be large arrays —
-        # unbounded reprs on 2-3 failed cases could push this whole fallback
-        # prompt past judgement_node's _MAX_IMPROVED_PROMPT_CHARS (2000),
-        # which then truncated it mid-sentence before reaching codegen.
+        # Bound each field — LCB inputs can be large arrays; without this,
+        # 2-3 failed cases can push the whole fallback prompt past
+        # _MAX_IMPROVED_PROMPT_CHARS, which then truncates it mid-sentence.
         _trim = lambda v: repr(v)[:150]
         parts.append("Your previous solution failed these test cases:")
         for case in failed_cases[:3]:
@@ -438,14 +615,25 @@ def _fallback_prompt(
             )
         parts.append("")
 
+    if timed_out:
+        parts.append("Your previous solution exceeded the time limit.")
+        parts.append("  - Use a more efficient algorithm (avoid nested loops on large inputs)")
+        parts.append("")
+
     parts.append("Write a completely new solution that passes all test cases.")
     return "\n".join(parts)
 
 
 def _find_json_objects(text: str) -> list:
     """
-    Brace-depth taraması ile tam { ... } alt dizilerini bulur; string literal
-    içindeki süslü parantezleri saymaz.
+    Scans for complete top-level {...} substrings by brace-depth, honoring
+    string literals so braces inside quoted strings don't affect nesting.
+
+    Needed because the judge prompt embeds the submitted Python source (which
+    itself contains {}/dict/set/f-string braces) ahead of the verdict. A naive
+    greedy `\\{.*\\}` regex spans from the first brace anywhere in the text to
+    the last one, swallowing the quoted code and producing unparseable JSON
+    even when the model's actual verdict object was well-formed on its own.
     """
     objects = []
     depth = 0
@@ -477,32 +665,50 @@ def _find_json_objects(text: str) -> list:
 
 def _parse_judgement(raw: str) -> dict:
     """
-    LLM yanıtından JSON çıkarır. Sırasıyla dener:
-      1. ``` ``` fence içindeki { ... }
-      2. Brace-depth taramasıyla bulunan tam nesneler (son bulunandan başlar)
-      3. Ham metnin tamamı
+    Extracts JSON from the LLM response.
+
+    Tries in order:
+      1. ``` ... ``` fenced block (any language tag: json, python, or none)
+      2. Complete top-level {...} objects found by brace-depth scanning,
+         tried last-to-first (the verdict is expected to follow any
+         reasoning/code the model echoes ahead of it)
+      3. Full raw text stripped
     """
+    # The judge often writes improved_system_prompt as a Python triple-quoted
+    # string ("""...""") instead of a JSON string; observed on every
+    # non-truncated json_parse_error in a 141-call sample. Re-encode those
+    # spans as JSON strings and retry before giving up.
+    repaired = re.sub(r'"""(.*?)"""', lambda m: json.dumps(m.group(1)), raw, flags=re.DOTALL)
+
     candidates = []
-
-    match = re.search(r"```\w*\s*(\{.*?\})\s*```", raw, re.DOTALL)
-    if match:
-        candidates.append(match.group(1).strip())
-
-    candidates.extend(reversed(_find_json_objects(raw)))
-    candidates.append(raw.strip())
+    for text in ([raw, repaired] if repaired != raw else [raw]):
+        # 1. Any fenced block — skip optional language identifier (json / python / etc.)
+        match = re.search(r"```\w*\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if match:
+            candidates.append(match.group(1).strip())
+        # 2. Balanced {...} objects, most-likely-final-answer first
+        candidates.extend(reversed(_find_json_objects(text)))
+        # 3. Fallback: use the full text as-is
+        candidates.append(text.strip())
 
     for json_str in candidates:
         if not json_str:
             continue
         try:
-            data = json.loads(json_str)
+            # strict=False tolerates raw newlines/tabs inside strings
+            data = json.loads(json_str, strict=False)
         except (json.JSONDecodeError, ValueError):
             continue
+        if not isinstance(data, dict):
+            continue
+        verdict = str(data.get("verdict", "")).strip().upper()
         return {
             "algorithm_choice":       max(0, min(10, int(data.get("algorithm_choice", 5)))),
             "error_handling":         max(0, min(10, int(data.get("error_handling", 5)))),
             "failure_reasons":        data.get("failure_reasons", []),
             "improved_system_prompt": data.get("improved_system_prompt", ""),
+            "verdict":                verdict if verdict in ("ACCEPT", "REJECT") else "",
+            "verdict_reason":         str(data.get("verdict_reason", ""))[:500],
         }
 
     return {
@@ -590,39 +796,61 @@ New state / JSON fields: `node3_verdict`, `node3_verdict_reason`, `node3_verdict
 (`node3.verdict`, `node3.verdict_reason`, `node3.verdict_source` in the iteration JSON).
 `max_tokens` comes from `settings.judge_max_tokens` (`JUDGE_MAX_TOKENS`, default 4096).
 
-## 5. models/client.py — Judge Model Registration
+### 4.3 Hosted judge and no-code rule (`ENV=openrouter`, 2026-10-02)
 
-Add to the `_MODEL_CONFIG` dict in `models/client.py`:
+The prompt now forbids code or pseudo-code in `improved_system_prompt` (defects and required
+changes in words; naming a technique or target complexity is allowed). Reason: in the main
+experiment the judge (Qwen2.5-72B) might know a solution the generator misses, and gains must
+come from feedback, not from the judge writing the solution. Leakage is still measured (code
+fragments in judge prompts) — `docs/ablation.md` §7. Local runs before this date used the
+prompt without this rule.
 
-```python
-_MODEL_CONFIG: dict[str, tuple[str, str, float]] = {
-    "M1":   (os.getenv("M1_BASE_URL",   "http://localhost:8001/v1"), "kimi-k2.5",    0.6),
-    "M2":   (os.getenv("M2_BASE_URL",   "http://localhost:8002/v1"), "glm-4.7-flash", 0.7),
-    "M3":   (os.getenv("M3_BASE_URL",   "http://localhost:8003/v1"), "minimax-m2.5",  0.7),
-    "QWEN": (os.getenv("QWEN_BASE_URL", "http://localhost:8004/v1"), "qwen3.5",       0.3),
-    #                                                                              ↑
-    #                              Low temperature for judgement → consistent scores
-}
-```
 
-`.env`'e ekle:
+The judge call goes through `models/client.chat()`. With `ENV=openrouter` the judge is
+`qwen/qwen-2.5-72b-instruct` pinned to Novita bf16 (`JUDGE_MAX_TOKENS=4096`; the endpoint allows
+32,000 context / 8,192 output tokens) — a different model family than the DeepSeek-V3 generator, to
+avoid self-preference bias. It is weaker than the generator on LCB (28.7 vs 37.6, DeepSeek-V3
+report, arXiv:2412.19437, 2024-08..11 window), which keeps the judge from simply solving the problem
+for it. Sampling follows its `generation_config.json` (T 0.7, top_p 0.8, top_k 20, rep. pen. 1.05). The secondary setting (Qwen3.5-9B + gpt-oss-120b) is still selectable. Prompt, schema and decision rule are
+unchanged. A `BudgetExceeded` error is re-raised rather than turned into the rule-based fallback,
+so a capped run stops instead of recording made-up judge scores.
 
-```bash
-QWEN_BASE_URL=http://localhost:8004/v1
-```
+### 4.4 Evidence framing and correctness-first feedback (2026-10-02)
 
-`scripts/start_servers.sh`'a ekle:
+A probe on two problems with the main pair (DeepSeek-V3 → Qwen2.5-72B judge) showed the judge
+rejecting code that passed every visible test for metric reasons only ("CC 14", "missing type
+annotation" for `char_counts`), although the system prompt says metrics alone are not grounds for
+REJECT. The user prompt pushed it there: Node 1 findings were headed "Issues (with required
+fixes)", and the closing line asked for feedback "addressing the specific issues above". The
+resulting feedback was mostly style fixes; on problem 3771 the next attempts dropped from 95.3% to
+65.1% of hidden tests.
 
-```bash
-start_qwen() {
-    tmux new-window -t main -n "QWEN-server"
-    tmux send-keys -t main:QWEN-server \
-        "/workspace/llama.cpp/llama-server \
-        --model /workspace/models/qwen3.5/*.gguf \
-        --port 8004 --host 0.0.0.0 --ctx-size 8192 \
-        --n-gpu-layers 99" Enter
-}
-```
+Changes (prompt only; rubric, schema and decision rule unchanged):
+- Node 1 findings are headed "Quality findings (evidence; not grounds for REJECT on their own)".
+- The closing instruction puts correctness first (failing tests, inputs where the code is wrong,
+  crashes or is too slow); quality findings follow briefly; no requests for annotations or renaming.
+- The rule that applies to the current evidence is restated at the end: visible failures → REJECT;
+  all visible tests passed → REJECT only with a concrete input or an infeasible complexity.
+- mypy runs with `--disable-error-code var-annotated` (`docs/node1.md`).
+
+Re-run on 3771, 3778, 3688 and abc395_b: every REJECT of public-passing code named an input
+(one of them wrong — the judge's counterexample was itself incorrect), and no attempt was rejected
+for metrics alone. The judge also accepted one hard solution that passes 66.7% of hidden tests;
+these errors are what the judge-accuracy analysis measures (`docs/analysis.md` §10).
+Rationale for focusing feedback on the defect: in self-repair, the quality of the feedback is the
+bottleneck (Olausson et al., "Is Self-Repair a Silver Bullet for Code Generation?", ICLR 2024,
+arXiv:2306.09896).
+
+## 5. Judge model registration
+
+The judge is the registry entry named by `JUDGE_MODEL` (default `QWEN`) in `config/models.py`;
+`nodes/judgement.py` calls it through `models/client.chat()`. Per environment:
+
+| `ENV` | `QWEN` entry | Temperature |
+|---|---|---|
+| `openrouter` | `qwen/qwen-2.5-72b-instruct`, Novita bf16 | 0.7 (top_p 0.8, top_k 20) |
+| `local` | `qwen3.5-9b` on :8001 (same server as the generator) | 0.6 |
+| `cloud` | `qwen3.5-35b-a3b` on :8004, or `JUDGE_MODEL=M1` | 0.3 / 0.6 |
 
 ---
 

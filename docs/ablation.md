@@ -1,5 +1,11 @@
 # ablation.md — Academic Framework and Ablation Experiments
 
+> **Durum (2026-10-02).** Geçerli deney protokolü **§7**'dedir (sızıntısız ana deney). §1–§6
+> özgün planı kayıt için korur; farklar: (i) metrik adı artık pass@1 (aşağıdaki not), (ii) yineleme
+> sınırı 10 değil 5, (iii) V0 artık `benchmark/sample_baseline.py` ile problem başına 5 örnek ve
+> hattın ilk iterasyon istemiyle üretilir — §4'teki `baseline.py` `benchmark/legacy/` altına
+> taşındı (farklı istem, 2048 token; karşılaştırılamaz), (iv) V1/V2 koşuları henüz yapılmadı.
+
 ## 1. Research Question and Terminology
 
 ### Research Question
@@ -10,6 +16,13 @@
 > selected open-weight models compared to a single-shot baseline?
 
 ### Terminology Decisions
+
+> **Güncelleme (2026-10-02):** Raporlarda birincil metrik **pass@1** adıyla verilir: problem
+> başına teslim edilen tek kodun tüm gizli testleri geçme oranı. Bu, aşağıdaki
+> `TSR_correctness` ile aynı tanımdır; ad, literatürle uyum için değişti (Chen vd. 2021; LCB'nin
+> self-repair senaryosu onarım sonrası Pass@1 raporlar, Jain vd. arXiv:2403.07974 Tablo 4).
+> Aşağıdaki "neden pass@1 değil" kaygısı — hattın fazladan hesap harcaması — eşit bütçeli
+> karşılaştırmalarla (filt@k̄, pass@k̄; Olausson vd., ICLR 2024) ele alınır (§7).
 
 | Term Used | Why | Term Avoided |
 |-----------------|-------|-----------------|
@@ -138,7 +151,7 @@ print(f"TSR: {passed/total:.3f} [{lo:.3f}, {hi:.3f}]")
 
 ---
 
-## 4. benchmark/baseline.py
+## 4. benchmark/baseline.py (legacy → `benchmark/legacy/baseline.py`)
 
 ```python
 """
@@ -410,62 +423,108 @@ Each evaluator run writes a JSON file with two TSR layers:
 
 ---
 
-## 6. Phase 4 — Experiment Run Commands
+## 6. Experiment Run Commands
 
-### Order Matters: Baseline First, Then Pipeline
+Ana deneyin komutları §7'dedir (`scripts/run_openrouter.sh`). Özgün plandaki model başına
+`baseline.py` + V1/V2/V3 komutları (M1/M2/M3, 50 soru) artık kullanılmıyor.
 
+V1/V2 ablasyonu isteğe bağlıdır ve bütçe kalırsa ana deneyin problem kümesinde koşulur
+(`benchmark/evaluator.py --variant V1|V2`; aynı `config/openrouter.env` ayarlarıyla).
+Bunun için çalıştırma betiğine bir alt komut eklenmesi gerekir; henüz eklenmedi.
+
+---
+
+## 7. Sızıntısız ana deney planı (2026-10-02)
+
+Gerekçe: `docs/dataset.md` §10. Bu bölüm OpenRouter üzerinden yapılacak ana deneyin
+protokolüdür; yerel Qwen3.5-9B koşuları ek bulgu olarak kalır.
+
+### Modeller
+
+| Rol | Model | Yayın | LCB referansı |
+|---|---|---|---|
+| Üretici | DeepSeek-V3 (`deepseek/deepseek-chat`) | 2024-12-26 | Pass@1 37,6 (LCB 2024-08..11; DeepSeek-V3 raporu, arXiv:2412.19437) |
+| Yargıç | Qwen2.5-72B-Instruct (farklı aile) | 2024-09-19 | Pass@1 28,7 (aynı tablo) |
+
+İlk plan Qwen2.5-Coder-32B (LCB 2407–2409'da 31,4; arXiv:2409.12186) + Llama-3.3-70B idi. 20
+problemlik pilotta pass@1 %12,2 çıktı (kolay %44, orta ve zor %0) ve Cloudflare uç noktası
+örneklerin ~%9'unda `[]` belirteçlerini düşürüyordu (`x =` sonrası boş). Taban etkisi ve sağlayıcı
+hatası nedeniyle, ana koşulardan **önce** üretici 2025 öncesi yayımlanmış en güçlü erişilebilir
+modelle değiştirildi; bu değişiklik ve pilot sonucu yöntem bölümünde açıkça yazılır. Yargıç
+üreticiden farklı ailedendir ve LCB'de üreticiden zayıftır; çözümü kendisi yazarak kazanç
+yaratması daha az olasıdır. Örnekleme: DeepSeek-V3 için resmî öneri yok, model kartındaki
+demo komutunun T = 0,7'si kullanıldı; Qwen2.5-72B `generation_config.json` değerleriyle.
+Uç noktalar: DeepSeek-V3 DeepInfra **fp4**, Qwen2.5-72B Novita bf16; yöntem bölümünde belirtilir.
+
+### Problem kümesi
+LCB v6, `contest_date` 2025-01 – 2025-04 (182 problem; kolay 45, orta 55, zor 82); tez
+planındaki 150 soruluk ölçek için bunlardan seed 42 ile 150 problem (kolay 40, orta 38, zor 72).
+Tümü her iki modelin yayın tarihinden sonra.
+
+### Notlama
+Tek değerlendirici (`sandbox/lcb_eval.py`, yerel). Açık testler: test başına 10 s (Düğüm 2 ve
+V0'ın filt@k'sı aynı değerle). Gizli testler: test başına 10 s (`HIDDEN_TIMEOUT_SEC`) ve ilk
+başarısız testte durma; lcb_runner'ın `grade_stdio`/`grade_call_based` işlevleri de böyle yapar
+(LiveCodeBench deposu, `lcb_runner/evaluation/testing_util.py`). Bu, problemin geçti/kaldı
+sonucunu değiştirmez; yalnızca kısmi gizli geçme oranı alt sınır olur. V0 ve V3 birebir aynı
+kurallarla notlanır. İlk V0 koşusu açık testleri 15 s ile notlayarak başladı; kayıtlar
+`sample_baseline --regrade` ile (API çağrısı olmadan) aynı kurallarla yeniden notlanır.
+
+### Model lisansları
+Modellerin hepsi açık ağırlıklıdır: DeepSeek-V3 (kod MIT, model DeepSeek Model License, ticari
+kullanım serbest; HF deepseek-ai/DeepSeek-V3), Qwen2.5-72B-Instruct (Qwen License, HF
+Qwen/Qwen2.5-72B-Instruct), ek düzendeki Qwen3.5-9B (Apache-2.0). Çıkarım OpenRouter üzerinden barındırılan
+sağlayıcılarla yapılır; aynı ağırlıklar yerelde/kiralık GPU'da çalıştırılarak tekrarlanabilir.
+
+### Ölçüm
+- **Birincil:** pass@1 = problem başına teslim edilen tek nihai kodun gizli testlerin tamamını
+  geçme oranı (Chen vd. 2021; LCB self-repair senaryosu da onarım sonrası Pass@1 raporlar).
+- **Taban (V0):** hattın 1. iterasyonuyla aynı istemle problem başına n=5 bağımsız örnek;
+  pass@1 = c/n ortalaması (yansız kestirici).
+- **Hat (V3):** en fazla 5 iterasyon, eğilim uzatması kapalı (`MAX_ITERATIONS=5`,
+  `TREND_EXTENSION_ENABLED=false`); Y (`verdict`) ve P (`rubric`) tasarımları.
+- **Eşit bütçe karşılaştırmaları** (Olausson vd., ICLR 2024): aynı 5 örnekten (i) açık testlere
+  göre seçilen ilk kod (kâhinsiz, gerçekçi rakip), (ii) pass@k̄ (k̄ = hattın ortalama üretim
+  sayısı; gizli testle seçtiği için üst sınır).
+- **Maliyet:** çözülen problem başına token ve $ (`outputs/api_usage.jsonl`).
+- **Kontroller:** yargıç modelinin tek başına pass@1'i; yargıç yönergelerinde kod parçası
+  sayımı (çözüm sızıntısı denetimi); zorluk düzeyine göre ayrı raporlama.
+
+### Komutlar
 ```bash
-# ── V0 Baseline — separately for each model ───────────────────────────
-python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
-python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
-python benchmark/baseline.py --model M3 --sample 50 --tag v0_M3
-
-# ── Ablation Variants ──────────────────────────────────────────────────
-python -m benchmark.evaluator --variant V1 --sample 50 --tag v1
-python -m benchmark.evaluator --variant V2 --sample 50 --tag v2
-python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_full
-
-# ── Difficulty breakdown (V3 full pipeline) ────────────────────────────
-python -m benchmark.evaluator --variant V3 --difficulty easy   --sample 25 --tag v3_easy
-python -m benchmark.evaluator --variant V3 --difficulty medium --sample 15 --tag v3_medium
-python -m benchmark.evaluator --variant V3 --difficulty hard   --sample 10 --tag v3_hard
+scripts/run_openrouter.sh smoke          # hat, 2 problem
+scripts/run_openrouter.sh pilot 20       # taban çizgisi, 20 problem × 5 örnek (floor denetimi)
+scripts/run_openrouter.sh baseline       # taban çizgisi, 150 problem × 5 örnek
+scripts/run_openrouter.sh run            # hat, 150 problem × {verdict, rubric}, tasarım başına 4 süreç
+scripts/run_openrouter.sh status         # ilerleme + harcama
 ```
+Taban çizgisi `benchmark/sample_baseline.py` ile üretilir (Langfuse açıksa her örnek ayrı bir iz,
+`public_pass_rate` ve `hidden_pass` skorlarıyla; `--regrade <jsonl>`: kayıtlı
+örnekleri API çağrısı olmadan güncel notlama kurallarıyla yeniden notlar): istem, hattın 1. iterasyonuyla
+birebir aynıdır (`build_system_prompt(None)` + `build_user_prompt(format_problem(row))`); her
+örnek açık ve tüm testlerle yerel LCB uyumlu değerlendiriciyle notlanır. Çıktı:
+`outputs/openrouter/results/baseline_samples/<run_id>.jsonl`; özet pass@1, pass@k ve filt@k
+(k=1..5) değerlerini zorluk düzeyine göre verir. Problem sırası hat ve taban çizgisinde aynıdır
+(pencere + seed 42).
 
-> `.env` symlink → `.env.cloud` olduğu için `ENV=cloud` prefix'i gerekmez.
+### Koşu kayıtları (2026-10-02)
+| Koşu | run_id | Onarım istemi |
+|---|---|---|
+| V0 taban çizgisi | `run_20261002_091834` (`.regraded.jsonl`) | — |
+| Y, yalnız geri bildirim (A) | `run_20261002_091834/36/38/40` | `FEEDBACK_INCLUDE_CODE=false` davranışı |
+| P, yalnız geri bildirim (A) | `run_20261002_091842/44/46/48` | aynı |
+| Y, geri bildirim + önceki çözüm (B, ana) | `run_20261002_100638/40/42/44` | `FEEDBACK_INCLUDE_CODE=true` |
+| P, geri bildirim + önceki çözüm (B, ana) | `run_20261002_100646/48/50/52` | aynı |
 
-### Check Before Each Run
+A koşularının yarısında yalnızca 2 problem 1. iterasyonda yanlıştan sonda doğruya geçti; yargıcın
+"kodun X girdisinde Y döndürüyor" geri bildirimi üreticinin göremediği koda atıf yapıyordu.
+LCB'nin self-repair istemi soruyu, düzeltilecek kodu ve hata geri bildirimini birlikte verir
+(Jain vd., arXiv:2403.07974, Ek C.3). B koşuları bu biçimi izler (`docs/codegen-models.md`).
+A koşuları ablasyon olarak raporlanır (önceki çözümün katkısı); 1. iterasyon istemi her iki
+düzende aynıdır. Not: `run_20261002_091834` hem V0 hem Y-A'nın bir parçasıdır (aynı saniyede
+başladılar); maliyet `phase` etiketiyle ayrılır.
 
-```bash
-# Previous outputs saved to local machine?
-ls outputs/results/
-
-# All 4 servers running?
-for port in 8001 8002 8003 8004; do
-    curl -s http://localhost:$port/v1/models | python -m json.tool | grep '"id"' || echo "port $port: NOT running"
-done
-
-# Disk dolu mu? (~99 GB model + outputs)
-df -h /workspace
-```
-
-### Output Files
-
-```
-outputs/
-├── run_info.json                        ← Her run için ortam bilgisi
-├── memory.md                            ← Tüm iterasyonlar (append)
-└── results/
-    └── YYYY-MM-DD/
-        ├── baseline_v0_M1_<ts>.json
-        ├── baseline_v0_M2_<ts>.json
-        ├── baseline_v0_M3_<ts>.json
-        ├── benchmark_V1_v1_<ts>.json
-        ├── benchmark_V2_v2_<ts>.json
-        ├── benchmark_V3_v3_full_<ts>.json
-        └── iterations/
-            └── <question_id>/
-                └── M1_iter1.json
-```
-
-> Her variant başlamadan önce `outputs/memory.md` sıfırlanmalı
-> ya da `MEMORY_LOG_PATH=outputs/memory_v1.md` şeklinde yönlendirilmeli.
+### Taban etkisi (floor) denetimi
+Pencerenin %45'i zor problem. İlk pilot (Coder-32B) genel pass@1 %12,2 verdi → üretici
+DeepSeek-V3'e geçildi (yukarıda). Yeni çiftle ayrı pilot yapılmadı; 6 problemlik prob koşusu
+istem/karar denetimi için kullanıldı (`docs/node3.md` §4.4).

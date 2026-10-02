@@ -41,18 +41,19 @@ Bu doküman pipeline'daki tüm metriklerin değer aralıklarını, ağırlıklar
 
 | Metrik | Araç | İdeal | Uyarı Eşiği | Skor Etkisi | Başarıya Etkisi |
 |--------|------|-------|-------------|-------------|-----------------|
-| **pass_rate** | lcb_runner | 1.0 | easy ≥ 0.90 / med ≥ 0.75 / hard ≥ 0.55 | accuracy 0–25p (`pass_rate × 25`) | **En kritik** — doğrudan PASS kararı |
+| **pass_rate** | yerel LCB uyumlu değerlendirici (açık testler) | 1.0 | easy ≥ 0.90 / med ≥ 0.75 / hard ≥ 0.55 | accuracy 0–25p (`pass_rate × 25`) | **En kritik** — 1.0 olmadan PASS olamaz (ön koşul) |
 | **cpu_ms** | subprocess | ≤ 2000ms | > 5000ms | efficiency 0–20p | yüksek CPU → skor düşer |
 | **ram_mb** | psutil | ≤ 256MB | > 512MB | efficiency 0–20p | yüksek RAM → skor düşer |
 | **timed_out** | subprocess | False | True | skora girmez | Node 3 prompt'a bilgi olarak gider |
-| **failed_cases** | lcb_runner | [] | — | skora girmez | Node 3 prompt'a gider (max 5 case) |
-| **crash_count** | lcb_runner | 0 | — | skora girmez | pass_rate içinde sayılır |
-| **test_diversity_score** | lcb_runner | 1.0 | — | skora girmez | izleme amaçlı |
+| **failed_cases** | yerel değerlendirici | [] | — | skora girmez | Node 3 prompt'a gider (max 5 case) |
+| **crash_count** | yerel değerlendirici | 0 | — | skora girmez | pass_rate içinde sayılır |
+| **test_diversity_score** | yerel değerlendirici | 1.0 | — | skora girmez | izleme amaçlı |
 
 ### İki Fazlı Çalışma
 
-**Faz 1 — Doğruluk (lcb_runner):**
-Tüm test case'leri çalıştırır (public + private + edge cases). pass_rate, failed_cases, crash_count üretir.
+**Faz 1 — Doğruluk (yerel LCB uyumlu değerlendirici):**
+Döngüde **yalnızca açık (public) testleri** çalıştırır; pass_rate, failed_cases, crash_count üretir.
+Gizli testler döngüde hiç kullanılmaz; teslim edilen kod çevrimdışı notlanır.
 
 **Faz 2 — Runtime (subprocess):**
 Sadece public test'lerle cpu_ms ve ram_mb ölçer.
@@ -88,6 +89,11 @@ error_handl. ██████████░░░░░░░░░░░░�
 
 ### PASS Eşikleri
 
+> **Güncel karar kuralı (2026-10-02):** Varsayılan tasarımda (`JUDGE_DECISION=verdict`) PASS'i
+> yargıcın gerekçeli ACCEPT/RET kararı verir; ön koşul açık testlerin tamamının geçmesidir.
+> Aşağıdaki eşikler yalnızca (i) puan kararı tasarımında (P, `rubric`) ve (ii) yargıç geçerli
+> karar üretemediğinde yedek olarak kullanılır. Bkz. `docs/node3.md` §4.2.
+
 | Difficulty | PASS Eşiği | Gerekli Minimum |
 |------------|-----------|-----------------|
 | **easy** | ≥ 80p | pass_rate ~%60 + tam efficiency + quality |
@@ -121,4 +127,4 @@ Aşağıdaki metrikler **skora girmez** ama Node 3'ün ürettiği `improved_prom
 | cpu_ms, ram_mb | ✓ | ✗ | ✓ |
 | failed_cases | ✓ | ✗ | ✓ |
 | algorithm_choice, error_handling | ✓ | ✓ | ✓ |
-| **PASS kriteri** | score ≥ threshold | score ≥ threshold | score ≥ threshold |
+| **PASS kriteri** | yargıç ACCEPT + açık testler | yargıç ACCEPT (açık test ön koşulu yok) | yargıç ACCEPT + açık testler |

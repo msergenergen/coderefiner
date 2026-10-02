@@ -1,5 +1,7 @@
 # cloud-comparison.md — Cloud Platform Comparison
 
+> **Durum (2026-10-02): tarihsel belge.** Ana deney artık GPU kiralamadan OpenRouter API üzerinden koşuluyor (`CLOUD_README.md` §A). Vast.ai yalnızca isteğe bağlı ek bulgu için (§B). Aşağıdaki karşılaştırma eski model setine göredir.
+
 > Goal: Select the best platform to run the iterative code refinement pipeline (gpt-oss-20b + Qwen3-Coder-Next + GLM-4.7-Flash + Qwen3.5-35B-A3B)
 > using an on-premise GGUF / llama.cpp architecture.
 

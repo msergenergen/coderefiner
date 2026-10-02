@@ -154,9 +154,9 @@ class TestBuildJudgementPrompt:
 class TestGetLlmJudgementFallback:
 
     def test_client_error_triggers_fallback(self, monkeypatch):
-        def _boom(model_id):
+        def _boom(*a, **kw):
             raise ConnectionError("server unreachable")
-        monkeypatch.setattr(judgement, "get_client", _boom)
+        monkeypatch.setattr(judgement, "chat", _boom)
 
         result = _get_llm_judgement(
             numeric_scores={"accuracy": 0.0, "efficiency": 0.0, "quality": 0.0,
@@ -302,6 +302,19 @@ class TestParseTripleQuotedPrompt:
         assert out["failure_reasons"] == ["dp off by one"]
         assert out["algorithm_choice"] == 4
         assert 'Case "leetscode"' in out["improved_system_prompt"]
+
+    def test_budget_exceeded_is_not_swallowed(self, monkeypatch):
+        from models.budget import BudgetExceeded
+        def _cap(*a, **kw):
+            raise BudgetExceeded("cap")
+        monkeypatch.setattr(judgement, "chat", _cap)
+        with pytest.raises(BudgetExceeded):
+            _get_llm_judgement(
+                numeric_scores={"accuracy": 0.0, "efficiency": 0.0, "quality": 0.0,
+                                 "security": 0.0, "numeric_total": 0.0},
+                code="code", problem="prob", node1_issues=[], failed_cases=[],
+                halstead=0.0, timed_out=False, difficulty="easy", iteration=1,
+            )
 
     def test_raw_newline_inside_string_is_tolerated(self):
         from nodes.judgement import _parse_judgement

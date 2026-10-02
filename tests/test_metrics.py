@@ -153,3 +153,9 @@ class TestDecideSeverity:
         sev = _decide_severity(cc=cc, mi=mi, halstead=halstead,
                                bandit_high_count=0, forbidden_imports=[])
         assert sev == expected
+
+
+def test_whitelist_allows_pure_stdlib_and_blocks_network():
+    from metrics.security import check_imports
+    assert check_imports("import operator\nimport array\nfrom queue import deque") == []
+    assert check_imports("import socket\nimport subprocess") == ["socket", "subprocess"]

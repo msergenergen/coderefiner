@@ -11,6 +11,10 @@ ALLOWED_IMPORTS = frozenset({
     # Stdlib — I/O and format
     "io", "textwrap", "struct", "decimal", "fractions",
     "statistics", "cmath", "numbers",
+    # Stdlib — pure computation common in competitive programming; no file,
+    # network or process access (added 2026-10-02 after an OpenRouter smoke
+    # test stopped a problem on `import operator`; none occurred locally).
+    "operator", "array", "queue", "graphlib", "__future__",
     # Testing
     "unittest",
 })

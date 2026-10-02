@@ -67,7 +67,10 @@ def _collect_hardware() -> dict:
             [llama_path, "--version"],
             text=True, timeout=3, stderr=subprocess.STDOUT
         )
-        info["llama_cpp"] = out.strip().split("\n")[0] if out.strip() else "unknown"
+        # Metal/CUDA init lines come first on stderr; keep the "version:" line.
+        lines = [l.strip() for l in out.splitlines() if l.strip()]
+        info["llama_cpp"] = next((l for l in lines if l.startswith("version:")),
+                                 lines[0] if lines else "unknown")
     except Exception:
         pass
 
@@ -89,7 +92,9 @@ def write_run_info() -> str:
     """
     run_id   = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     out_dir  = _dated_output_dir()
-    path     = os.path.join(out_dir, "run_info.json")
+    # One file per run: parallel shards started the same day used to
+    # overwrite a single run_info.json.
+    path     = os.path.join(out_dir, f"run_info_{run_id}.json")
 
     payload = {
         "run_id":    run_id,
@@ -100,11 +105,23 @@ def write_run_info() -> str:
             **{m: model_registry.get(m).model_name for m in settings.model_sequence},
             settings.judge_model: model_registry.get(settings.judge_model).model_name,
         },
+        "endpoints": {
+            m: {"base_url": cfg.base_url, "temperature": cfg.temperature,
+                "top_p": cfg.top_p, "extra_body": cfg.extra_body}
+            for m in {*settings.model_sequence, settings.judge_model}
+            for cfg in [model_registry.get(m)]
+        },
         "pipeline_config": {
+            "judge_decision":      settings.judge_decision,
+            "feedback_include_code": settings.feedback_include_code,
+            "codegen_max_tokens":  settings.codegen_max_tokens,
+            "judge_max_tokens":    settings.judge_max_tokens,
+            "lcb_evaluator":       settings.lcb_evaluator,
             "max_iterations":      settings.max_iterations,
             "lcb_split":           settings.lcb_split,
             "lcb_difficulty":      settings.lcb_difficulty,
             "lcb_sample_size":     settings.lcb_sample_size,
+            "lcb_date_window":     [settings.lcb_date_from, settings.lcb_date_to],
             "sandbox_timeout_sec": settings.sandbox_timeout_sec,
             "pass_threshold": {
                 "easy":   80,
@@ -286,6 +303,29 @@ def _write_iteration_json(state: PipelineState, status: str,
 
 # ── Public node functions ─────────────────────────────────────────────────────
 
+def _trace_iteration(state: PipelineState, status: str) -> None:
+    """Langfuse: one event per iteration; trace scores once the problem ends."""
+    from models import tracing
+    tracing.event("iteration", {
+        "iteration": state.get("iteration"), "status": status,
+        "severity": state.get("node1_severity"), "cc": state.get("node1_cc"),
+        "public_pass_rate": state.get("node2_pass_rate"),
+        "rubric_total": state.get("node3_total_score"),
+        "verdict": state.get("node3_verdict"), "verdict_source": state.get("node3_verdict_source"),
+        "verdict_reason": state.get("node3_verdict_reason"),
+    })
+    if status == "LOOP":
+        return
+    tracing.score("status", status, data_type="CATEGORICAL")
+    tracing.score("iterations", float(state.get("iteration", 0)))
+    if status != "STOP_HIGH":
+        tracing.score("public_pass_rate", float(state.get("node2_pass_rate", 0.0)))
+        tracing.score("rubric_total", float(state.get("node3_total_score", 0.0)))
+        if state.get("node3_verdict"):
+            tracing.score("judge_verdict", state["node3_verdict"], data_type="CATEGORICAL",
+                          comment=(state.get("node3_verdict_reason") or "")[:500])
+
+
 def log_iteration_node(state: PipelineState) -> PipelineState:
     """
     LangGraph node: logs each iteration after judgement.
@@ -314,6 +354,7 @@ def log_iteration_node(state: PipelineState) -> PipelineState:
     total_tok  = tokens.get("total", 0)
 
     _append_md_row(state, status, run_id, json_path, total_ms, total_tok)
+    _trace_iteration(state, status)
 
     # Append current iteration metrics to history lists for trend-aware extension.
     # extension_count is incremented only when this iteration ran beyond max_iterations.
@@ -381,6 +422,7 @@ def log_severity_stop_node(state: PipelineState) -> PipelineState:
     total_tok = tokens.get("total", 0)
 
     _append_md_row(state, "STOP_HIGH", run_id, json_path, total_ms, total_tok)
+    _trace_iteration(state, "STOP_HIGH")
     return {**state, "final_status": "STOP_HIGH"}
 
 

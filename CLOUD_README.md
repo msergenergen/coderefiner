@@ -1,14 +1,72 @@
-# Bulut Koşusu Rehberi (Vast.ai)
+# Koşu Rehberi
 
-Bu rehber, Mac'te koşturduğumuz deneyin **aynısını** bulutta, Qwen model kartının önerdiği
-token bütçesine yakın bir bütçeyle tekrarlamak içindir. Model, istemler, örnekleme ayarları,
-problem sırası ve değerlendirici yereldekiyle birebir aynı kalır; değişen tek şey çıktı bütçesi
-ve hızdır.
+İki yol var:
 
-Adımları sırayla izleyin. Komutlar kopyala-yapıştır için hazırdır; `<...>` ile gösterilen yerleri
-kendi bilgilerinizle değiştirin.
+- **§A — OpenRouter (ana deney).** GPU kiralanmaz; sızıntısız ana deney (DeepSeek-V3 üretici,
+  Qwen2.5-72B-Instruct yargıç, LCB 2025-01 – 2025-04) Mac'ten API ile koşulur.
+- **§B — Vast.ai (isteğe bağlı).** Mac'teki Qwen3.5-9B deneyinin **aynısını**, model kartının
+  önerdiğine yakın bir token bütçesiyle kiralık GPU'da tekrarlamak için. Model, istemler,
+  örnekleme ayarları, problem sırası ve değerlendirici yereldekiyle aynıdır; değişen yalnızca
+  çıktı bütçesi ve hızdır.
+
+Komutlar kopyala-yapıştır için hazırdır; `<...>` ile gösterilen yerleri kendi bilgilerinizle
+değiştirin.
 
 ---
+
+## A. OpenRouter ile koşu (GPU kiralamadan, ana deney)
+
+Ana deney sızıntısız tasarımdır (gerekçe: `docs/dataset.md` §10, protokol: `docs/ablation.md` §7):
+üretici `deepseek/deepseek-chat` = DeepSeek-V3 (DeepInfra fp4, 2024-12-26), yargıç
+`qwen/qwen-2.5-72b-instruct` (Novita bf16, 2024-09-19); ikisi de 2025'ten önce yayımlandı. Problemler
+yalnızca LCB'nin 2025-01 – 2025-04 penceresinden: 182 problemden seed 42 ile seçilen 150 problem. Koşu Mac'te çalışır; sandbox ve
+değerlendirme yerelde kalır. Deney ayarları `config/openrouter.env` dosyasındadır.
+
+1. **Kredi ve anahtar.** https://openrouter.ai → Credits ($5) → Keys → yeni anahtar (anahtara
+   $5 kredi sınırı koymak önerilir). Anahtarı **sohbete yapıştırmayın**; yalnızca şu dosyaya:
+   ```bash
+   cd ~/Desktop/llm-code-refinement
+   open -e .env.openrouter        # OPENROUTER_API_KEY=<anahtar>
+   ```
+   Bu dosyadan yalnızca anahtar satırı okunur; dosya git tarafından yok sayılır.
+2. **Duman testi** (hat, 2 problem, birkaç sent): `scripts/run_openrouter.sh smoke`
+3. **Pilot taban çizgisi** (20 problem × 5 örnek; taban etkisi denetimi):
+   `scripts/run_openrouter.sh pilot 20`
+4. **Tam taban çizgisi** (150 × 5): `scripts/run_openrouter.sh baseline`
+5. **Hat** (150 problem × Y ve P tasarımı, tasarım başına 4 süreç):
+   ```bash
+   scripts/run_openrouter.sh run
+   scripts/run_openrouter.sh status      # ilerleme + harcama
+   ```
+   **İsteğe bağlı Langfuse izleme:** `.env.openrouter` dosyasına `LANGFUSE_PUBLIC_KEY`,
+   `LANGFUSE_SECRET_KEY` (ve kendi sunucunuz için `LANGFUSE_BASE_URL`) satırlarını ekleyin;
+   `scripts/run_openrouter.sh langfuse-check` anahtarları sınar. Analizde `--langfuse` gizli test
+   sonuçlarını izlere skor olarak ekler. Anahtar yoksa izleme kapalıdır.
+   Önceki koşular sürerken yeni bir koşu başlatılacaksa günlük adları çakışmasın diye
+   `LOG_TAG=_x scripts/run_openrouter.sh run` kullanılır. `FEEDBACK_INCLUDE_CODE=false`
+   onarım isteminden önceki çözümü çıkarır (yalnız geri bildirim; ablasyon için).
+   **Yargıç tekrarı:** `scripts/run_openrouter.sh judge-replay MODEL SAĞLAYICI AD --run-ids …`
+   kod üretmeden, açık testlerin tamamını geçen kayıtlı denemeleri başka bir yargıca yeniden
+   değerlendirtir ve kararları gizli testlerle karşılaştırır (`docs/analysis.md` §11).
+6. **Analiz.** Taban çizgisi dosyası ve koşu kimlikleri günlüklerde yazar
+   (`outputs/openrouter/logs/`, satır `run_id:`):
+   ```bash
+   python -m benchmark.openrouter_results \
+       --baseline outputs/openrouter/results/baseline_samples/<run_id>.jsonl \
+       --y-run-ids <verdict run_id'leri> --p-run-ids <rubric run_id'leri>
+   ```
+   Rapor: `outputs/openrouter/report/report.md` ve `results.json`.
+7. **Harcama sınırı.** Her çağrı `outputs/api_usage.jsonl` defterine yazılır. Toplam harcama +
+   bir sonraki çağrının en kötü maliyeti `API_BUDGET_USD`'yi ($5) aşacaksa çağrı gönderilmez ve
+   süreç durur. Yarıda kalan hat koşusu `SKIP_QIDS`, taban çizgisi `RESUME=<jsonl>` ile sürdürülür.
+
+---
+
+## B. Vast.ai ile koşu (isteğe bağlı)
+
+Aşağıdaki 0–12. adımlar yalnızca bu yol içindir. Sonuçlar bildirideki yerel deneyle aynı
+ayarlarla (5 + en fazla 3 uzatma) karşılaştırılabilir olsun diye ortam dosyasında eğilim
+uzatması açıktır; yeni protokol için `TREND_EXTENSION_ENABLED=false` yapın.
 
 ## 0. Başlamadan önce (Mac'te, bir kez)
 

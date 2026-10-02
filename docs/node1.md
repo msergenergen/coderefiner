@@ -13,7 +13,7 @@ Detect structural, quality, and security issues in the generated code **before e
 | `radon` | `pip install radon` | Cyclomatic Complexity, Maintainability Index, Halstead |
 | `lizard` | `pip install lizard` | Cognitive Complexity |
 | `bandit` | `pip install bandit` | Security vulnerabilities |
-| `mypy` | `pip install mypy` | Type errors (informational, no severity effect) |
+| `mypy` | `pip install mypy` | Type errors (informational, no severity effect; `var-annotated` disabled since 2026-10-02 — "need type annotation" is not a defect in contest code and drew style-only judge REJECTs, `docs/node3.md` §4.4) |
 | `ruff` | `pip install ruff` | Lint warnings (informational, no severity effect) |
 | stdlib `ast` | — | Import whitelist check |
 
@@ -62,19 +62,23 @@ tekrar dener. Gerçek yasak import'lar (`subprocess`, `socket` vb.) hâlâ
 
 ```python
 """
-Node 1 import güvenlik kontrolü için whitelist.
+Import whitelist for Node 1 security check.
 """
 
 ALLOWED_IMPORTS = frozenset({
-    # Stdlib — temel
+    # Stdlib — core
     "os", "sys", "math", "random", "time", "datetime",
     "collections", "itertools", "functools", "heapq",
     "bisect", "string", "re", "json", "copy",
     "typing", "dataclasses", "enum", "abc",
-    # Stdlib — I/O ve format
+    # Stdlib — I/O and format
     "io", "textwrap", "struct", "decimal", "fractions",
     "statistics", "cmath", "numbers",
-    # Test
+    # Stdlib — pure computation common in competitive programming; no file,
+    # network or process access (added 2026-10-02 after an OpenRouter smoke
+    # test stopped a problem on `import operator`; none occurred locally).
+    "operator", "array", "queue", "graphlib", "__future__",
+    # Testing
     "unittest",
 })
 ```

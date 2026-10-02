@@ -142,6 +142,8 @@ def run_evaluator(
         split=settings.lcb_split,
         difficulty=difficulty,
         sample_size=sample_size,
+        date_from=settings.lcb_date_from,
+        date_to=settings.lcb_date_to,
     )
 
     logger.info(

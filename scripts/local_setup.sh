@@ -10,7 +10,7 @@
 #   3. llama.cpp Metal build         (skip with --skip-llamacpp)
 #   4. Project clone + venv + deps
 #   5. .env.local creation
-#   6. Model download (~11.9 GB)     (skip with --skip-model)
+#   6. Model download (~6 GB)        (skip with --skip-model)
 #   7. Verification
 #
 # Resume behaviour:
@@ -173,8 +173,16 @@ LOCAL_CODEGEN_MODEL=qwen3.5-9b
 LOCAL_JUDGEMENT_MODEL=qwen3.5-9b
 LLAMA_API_KEY=local
 
-# ── Pipeline — keep short for debug ──────────────────────────────
-MAX_ITERATIONS=3
+# ── Pipeline (secondary Qwen3.5-9B setting; main experiment runs on
+#    OpenRouter, see config/openrouter.env) ─────────────────────────
+PIPELINE_MODELS=M1
+JUDGE_MODEL=QWEN
+JUDGE_DECISION=verdict
+MAX_ITERATIONS=5
+# The ELECO-paper local runs used TREND_EXTENSION_ENABLED=true (5 + up to 3).
+TREND_EXTENSION_ENABLED=false
+CODEGEN_MAX_TOKENS=6144
+JUDGE_MAX_TOKENS=4096
 SANDBOX_TIMEOUT_SEC=15
 SANDBOX_MEMORY_LIMIT_MB=256
 SANDBOX_FLAKINESS_RUNS=2
@@ -182,8 +190,9 @@ SANDBOX_MAX_FAILED_CASES=3
 
 # ── LiveCodeBench ─────────────────────────────────────────────────
 LCB_SPLIT=test
-LCB_DIFFICULTY=easy
-LCB_SAMPLE_SIZE=5
+LCB_DIFFICULTY=all
+LCB_SAMPLE_SIZE=150
+LCB_EVALUATOR=local
 
 # ── Output ────────────────────────────────────────────────────────
 OUTPUT_DIR=outputs/results

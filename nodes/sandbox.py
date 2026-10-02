@@ -1,12 +1,14 @@
 """
 LangGraph Node 2: Sandbox & Execution
 
-Phase 1: lcb_runner correctness (all_tests)
-Phase 2: Own runner runtime metrics (public_tests)
+Phase 1: correctness on the PUBLIC tests only, with the pinned local
+         LCB-compatible evaluator (LCB_EVALUATOR=local; lcb_runner optional)
+Phase 2: own runner runtime metrics (public tests)
+Hidden tests are never used in the loop; they are graded offline.
 """
 import time
 from pipeline.state import PipelineState
-from sandbox.lcb_eval import lcb_evaluate
+from sandbox.lcb_eval import CORRECTNESS_TIMEOUT_SEC, lcb_evaluate
 from sandbox.runner  import measure_runtime
 from dataset.edge_cases import augment_row
 
@@ -45,7 +47,7 @@ def sandbox_node(state: PipelineState) -> PipelineState:
         code=code,
         problem_row=feedback_row,
         edge_cases=edge_cases,
-        timeout=10,
+        timeout=CORRECTNESS_TIMEOUT_SEC,
     )
 
     # ── Phase 2: Runtime metrics (public tests) ──────────────────────────

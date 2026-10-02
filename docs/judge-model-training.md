@@ -1,5 +1,7 @@
 # Specialized Code Judge Model — Research Roadmap
 
+> **Durum (2026-10-02): plan.** Gelecek çalışma. Mevcut yargıçlar: yerelde Qwen3.5-9B, ana deneyde Qwen2.5-72B-Instruct (OpenRouter); "QWEN 35B" karşılaştırmaları eski plana aittir. Eğitim verisi ana deneyin iterasyon JSON'larından üretilebilir.
+
 Bu döküman, mevcut genel amaçlı QWEN judge modelinin yerine
 domain-specific (Python competitive programming) küçük bir judge modeli
 eğitmenin fizibilitesini ve adım adım planını sunar.

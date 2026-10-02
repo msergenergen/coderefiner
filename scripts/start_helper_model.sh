@@ -1,7 +1,7 @@
 #!/bin/bash
 # Starts a llama.cpp server for a local "orchestrator helper" model — used by
 # Claude Code to draft code/docs/paper text, separate from the research
-# pipeline's own M1/M2/M3/QWEN servers (see scripts/start_model.sh).
+# pipeline's own M1/M2/QWEN servers (see scripts/start_model.sh).
 # Always stops any previous helper server on the same port first.
 #
 #   bash scripts/start_helper_model.sh              # defaults to qwen3.5-9b

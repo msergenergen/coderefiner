@@ -198,6 +198,12 @@ def _stdio_match(got: str, expected: str) -> bool:
     return True
 
 
+# Per-test limit for correctness on the public tests (Node 2). The V0
+# baseline grades its public tests with the same value so filt@k matches
+# what the pipeline sees.
+CORRECTNESS_TIMEOUT_SEC = 10
+
+
 def _starter_method(starter_code: str) -> Optional[str]:
     import re
     match = re.search(r"def\s+(\w+)\s*\(\s*self", starter_code or "")
@@ -208,6 +214,7 @@ def _fallback_evaluate(
     code: str,
     problem_row: dict,
     timeout: int,
+    stop_on_fail: bool = False,
 ) -> dict:
     """
     Local LCB-compatible evaluator (used because lcb_runner is not installed).
@@ -223,6 +230,11 @@ def _fallback_evaluate(
     harness whose printed output matched the JSON text exactly (Python's
     `True` vs JSON `true`, quoted strings, ...). In a 52-problem run that
     left LeetCode strict accuracy at 7.7% against 69.2% on AtCoder.
+
+    stop_on_fail=True stops at the first failing test, as lcb_runner's
+    grade_stdio / grade_call_based do. Pass/fail of the whole problem is
+    unchanged; pass_rate is then a lower bound (passed so far / all tests).
+    Used for offline hidden grading, where only "all tests pass" is reported.
     """
     import json
     import os
@@ -287,6 +299,8 @@ def _fallback_evaluate(
                     "input": inp, "expected": expected,
                     "got": got, "error": error,
                 })
+            if not passed and stop_on_fail:
+                break
     finally:
         for path in tmp_files:
             try:
@@ -295,7 +309,7 @@ def _fallback_evaluate(
                 pass
 
     passed = sum(results)
-    total  = len(results)
+    total  = len(all_inputs)
 
     return {
         "pass_rate":            passed / total if total > 0 else 0.0,

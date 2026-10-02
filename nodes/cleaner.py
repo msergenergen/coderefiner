@@ -13,6 +13,10 @@ Method:
     - It also processes code with syntax errors (LLM sometimes produces broken code)
     - It preserves docstrings (these are API contracts, not comments)
     - It trims trailing whitespace from lines
+
+  Comments are cut from the source lines at the column tokenize reports, so
+  line structure is kept 1:1 (the earlier token-joining version doubled every
+  newline and left the comment's indentation behind; fixed 2026-10-02).
 """
 import io
 import re
@@ -32,37 +36,27 @@ def strip_comments(code: str) -> str:
         '\"\"\"docstring\"\"\"'  →  preserved
     """
     try:
-        tokens   = tokenize.generate_tokens(io.StringIO(code).readline)
-        result   = []
-        prev_end = (1, 0)
+        # Column of the first comment token on each line (1-based rows).
+        # Only real COMMENT tokens count: a "#" inside a string is a STRING
+        # token, and docstrings are STRING tokens, so both are preserved.
+        comment_col = {}
+        for tok in tokenize.generate_tokens(io.StringIO(code).readline):
+            if tok.type == tokenize.COMMENT:
+                comment_col.setdefault(tok.start[0], tok.start[1])
 
-        for tok_type, tok_str, tok_start, tok_end, _ in tokens:
-            # Skip COMMENT tokens
-            if tok_type == tokenize.COMMENT:
-                continue
-            # Skip ENCODING and ENDMARKER tokens
-            if tok_type in (tokenize.ENCODING, tokenize.ENDMARKER):
-                continue
+        out = []
+        for row, line in enumerate(code.splitlines(), 1):
+            if row in comment_col:
+                kept = line[:comment_col[row]].rstrip()
+                if not kept:
+                    continue            # comment-only line: drop it entirely
+                out.append(kept)
+            else:
+                out.append(line.rstrip())
 
-            # Preserve line/column spacing (keep indentation intact)
-            start_row, start_col = tok_start
-            end_row,   _         = prev_end
-
-            if start_row > end_row:
-                # New line(s) — blank lines may remain after comment removal
-                result.append("\n" * (start_row - end_row))
-                result.append(" " * start_col)
-            elif start_col > prev_end[1]:
-                result.append(" " * (start_col - prev_end[1]))
-
-            result.append(tok_str)
-            prev_end = tok_end
-
-        cleaned = "".join(result)
-
-        # Collapse 3+ consecutive blank lines to 2
+        cleaned = "\n".join(out)
+        # Collapse 3+ consecutive newlines (2+ blank lines) to one blank line
         cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-
         return cleaned.strip()
 
     except (tokenize.TokenError, SyntaxError, IndentationError):

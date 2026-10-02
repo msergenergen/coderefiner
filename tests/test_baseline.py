@@ -1,5 +1,5 @@
 """
-Unit tests: benchmark/baseline.py
+Unit tests: benchmark/legacy/baseline.py (legacy V0 runner)
 _extract_code() behavior — code extraction from LLM output.
 """
 import pytest
@@ -7,7 +7,7 @@ import pytest
 
 def _extract_code(text: str) -> str:
     """Import from baseline module."""
-    from benchmark.baseline import _extract_code as _ec
+    from benchmark.legacy.baseline import _extract_code as _ec
     return _ec(text)
 
 

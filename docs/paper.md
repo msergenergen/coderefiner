@@ -1,5 +1,7 @@
 # Yinelemeli Kod Arıtımında Yargıç Olarak BDM: Çok Aşamalı Bir Yaklaşım
 
+> **Durum (2026-10-02): tarihsel belge.** Bu, eski IEEE biçimli bildiri taslağıdır (TSR, V0–V4, eski model seti). Güncel bildiri `~/Desktop/eleco2026-bildiri/` altındadır (ELECO 2026, Türkçe, 5 sayfa); güncel deney tasarımı `docs/ablation.md` §7. Metin kayıt amacıyla korunuyor.
+
 **LLM-as-a-Judge for Iterative Code Refinement: A Multi-Stage Approach**
 
 > *IEEE iki sütun formatı — taslak içerik*

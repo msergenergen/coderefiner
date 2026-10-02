@@ -7,44 +7,34 @@
 | `config/` package is the single entry point | `from config import settings, thresholds, model_registry` |
 | `.env` is read only inside `config/` | `os.getenv` is not called anywhere else |
 | Typed `frozen=True` dataclasses | IDE autocomplete + prevents accidental value mutation |
-| **`ENV=local|cloud` flag** | Model set is selected automatically per environment — no model config changes needed |z |
-| **`build_registry(env)` factory** | `local` → Mac Mini models, `cloud` → production models |
+| **`ENV=local|cloud|openrouter` flag** | Model set is selected automatically per environment — no model config changes needed |
+| **`build_registry(env)` factory** | `local` → one llama.cpp server, `cloud` → llama.cpp servers per role, `openrouter` → hosted APIs (main experiment) |
 | Threshold values centralized in `thresholds.py` | Node 1/2/3 and judgement prompt all read from the same source |
 
-### Environment Selection: `.env` Symlink
+### Environment Selection
 
-The environment is selected **once** via a symlink — no flag needed at runtime:
+`local` and `cloud` are selected **once** via the `.env` symlink; OpenRouter runs do not touch it:
 
 ```bash
-# Mac Mini M4 16GB — local debug (done once)
-ln -sf .env.local .env
-
-# Vast.ai A100 80GB — cloud production (done once)
-ln -sf .env.cloud .env
-
-# Then just run:
+ln -sf .env.local .env            # Mac mini M4 — ELECO paper setting
+ln -sf .env.cloud .env            # rented GPU (optional, CLOUD_README.md §B)
 python main.py
+
+scripts/run_openrouter.sh smoke   # main experiment: sources config/openrouter.env,
+                                  # reads only the key from .env.openrouter
 ```
 
-The active `.env` file controls the entire model set:
+Values exported in the shell take precedence over `.env` (`load_dotenv` does not override),
+which is how the run script layers `config/openrouter.env` over a `.env` that points to `.env.local`.
 
-| ENV | M1 | M2 | Judgement | Toplam Bellek |
-|-----|----|----|----|----------|
-| `local` | qwen3.5-9b | qwen3.5-9b | qwen3.5-9b | ~6 GB |
-| `cloud` | Qwen3.5-9B | Qwen2.5-Coder-1.5B-Instruct | Qwen3.5-35B-A3B | ~30 GB (concurrent) |
+| ENV | Generator (M1) | Judge (QWEN key) | Memory / cost |
+|-----|----|----|----|
+| `openrouter` | DeepSeek-V3 (DeepInfra fp4) | Qwen2.5-72B-Instruct (Novita bf16) | API, ≤ $5 cap |
+| `local` | qwen3.5-9b | qwen3.5-9b (same server) | ~6 GB |
+| `cloud` | Qwen3.5-9B | Qwen3.5-35B-A3B, or `JUDGE_MODEL=M1` | ~6–30 GB |
 
-In local mode all roles (M1/M2 and judgement) route to the same model
-on the same server; pipeline flow, gates, and iteration logic run identically.
-
-### Sequential Model Architecture and Memory
-
-```
-START → M1 (çalışır, biter) → M2 (çalışır, biter) → END
-         ↑ bellekte tek model aynı anda
-```
-
-Both M1 (Qwen3.5-9B, ~6 GB) and M2 (Qwen2.5-Coder-1.5B, ~1 GB) are same-family Qwen models at two size tiers, isolating model size as the controlled variable.
-Concurrent memory: M1 + QWEN judgement ≈ 30 GB (cloud); qwen3.5-9b (~6 GB) single server (local).
+`M2` (Qwen2.5-Coder-1.5B in the cloud registry; same model as M1 elsewhere) runs only when
+`PIPELINE_MODELS=M1,M2`; no reported experiment uses it.
 
 ---
 
@@ -52,16 +42,16 @@ Concurrent memory: M1 + QWEN judgement ≈ 30 GB (cloud); qwen3.5-9b (~6 GB) sin
 
 ```python
 """
-Tek giriş noktası.
+Single entry point for configuration.
 
-Kullanım:
+Usage:
     from config import settings, thresholds, model_registry
 """
 from config.pipeline   import settings
 from config.thresholds import thresholds
 from config.models     import build_registry
 
-# model_registry reads ENV flag from settings.
+# model_registry reads the ENV flag from settings.
 # No other module reads ENV directly.
 model_registry = build_registry(env=settings.env)
 
@@ -74,8 +64,8 @@ __all__ = ["settings", "thresholds", "model_registry"]
 
 ```python
 """
-Pipeline geneli çalışma ayarları.
-Tüm os.getenv çağrıları burada — başka modülde getenv yok.
+Pipeline-wide runtime settings.
+All os.getenv calls are here — no other module calls getenv directly.
 """
 import os
 from dataclasses import dataclass
@@ -87,17 +77,21 @@ load_dotenv()
 @dataclass(frozen=True)
 class PipelineSettings:
 
-    # ── Environment selection ──────────────────────────────────────────────────────
+    # ── Environment selection ──────────────────────────────────────────────────
     env: str = os.getenv("ENV", "cloud").lower()
-    # "local" → Mac Mini M4 16GB debug environment (small models)
-    # "cloud" → Vast.ai A100 80GB production environment (selected models)
+    # "local"  → Mac Mini M4 16GB debug environment (small models)
+    # "cloud"  → self-hosted llama.cpp servers on a rented GPU (Vast.ai)
+    # "openrouter" → hosted APIs via OpenRouter (codegen and judge on
+    #                different providers' models; paid, budget-capped)
     #
     # Usage:
     #   ENV=local python main.py   ← Mac Mini
     #   ENV=cloud python main.py   ← Vast.ai (default)
 
-    # ── Iterasyon ────────────────────────────────────────────────────────
-    max_iterations: int = int(os.getenv("MAX_ITERATIONS", 10))
+    # ── Iteration ────────────────────────────────────────────────────────
+    # At most 5 generations per problem (main experiment protocol,
+    # docs/ablation.md §7); trend extension below is off by default.
+    max_iterations: int = int(os.getenv("MAX_ITERATIONS", 5))
 
     # ── Sandbox ──────────────────────────────────────────────────────────
     sandbox_timeout_sec:      int = int(os.getenv("SANDBOX_TIMEOUT_SEC",      10))
@@ -109,34 +103,91 @@ class PipelineSettings:
     lcb_split:       str = os.getenv("LCB_SPLIT",       "test")
     lcb_difficulty:  str = os.getenv("LCB_DIFFICULTY",  "all")
     lcb_sample_size: int = int(os.getenv("LCB_SAMPLE_SIZE", 50))
+    # Optional contest-date window "YYYY-MM" (inclusive), applied before the
+    # seeded sample. Empty = whole release. Main experiment: 2025-01..2025-04.
+    lcb_date_from:   str = os.getenv("LCB_DATE_FROM", "")
+    lcb_date_to:     str = os.getenv("LCB_DATE_TO", "")
+    # "local"      → LCB-compatible evaluator in sandbox/lcb_eval.py (all reported results)
+    # "lcb_runner" → the official lcb_runner, if installed
+    # Pinned so a cloud machine with lcb_runner installed grades exactly like the Mac.
+    lcb_evaluator:   str = os.getenv("LCB_EVALUATOR", "local").lower()
+    # Offline grading on all (hidden) tests: one per-test limit for V0 and the
+    # pipeline alike (10 s = the value the ELECO runs were graded with).
+    hidden_timeout_sec: int = int(os.getenv("HIDDEN_TIMEOUT_SEC", 10))
+    # Repair iterations show the generator its previous solution next to the
+    # judge's feedback (LCB self-repair format). false = feedback only, the
+    # setting of every run before 2026-10-02 10:10.
+    feedback_include_code: bool = os.getenv("FEEDBACK_INCLUDE_CODE", "true").lower() == "true"
 
     # ── Output ─────────────────────────────────────────────────────────────
     output_dir:        str = os.getenv("OUTPUT_DIR",        "outputs/results")
     memory_log_path:   str = os.getenv("MEMORY_LOG_PATH",   "outputs/memory.md")
     pipeline_log_path: str = os.getenv("PIPELINE_LOG_PATH", "outputs/pipeline.log")
 
-    # ── Trend-aware extension ─────────────────────────────────────────
-    # max_iterations'a ulaşıldığında stop_max yerine EMA trend analizi yapılır.
-    # Tüm 5 aktivasyon koşulu sağlanırsa ek iterasyon verilir.
-    # Varsayılan: false — V1–V3 ablasyon sonuçlarını etkilemez.
-    # Aktive etmek için: TREND_EXTENSION_ENABLED=true
+    # ── Model sequence ────────────────────────────────────────────────────
+    # "M1"     → single generator (default; every reported experiment)
+    # "M1,M2"  → also run the small-scale model afterwards (cloud registry:
+    #            Qwen2.5-Coder-1.5B; model-scale study, not run so far)
+    pipeline_models: str = os.getenv("PIPELINE_MODELS", "M1")
+
+    # ── Judge model ───────────────────────────────────────────────────────
+    # Registry key of the judgement model. Must match a key in ModelRegistry.
+    # Default: "QWEN" — change to any registered key (e.g. "M1" = self-judging) to swap.
+    judge_model: str = os.getenv("JUDGE_MODEL", "QWEN")
+
+    # ── Judge decision mechanism ──────────────────────────────────────────
+    # "verdict" → the judge gives an explicit, justified ACCEPT/REJECT; the
+    #             deterministic metrics and test results are evidence in its
+    #             prompt, and passing every public test is a precondition.
+    # "rubric"  → PASS when the 100-point rubric total clears the difficulty
+    #             threshold (with the same public-test precondition).
+    judge_decision: str = os.getenv("JUDGE_DECISION", "verdict").lower()
+
+    # ── Token budgets (per call) ──────────────────────────────────────────
+    # Local default 6144 is ~7.5% of the 81,920 output tokens the Qwen3.5
+    # model card recommends for competition programming; raise on cloud GPUs.
+    codegen_max_tokens: int = int(os.getenv("CODEGEN_MAX_TOKENS", 6144))
+    judge_max_tokens:   int = int(os.getenv("JUDGE_MAX_TOKENS", 4096))
+
+    # ── Paid API backend (ENV=openrouter) ─────────────────────────────────
+    # Hard cap on cumulative spend, summed over every run in the ledger.
+    api_budget_usd:   float = float(os.getenv("API_BUDGET_USD", "5.0"))
+    api_ledger_path:  str   = os.getenv("API_LEDGER_PATH", "outputs/api_usage.jsonl")
+    # Read timeout between streamed chunks, and retries for 429/5xx/drops.
+    api_timeout_sec:  int   = int(os.getenv("API_TIMEOUT_SEC", "300"))
+    api_max_retries:  int   = int(os.getenv("API_MAX_RETRIES", "5"))
+
+    # ── Trend-aware extension ─────────────────────────────────────────────
+    # When enabled, iteration_gate allows up to max_extension_iters additional
+    # iterations beyond max_iterations if the score shows a genuine upward trend.
+    # Disabled by default — enable to add trend-aware extension to any variant.
     #
-    # Aktivasyon koşulları (hepsi sağlanmalı):
-    #   1. accuracy > 0                           (en az bir test geçiyor)
-    #   2. pass_rate_slope > 0                    (son 3 iter'de pass rate artıyor)
-    #   3. EMA score_slope >= min                 (skor gerçekten iyileşiyor)
-    #   4. slope * TREND_PROJECTION_WINDOW >= gap (sabit pencereyle eşiğe ulaşılabilir)
-    #   5. extension_count < max      (bütçe tükenmemiş)
-    trend_extension_enabled: bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
-    max_extension_iters:     int   = int(os.getenv("MAX_EXTENSION_ITERS",  "3"))
-    trend_min_slope:         float = float(os.getenv("TREND_MIN_SLOPE",    "1.0"))
-    trend_ema_alpha:         float = float(os.getenv("TREND_EMA_ALPHA",    "0.5"))
+    # Activation requires ALL of:
+    #   1. accuracy > 0 (at least one test passing)
+    #   2. pass_rate_slope > 0 (pass rate increasing in last 3 iters)
+    #   3. EMA-smoothed score slope >= trend_min_slope (points/iter)
+    #   4. expected_gain >= gap to threshold (slope * trend_projection_window)
+    #   5. extension_count < max_extension_iters
+    #
+    # NOTE: trend_projection_window and max_extension_iters are intentionally
+    # separate. The projection window is a fixed look-ahead for the gain estimate;
+    # max_extension_iters is the hard safety cap.
+    # Increasing max_extension_iters does NOT inflate the gain projection.
+    trend_extension_enabled:  bool  = os.getenv("TREND_EXTENSION_ENABLED", "false").lower() == "true"
+    max_extension_iters:      int   = int(os.getenv("MAX_EXTENSION_ITERS",       "3"))
+    trend_projection_window:  int   = int(os.getenv("TREND_PROJECTION_WINDOW",   "3"))
+    trend_min_slope:          float = float(os.getenv("TREND_MIN_SLOPE",         "1.0"))
+    trend_ema_alpha:          float = float(os.getenv("TREND_EMA_ALPHA",         "0.5"))
+
+    @property
+    def model_sequence(self) -> list:
+        return [m.strip() for m in self.pipeline_models.split(",") if m.strip()]
 
     def __post_init__(self):
-        if self.env not in ("local", "cloud"):
+        if self.env not in ("local", "cloud", "openrouter"):
             raise ValueError(
-                f"Geçersiz ENV değeri: '{self.env}'. "
-                f"'local' veya 'cloud' olmalı."
+                f"Invalid ENV value: '{self.env}'. "
+                f"Must be 'local', 'cloud' or 'openrouter'."
             )
 
 
@@ -161,31 +212,68 @@ so shards of a capped/resumed run never overlap. Cloud server sizing: `PARALLEL`
 for `scripts/start_model.sh M1` (context per slot must cover prompt + `CODEGEN_MAX_TOKENS`).
 Step-by-step cloud procedure: `CLOUD_README.md`.
 
+### Hosted-API backend (`ENV=openrouter`)
+
+Runs the same pipeline against OpenRouter instead of llama.cpp servers. Experiment settings
+live in `config/openrouter.env` (tracked, no secrets); `scripts/run_openrouter.sh` sources it and
+reads only `OPENROUTER_API_KEY` from `.env.openrouter` (git-ignored; template
+`.env.openrouter.example`). The `.env` symlink is untouched.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | Required. Only in `.env.openrouter`; never committed |
+| `OPENROUTER_CODEGEN_MODEL` / `_PROVIDER` | `deepseek/deepseek-chat` / `deepinfra/fp4` | Generator and the one endpoint it is pinned to |
+| `OPENROUTER_JUDGE_MODEL` / `_PROVIDER` | `qwen/qwen-2.5-72b-instruct` / `novita/bf16` | Judge (different model family than the generator) |
+| `JUDGE_REASONING_EFFORT` | `medium` | Only for the secondary gpt-oss-120b judge |
+| `LCB_DATE_FROM` / `LCB_DATE_TO` | empty | Contest-date window `YYYY-MM` (inclusive), applied before the seeded sample; main experiment `2025-01`..`2025-04` (150 of 182 problems) |
+| `API_BUDGET_USD` | `5.0` | Hard cap on cumulative spend over all runs in the ledger |
+| `API_LEDGER_PATH` | `outputs/api_usage.jsonl` | One line per call: model, serving provider, tokens, cost, question_id, iteration |
+| `API_TIMEOUT_SEC` | `300` | Read timeout between streamed chunks |
+| `API_MAX_RETRIES` | `5` (`openrouter.env`: 10) | Retries for 429/5xx, dropped connections and in-stream provider errors. 10 lets a call wait out ~13 min of upstream overload (DeepInfra returned `engine_overloaded` 429s on 2026-10-02) without moving to another endpoint |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | — | Optional Langfuse tracing; only in `.env.openrouter` (git-ignored). Unset → tracing off |
+| `LANGFUSE_BASE_URL` | `https://cloud.langfuse.com` | Langfuse host (self-hosted: own URL) |
+| `LANGFUSE_ENABLED` | `true` | `false` forces tracing off even with keys |
+| `FEEDBACK_INCLUDE_CODE` | `true` | Repair iterations show the previous solution with the judge's feedback (LCB self-repair format); `false` = feedback only (`docs/codegen-models.md`) |
+| `HIDDEN_TIMEOUT_SEC` | `10` | Per-test limit for offline grading on all tests (V0 and pipeline outputs alike); grading stops at the first failure as lcb_runner does |
+
+Provider routing per call: `order=[<provider tag>]`, `allow_fallbacks=false`, and a `max_price`
+ceiling equal to the pinned endpoint's price, so a run never silently moves to another
+quantization or a pricier endpoint. Sampling and prices per (model, provider) pair are in
+`_OPENROUTER_MODELS` (`config/models.py`); an unlisted pair is rejected. Qwen2.5-72B uses its
+`generation_config.json` (temperature 0.7, top_p 0.8, top_k 20, repetition_penalty 1.05).
+DeepSeek-V3 publishes no generation_config.json; its model card's demo command uses temperature
+0.7, so that is set and top_p/top_k are left to the provider (`top_p=None` → not sent). Endpoints:
+DeepSeek-V3 on DeepInfra fp4 (163,840 context, 16,384 max output), Qwen2.5-72B on Novita bf16
+(32,000 context, 8,192 max output); both disclosed in the paper. Both models are open-weight:
+DeepSeek-V3 (code MIT, DeepSeek Model License, commercial use allowed), Qwen2.5-72B (Qwen License).
+The first pilot pair (Qwen2.5-Coder-32B on Cloudflare + Llama-3.3-70B) stays in the table for
+reproducibility only; see `docs/ablation.md` §7.
+
 ## 4. config/thresholds.py
 
 ```python
 """
-Tüm metrik eşikleri tek yerde.
-Node 1, Node 2, Node 3 ve judgement prompt bu modülden okur.
+All metric thresholds in one place.
+Node 1, Node 2, Node 3, and the judgement prompt all read from this module.
 """
 from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
 class Node1Thresholds:
-    cc_hard_limit:   float = 20.0   # CC > 20  → HIGH severity → STOP
-    cc_warn:         float = 10.0   # CC > 10  → issue report
-    mi_low_limit:    float = 40.0   # MI < 40  → LOW severity
-    mi_warn:         float = 65.0   # MI < 65  → issue report
-    halstead_warn:   float = 1000.0 # > 1000   → LOW severity
-    cc_ideal:        float = 5.0
-    mi_ideal:        float = 85.0
-    halstead_ideal:  float = 500.0
+    cc_hard_limit:  float = 20.0    # CC > 20  → HIGH severity → STOP
+    cc_warn:        float = 10.0    # CC > 10  → issue reported
+    mi_low_limit:   float = 40.0    # MI < 40  → LOW severity
+    mi_warn:        float = 65.0    # MI < 65  → issue reported
+    halstead_warn:  float = 1000.0  # > 1000   → LOW severity
+    cc_ideal:       float = 5.0
+    mi_ideal:       float = 85.0
+    halstead_ideal: float = 500.0
 
 
 @dataclass(frozen=True)
 class Node2Thresholds:
-    cpu_limit_ms:         float = 5000.0
+    cpu_limit_ms:         float = 2000.0
     ram_limit_mb:         float = 512.0
     pass_rate_easy:       float = 0.90
     pass_rate_medium:     float = 0.75
@@ -203,10 +291,10 @@ class Node3Thresholds:
     def for_difficulty(self, difficulty: str) -> int:
         mapping = {"easy": self.easy, "medium": self.medium, "hard": self.hard}
         if difficulty not in mapping:
-            raise ValueError(f"Geçersiz difficulty: {difficulty!r}")
+            raise ValueError(f"Invalid difficulty: {difficulty!r}")
         return mapping[difficulty]
 
-    def as_dict(self) -> dict[str, int]:
+    def as_dict(self) -> dict:
         return {"easy": self.easy, "medium": self.medium, "hard": self.hard}
 
 
@@ -218,11 +306,16 @@ class AllThresholds:
 
     def judgement_context_table(self) -> str:
         """
-        Qwen 3.5'e gönderilecek threshold tablosunu config'ten üretir.
-        Hardcode markdown string yok — değer değişirse tablo otomatik güncellenir.
+        Generates the threshold table embedded in the judgement prompt.
+        Hardcoded markdown string avoided — if values change, table updates automatically.
+        Pass rate rows are split by difficulty because easy/medium/hard have different targets.
         """
         n1 = self.node1
         n2 = self.node2
+        # "Poor" lower bounds: easy/medium drop by 20 pp; medium's floor equals the hard target
+        poor_easy   = int(n2.pass_rate_easy   * 100) - 20  # 90 - 20 = 70%
+        poor_medium = int(n2.pass_rate_hard   * 100)       # 55% (hard target = medium's poor floor)
+        poor_hard   = int(n2.pass_rate_hard   * 100) - 20  # 55 - 20 = 35%
         return f"""## Metric Threshold Reference
 
 | Metric | Good | Acceptable | Poor |
@@ -230,13 +323,16 @@ class AllThresholds:
 | Cyclomatic Complexity (CC) | ≤ {n1.cc_ideal:.0f} | {n1.cc_ideal+1:.0f}–{n1.cc_warn:.0f} | > {n1.cc_warn:.0f} |
 | Maintainability Index (MI) | ≥ {n1.mi_ideal:.0f} | {n1.mi_warn:.0f}–{n1.mi_ideal:.0f} | < {n1.mi_warn:.0f} |
 | Halstead Volume | ≤ {n1.halstead_ideal:.0f} | {n1.halstead_ideal:.0f}–{n1.halstead_warn:.0f} | > {n1.halstead_warn:.0f} |
-| Test Pass Rate | ≥ {n2.pass_rate_easy:.0%} | {n2.pass_rate_hard:.0%}–{n2.pass_rate_easy:.0%} | < {n2.pass_rate_hard:.0%} |
+| Test Pass Rate — Easy   | ≥ {n2.pass_rate_easy:.0%}  | {poor_easy}%–{int(n2.pass_rate_easy*100)}%   | < {poor_easy}%  |
+| Test Pass Rate — Medium | ≥ {n2.pass_rate_medium:.0%}  | {poor_medium}%–{int(n2.pass_rate_medium*100)}%   | < {poor_medium}%  |
+| Test Pass Rate — Hard   | ≥ {n2.pass_rate_hard:.0%}  | {poor_hard}%–{int(n2.pass_rate_hard*100)}%   | < {poor_hard}%  |
 | Peak Memory | ≤ {n2.ram_limit_mb/2:.0f} MB | {n2.ram_limit_mb/2:.0f}–{n2.ram_limit_mb:.0f} MB | > {n2.ram_limit_mb:.0f} MB |
-| CPU Time | ≤ {n2.cpu_limit_ms/2500:.0f} s | {n2.cpu_limit_ms/2500:.0f}–{n2.cpu_limit_ms/1000:.0f} s | > {n2.cpu_limit_ms/1000:.0f} s |
+| CPU Time | ≤ {n2.cpu_limit_ms/2000:.0f} s | {n2.cpu_limit_ms/2000:.0f}–{n2.cpu_limit_ms/1000:.0f} s | > {n2.cpu_limit_ms/1000:.0f} s |
 
 Bandit HIGH severity: zero tolerance.
 MI < {n1.mi_warn:.0f} means the code is hard to maintain.
-CC > {n1.cc_warn:.0f} means the function has too many branches."""
+CC > {n1.cc_warn:.0f} means the function has too many branches.
+IMPORTANT: Apply the pass rate row that matches the problem's difficulty level."""
 
 
 thresholds = AllThresholds()
@@ -248,9 +344,9 @@ thresholds = AllThresholds()
 
 ```python
 """
-Model tanımları ve build_registry factory.
+Model definitions and build_registry factory.
 
-ENV=cloud (varsayılan, Vast.ai):
+ENV=cloud (default, Vast.ai):
     M1   → Qwen3.5-9B                 (~6 GB)    port 8001  ← medium-scale anchor
     M2   → Qwen2.5-Coder-1.5B-Instruct (~1 GB)    port 8002  ← small-scale anchor
     QWEN → Qwen3.5-35B-A3B            (~24 GB)   port 8004
@@ -260,12 +356,21 @@ ENV=cloud (varsayılan, Vast.ai):
     the controlled variable for the pipeline's core claim — that
     structured, multi-stage feedback narrows the gap between a
     medium-scale and a small-scale model — instead of conflating size
-    differences with vendor/architecture differences.
+    differences with vendor/architecture differences. See
+    docs/future-work.md T1 and main.tex §IV-A for the rationale.
 
 ENV=local (Mac Mini M4 16GB):
     M1   → qwen3.5-9b (UD-Q4_K_XL, ~6.0 GB)   port 8001
     M2   → qwen3.5-9b (UD-Q4_K_XL, ~6.0 GB)   port 8001  ← same server
     QWEN → qwen3.5-9b (UD-Q4_K_XL, ~6.0 GB)   port 8001  ← same server
+
+ENV=openrouter (hosted APIs, paid, budget-capped — see models/budget.py):
+    M1   → deepseek/deepseek-chat = DeepSeek-V3 (DeepInfra fp4; released 2024-12-26)
+    M2   → same as M1 (run with PIPELINE_MODELS=M1)
+    QWEN → qwen/qwen-2.5-72b-instruct (Novita bf16; released 2024-09-19)
+    Both predate the LCB 2025-01..04 problems they are evaluated on, and the
+    judge is a different model family than the generator (self-preference
+    bias). Qwen3.5-9B + gpt-oss-120b remain selectable via env.
 
 In local mode all roles route to a single server (8001).
 Pipeline logic (ordering, gates, iterations) runs identically.
@@ -277,7 +382,7 @@ Sequential execution note:
     of which codegen model is active, so it stays resident concurrently).
 """
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -291,6 +396,14 @@ class ModelConfig:
     temperature: float
     port:        int    # Reference for start_model.sh
     role:        str    # "codegen" | "judgement"
+    # Extra request-body fields (provider pinning, sampling params that the
+    # OpenAI schema lacks, reasoning effort). Empty for llama.cpp servers.
+    extra_body:  dict  = field(default_factory=dict)
+    # USD per 1M tokens; used for the pre-call worst-case budget reserve
+    # and as a fallback when the API does not report the call's cost.
+    price_in:    float = 0.0
+    price_out:   float = 0.0
+    top_p:       float | None = None
 
 
 @dataclass(frozen=True)
@@ -306,13 +419,32 @@ class ModelRegistry:
             raise ValueError(f"Invalid model_id: {model_id!r}. Must be M1/M2/QWEN.")
 
     def codegen_models(self, sequence: list[str]) -> list:
-        """Returns ModelConfig list for the given model keys in order."""
+        """Returns ModelConfig list for the given model keys in order.
+
+        Args:
+            sequence: list of model keys, e.g. settings.model_sequence
+        """
         return [self.get(k) for k in sequence]
 
     def judgement_model(self, key: str) -> ModelConfig:
+        """Returns the ModelConfig for the given judgement model key.
+
+        Args:
+            key: registry key, e.g. settings.judge_model
+        """
         return self.get(key)
 
+    paid: bool = False   # True → calls go through the budget ledger
+
     def api_key(self) -> str:
+        if self.paid:
+            key = os.getenv("OPENROUTER_API_KEY", "")
+            if not key:
+                raise RuntimeError(
+                    "OPENROUTER_API_KEY is not set. Put it in .env.openrouter "
+                    "(git-ignored) and start runs with scripts/run_openrouter.sh"
+                )
+            return key
         return os.getenv("LLAMA_API_KEY", "local")
 
     def is_local(self) -> bool:
@@ -403,90 +535,230 @@ def _local_registry() -> ModelRegistry:
     )
 
 
+def _pin(provider_tag: str, max_in: float, max_out: float) -> dict:
+    """
+    OpenRouter provider routing: one exact endpoint, no silent fallback to
+    another provider/quantization, and a price ceiling as a second guard.
+    """
+    return {
+        "order":           [provider_tag],
+        "allow_fallbacks": False,
+        "max_price":       {"prompt": max_in, "completion": max_out},
+    }
+
+
+# Per-model request settings for ENV=openrouter, from each model's card /
+# generation_config.json. Prices are the pinned endpoint's USD per 1M tokens
+# (also used as the max_price ceiling). Keyed by (model, provider tag).
+_OPENROUTER_MODELS = {
+    # Main, contamination-free experiment (both released before 2025-01;
+    # problems restricted to LCB 2025-01..2025-04 — see docs/dataset.md §10).
+    # Generator: DeepSeek-V3 (2024-12-26). No official sampling recommendation;
+    # T 0.7 as in the model card's demo command (provider defaults otherwise).
+    ("deepseek/deepseek-chat", "deepinfra/fp4"): dict(
+        temperature=0.7, top_p=None, price=(0.32, 0.89), extra={},
+    ),
+    # Judge: Qwen2.5-72B-Instruct (2024-09-19), generation_config.json values.
+    ("qwen/qwen-2.5-72b-instruct", "novita/bf16"): dict(
+        temperature=0.7, top_p=0.8, price=(0.38, 0.40),
+        extra={"top_k": 20, "repetition_penalty": 1.05},
+    ),
+    # Pilot only (2026-10-02): Cloudflare's Qwen2.5-Coder-32B endpoint dropped
+    # "[]" tokens (≈9% of samples had `x =` with nothing after it).
+    ("qwen/qwen-2.5-coder-32b-instruct", "cloudflare"): dict(
+        temperature=0.7, top_p=0.8, price=(0.66, 1.00),
+        extra={"top_k": 20, "repetition_penalty": 1.05},
+    ),
+    ("meta-llama/llama-3.3-70b-instruct", "novita/bf16"): dict(
+        temperature=0.6, top_p=0.9, price=(0.135, 0.40), extra={},
+    ),
+    # Secondary "modern reasoning model" setting.
+    ("qwen/qwen3.5-9b", "deepinfra/bf16"): dict(
+        temperature=0.6, top_p=0.95, price=(0.10, 0.15),
+        extra={"top_k": 20, "min_p": 0.0},
+    ),
+    ("openai/gpt-oss-120b", "deepinfra/bf16"): dict(
+        temperature=1.0, top_p=1.0, price=(0.037, 0.17),
+        extra={"reasoning": {"effort": os.getenv("JUDGE_REASONING_EFFORT", "medium").lower()}},
+    ),
+}
+
+
+def _openrouter_config(model_id: str, role: str, model: str, provider: str, port: int) -> ModelConfig:
+    try:
+        spec = _OPENROUTER_MODELS[(model, provider)]
+    except KeyError:
+        raise ValueError(
+            f"No OpenRouter settings for {model!r} on {provider!r}; "
+            f"add sampling and price to _OPENROUTER_MODELS in config/models.py"
+        )
+    price_in, price_out = spec["price"]
+    return ModelConfig(
+        model_id=model_id,
+        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        model_name=model,
+        temperature=spec["temperature"],
+        top_p=spec["top_p"],
+        port=port,
+        role=role,
+        extra_body={
+            "provider": _pin(provider, price_in, price_out),
+            **spec["extra"],
+            "usage":    {"include": True},
+        },
+        price_in=price_in,
+        price_out=price_out,
+    )
+
+
+def _openrouter_registry() -> ModelRegistry:
+    """
+    Hosted-API registry. Generator and judge are different model families;
+    each is pinned to one provider endpoint so every call in a run hits the
+    same weights and precision (logged per call in the API ledger).
+    Defaults are the contamination-free main experiment.
+    """
+    codegen = _openrouter_config(
+        "M1", "codegen",
+        os.getenv("OPENROUTER_CODEGEN_MODEL", "deepseek/deepseek-chat"),
+        os.getenv("OPENROUTER_CODEGEN_PROVIDER", "deepinfra/fp4"), port=0,
+    )
+    judge = _openrouter_config(
+        "QWEN", "judgement",
+        os.getenv("OPENROUTER_JUDGE_MODEL", "qwen/qwen-2.5-72b-instruct"),
+        os.getenv("OPENROUTER_JUDGE_PROVIDER", "novita/bf16"), port=1,
+    )
+    return ModelRegistry(M1=codegen, M2=codegen, QWEN=judge, paid=True)
+
+
 def build_registry(env: str = "cloud") -> ModelRegistry:
     """
-    ENV flag'ine göre doğru registry'yi döner.
+    Returns the correct registry based on the ENV flag.
 
     Args:
-        env: "cloud" (varsayılan) | "local"
+        env: "cloud" (default) | "local" | "openrouter"
 
     Returns:
-        ModelRegistry — diğer modüller bu registry'yi kullanır,
-        hangi ortamda olduklarını bilmek zorunda değiller.
+        ModelRegistry — other modules use this registry and don't need
+        to know which environment they're running in.
     """
     if env == "local":
         return _local_registry()
+    if env == "openrouter":
+        return _openrouter_registry()
     return _cloud_registry()
 ```
+
+`ModelConfig` also carries `extra_body` (provider pinning and non-OpenAI sampling fields),
+`top_p`, and `price_in` / `price_out` (USD per 1M tokens, for the budget reserve and as a
+fallback when the API reports no cost). `ModelRegistry.paid` is `True` only for
+`_openrouter_registry()`; it switches `models/client.chat()` to the streamed, retried,
+ledger-recorded path (see `docs/codegen-models.md`).
 
 ---
 
 ## 6. .env Files
 
-### .env (cloud — Vast.ai, default)
+### config/openrouter.env (main experiment; tracked, no secrets)
+
+The key is **not** here: `scripts/run_openrouter.sh` reads only `OPENROUTER_API_KEY=` from the
+git-ignored `.env.openrouter` (template `.env.openrouter.example`).
 
 ```bash
-# ── Ortam ──────────────────────────────────────────────────────────
-ENV=cloud
+# ── OpenRouter experiment settings (tracked; NO secrets here) ──────
+# The API key is read only from .env.openrouter (git-ignored) by
+# scripts/run_openrouter.sh. See docs/ablation.md §7.
+ENV=openrouter
 
-# ── Model server URL'leri ──────────────────────────────────────────
-M1_BASE_URL=http://localhost:8001/v1
-M2_BASE_URL=http://localhost:8002/v1
-M3_BASE_URL=http://localhost:8003/v1
-QWEN_BASE_URL=http://localhost:8004/v1
-LLAMA_API_KEY=local
+# Main, contamination-free experiment: both models released before 2025-01,
+# problems from LCB v6 2025-01..2025-04 (docs/dataset.md §10).
+# Generator DeepSeek-V3 (2024-12-26), judge Qwen2.5-72B-Instruct (2024-09-19).
+# The pilot pair (Qwen2.5-Coder-32B on Cloudflare + Llama-3.3-70B) was dropped:
+# floor effect and a Cloudflare endpoint that lost "[]" tokens.
+OPENROUTER_CODEGEN_MODEL=deepseek/deepseek-chat
+OPENROUTER_CODEGEN_PROVIDER=deepinfra/fp4
+OPENROUTER_JUDGE_MODEL=qwen/qwen-2.5-72b-instruct
+OPENROUTER_JUDGE_PROVIDER=novita/bf16
 
-# ── Pipeline ──────────────────────────────────────────────────────
-MAX_ITERATIONS=10
-SANDBOX_TIMEOUT_SEC=10
-SANDBOX_MEMORY_LIMIT_MB=512
-SANDBOX_FLAKINESS_RUNS=5
-SANDBOX_MAX_FAILED_CASES=5
+# ── Spending guard ─────────────────────────────────────────────────
+API_BUDGET_USD=5.0
+API_LEDGER_PATH=outputs/api_usage.jsonl
+API_TIMEOUT_SEC=300
+API_MAX_RETRIES=10
 
-# ── LiveCodeBench ─────────────────────────────────────────────────
+# ── Token budgets (non-reasoning models; endpoint limits: generator
+#    163,840 context / 16,384 output, judge 32,000 / 8,192) ──────────
+CODEGEN_MAX_TOKENS=8192
+JUDGE_MAX_TOKENS=4096
+
+# ── Problems ───────────────────────────────────────────────────────
 LCB_SPLIT=test
 LCB_DIFFICULTY=all
-LCB_SAMPLE_SIZE=50
+LCB_DATE_FROM=2025-01
+LCB_DATE_TO=2025-04
+LCB_SAMPLE_SIZE=150
+LCB_EVALUATOR=local
 
-# ── Output ─────────────────────────────────────────────────────────
-OUTPUT_DIR=outputs/results
-MEMORY_LOG_PATH=outputs/memory.md
-PIPELINE_LOG_PATH=outputs/pipeline.log
-
-# ── Trend-aware extension ─────────────────────────────────────────
-# V1–V3 ablasyon çalıştırmalarında false bırak.
+# ── Pipeline: at most 5 iterations, no trend extension ─────────────
+PIPELINE_MODELS=M1
+JUDGE_MODEL=QWEN
+JUDGE_DECISION=verdict
+MAX_ITERATIONS=5
 TREND_EXTENSION_ENABLED=false
-MAX_EXTENSION_ITERS=3
-TREND_MIN_SLOPE=1.0
-TREND_EMA_ALPHA=0.5
+SANDBOX_TIMEOUT_SEC=15
+SANDBOX_MEMORY_LIMIT_MB=256
+SANDBOX_FLAKINESS_RUNS=2
+SANDBOX_MAX_FAILED_CASES=3
+
+# ── Output (kept apart from the local runs) ────────────────────────
+OUTPUT_DIR=outputs/openrouter/results
+MEMORY_LOG_PATH=outputs/openrouter/memory.md
+PIPELINE_LOG_PATH=outputs/openrouter/pipeline.log
+
+# Repair iterations show the generator its previous solution with the judge
+# feedback (LCB self-repair format). false = feedback only (runs before 10:10).
+FEEDBACK_INCLUDE_CODE=true
 ```
 
-### .env.local (Mac Mini M4 16GB)
+### .env.local (Mac mini M4 — ELECO paper runs)
 
 ```bash
-# ── Ortam — LOCAL DEBUG ───────────────────────────────────────────
 ENV=local
-
-# ── Single server (all roles go here) ──────────────────────────
 LOCAL_BASE_URL=http://localhost:8001/v1
-LOCAL_CODEGEN_MODEL=qwen3.5-9b   # Unsloth UD-Q4_K_XL ~6.0 GB
-LOCAL_JUDGEMENT_MODEL=qwen3.5-9b  # same model, same server
+LOCAL_CODEGEN_MODEL=qwen3.5-9b      # Unsloth UD-Q4_K_XL ~6 GB
+LOCAL_JUDGEMENT_MODEL=qwen3.5-9b    # same model, same server
 LLAMA_API_KEY=local
 
-# ── Pipeline — keep short ───────────────────────────────────────────
-MAX_ITERATIONS=3
-SANDBOX_TIMEOUT_SEC=15              # Mac daha yavaş, marj ver
+PIPELINE_MODELS=M1
+JUDGE_MODEL=QWEN                    # → the same local server
+MAX_ITERATIONS=5
+TREND_EXTENSION_ENABLED=true        # paper runs: 5 + up to 3 (new runs: false)
+MAX_EXTENSION_ITERS=3
+TREND_PROJECTION_WINDOW=3
+TREND_MIN_SLOPE=1.0
+TREND_EMA_ALPHA=0.5
+SANDBOX_TIMEOUT_SEC=15
 SANDBOX_MEMORY_LIMIT_MB=256
+SANDBOX_FLAKINESS_RUNS=2
+SANDBOX_MAX_FAILED_CASES=3
 
-# ── LiveCodeBench — small sample ───────────────────────────────
-LCB_SAMPLE_SIZE=5
-LCB_DIFFICULTY=easy
+LCB_SPLIT=test
+LCB_DIFFICULTY=all
+LCB_SAMPLE_SIZE=150                 # seed 42; the paper uses the first 50
 
-# ── Output ─────────────────────────────────────────────────────────
 OUTPUT_DIR=outputs/results
 MEMORY_LOG_PATH=outputs/memory.md
 PIPELINE_LOG_PATH=outputs/pipeline.log
 ```
+
+Defaults not set here: `JUDGE_DECISION=verdict`, `CODEGEN_MAX_TOKENS=6144`,
+`JUDGE_MAX_TOKENS=4096`, `LCB_EVALUATOR=local`.
+
+### .env.cloud (rented GPU, optional)
+
+Same experiment settings as `.env.local`, with `ENV=cloud`, `M1_BASE_URL=http://localhost:8001/v1`,
+`JUDGE_MODEL=M1` and a larger budget (`CODEGEN_MAX_TOKENS=32768`, `JUDGE_MAX_TOKENS=16384`).
+Full file: `CLOUD_README.md` §B.
 
 ### Usage
 
@@ -496,8 +768,11 @@ PIPELINE_LOG_PATH=outputs/pipeline.log
 # Mac Mini (local):
 ln -sf .env.local .env
 
-# Vast.ai (cloud):
+# Rented GPU (cloud, optional):
 ln -sf .env.cloud .env
+
+# OpenRouter (main experiment) does not use the symlink:
+#   scripts/run_openrouter.sh smoke
 
 # After symlink is set, just run:
 python main.py
@@ -511,148 +786,11 @@ python -c "from config import settings, model_registry; \
 
 ---
 
-## 7. Mac Mini M4 Local Kurulumu
+## 7. Installation
 
-### Model Download (one-time)
-
-```bash
-# All roles (codegen + judgement) — ~6.0 GB
-hf download unsloth/Qwen3.5-9B-GGUF \
-    --include "*UD-Q4_K_XL*" \
-    --local-dir ./models/qwen3.5-9b
-```
-
-### llama.cpp Metal Derleme
-
-```bash
-cmake llama.cpp -B llama.cpp/build \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DGGML_CUDA=OFF      # Metal otomatik aktif
-
-cmake --build llama.cpp/build \
-    --config Release -j$(sysctl -n hw.logicalcpu)
-```
-
-### Start Single Server (codegen and judgement share the same server)
-
-```bash
-# Codegen and judgement both go to port 8001
-./llama.cpp/llama-server \
-    --model ./models/qwen3.5-9b/*.gguf \
-    --port 8001 --host 0.0.0.0 \
-    --ctx-size 8192 --n-gpu-layers 99 \
-    --parallel 1 \
-    --jinja \
-    --cache-ram 0 \
-    --temp 0.6 --top-p 0.95 --min-p 0.01 --top-k 40
-```
-
-> `--parallel 1` caps llama-server at a single inference slot. Without it, llama-server
-> defaults to 3 parallel slots, each allocating its own KV cache — on a 16GB Mac Mini
-> this was observed to trigger `kIOGPUCommandBufferCallbackErrorOutOfMemory` (Metal GPU
-> OOM) on the very first request. The pipeline only ever issues one request at a time
-> per model (sequential execution), so a single slot is sufficient.
-
-> `--jinja` is required for qwen3.5-9b's chat template. `--cache-ram 0` disables the
-> default 8 GiB prompt cache, which caused Metal GPU OOM when combined with the model's
-> resident weights on this hardware. In local mode, judgement calls also go to port 8001;
-> llama.cpp handles both over the same port and the same model.
-
-### Run Pipeline
-
-```bash
-# Symlink already set to .env.local (done in setup step A6)
-python main.py
-# → ENV=local → M1/M2 → qwen3.5-9b (port 8001)
-# → QWEN → qwen3.5-9b (port 8001)
-# → 5 easy questions, 3 iterations
-```
-
----
-
-## 8. Vast.ai Cloud Kurulumu
-
-### Model Download
-
-```bash
-cd /workspace/models && pip install huggingface_hub
-
-# M1 — Qwen3.5-9B (~6 GB)
-huggingface-cli download unsloth/Qwen3.5-9B-GGUF \
-    --include "*UD-Q4_K_XL*" --local-dir ./qwen3.5-9b
-
-# M2 — Qwen2.5-Coder-1.5B-Instruct (~1 GB)
-huggingface-cli download unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF \
-    --include "*Q4_K_M*" --local-dir ./qwen2.5-coder-1.5b
-
-# QWEN — Judgement (~24 GB)
-huggingface-cli download unsloth/Qwen3.5-35B-A3B-GGUF \
-    --include "*UD-Q4_K_XL*" --local-dir ./qwen3.5-35b
-```
-
-### scripts/start_model.sh
-
-```bash
-#!/bin/bash
-# Usage: bash scripts/start_model.sh M1|M2|QWEN
-# Stops previous server, starts new model.
-# Unsloth split GGUFs: first_shard() picks the first shard;
-# llama.cpp auto-discovers the rest.
-
-set -e
-MODEL=${1:?"\nUsage: $0 M1|M2|QWEN"}
-MODELS=/workspace/models
-
-first_shard() {
-    ls "$1/"*.gguf 2>/dev/null | sort | head -1
-}
-
-stop_server() {
-    pkill -f "llama-server" 2>/dev/null || true
-    sleep 2
-}
-
-case $MODEL in
-M1)
-    MODEL_PATH=$(first_shard "$MODELS/qwen3.5-9b")
-    [ -z "$MODEL_PATH" ] && { echo "M1 model files not found in $MODELS/qwen3.5-9b"; exit 1; }
-    echo "Starting M1: $MODEL_PATH"
-    stop_server
-    /workspace/llama.cpp/llama-server \
-        --model "$MODEL_PATH" \
-        --port 8001 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
-        --jinja --cache-ram 0 \
-        --temp 0.6 --top-p 0.95 --min-p 0.01 --top-k 40
-    ;;
-M2)
-    MODEL_PATH=$(first_shard "$MODELS/qwen2.5-coder-1.5b")
-    [ -z "$MODEL_PATH" ] && { echo "M2 model files not found in $MODELS/qwen2.5-coder-1.5b"; exit 1; }
-    echo "Starting M2: $MODEL_PATH"
-    stop_server
-    /workspace/llama.cpp/llama-server \
-        --model "$MODEL_PATH" \
-        --port 8002 --host 0.0.0.0 \
-        --ctx-size 16384 --n-gpu-layers 99 \
-        --temp 0.7 --top-p 0.95 --min-p 0.01 --top-k 40
-    ;;
-QWEN)
-    MODEL_PATH=$(first_shard "$MODELS/qwen3.5-35b")
-    [ -z "$MODEL_PATH" ] && { echo "QWEN model files not found in $MODELS/qwen3.5-35b"; exit 1; }
-    echo "Starting QWEN: $MODEL_PATH"
-    stop_server
-    /workspace/llama.cpp/llama-server \
-        --model "$MODEL_PATH" \
-        --port 8004 --host 0.0.0.0 \
-        --ctx-size 8192 --n-gpu-layers 99 \
-        --temp 0.3 --top-p 0.95 --min-p 0.01
-    ;;
-*)
-    echo "Invalid model: $MODEL"
-    exit 1
-    ;;
-esac
-```
+Installation steps live in one place to avoid drift: `docs/setup.md` (Mac mini, llama.cpp,
+model download), `CLOUD_README.md` §A (OpenRouter) and §B (rented GPU). Server flags are set by
+`scripts/start_model.sh` (Qwen3.5-9B: `--jinja --cache-ram 0`; cloud: `PARALLEL`, `CTX_PER_SLOT`).
 
 ---
 
@@ -662,19 +800,13 @@ There is **not a single line** related to ENV or model selection in any other mo
 `config/__init__.py` handles this when building the registry.
 
 ```python
-# models/client.py — unchanged
-from config import model_registry
+# models/client.py — nodes call chat(model_id, messages, max_tokens, tag);
+# get_client() builds the OpenAI client from the registry entry
+# (llama.cpp URL, or OpenRouter with the key from OPENROUTER_API_KEY).
 
-def get_client(model_id: str) -> OpenAI:
-    cfg = model_registry.get(model_id)
-    # local mode: M1/M2 → port 8001 (qwen3.5-9b)
-    # cloud: M1 → port 8001 (qwen3.5-9b), M2 → port 8002 (qwen2.5-coder-1.5b)
-    return OpenAI(base_url=cfg.base_url, api_key=model_registry.api_key())
-
-# pipeline/router.py — unchanged
-from config import model_registry
+# pipeline/router.py
 MODEL_SEQUENCE = [m.model_id for m in model_registry.codegen_models(settings.model_sequence)]
-# → ["M1", "M2"] (default from config/pipeline.py)
+# → ["M1"] (default PIPELINE_MODELS)
 
 # nodes/judgement.py — unchanged
 from config import thresholds
@@ -717,9 +849,20 @@ print('Is local:   ', model_registry.is_local())       # True
 "
 ```
 
+### OpenRouter environment
+
+```bash
+set -a; source config/openrouter.env; set +a
+python -c "
+from config import model_registry as r
+print(r.paid, r.M1.model_name, r.M1.extra_body['provider'])   # True deepseek/deepseek-chat {...}
+print(r.QWEN.model_name)                                       # qwen/qwen-2.5-72b-instruct
+"
+```
+
 ### Invalid ENV test
 
 ```bash
 ENV=staging python -c "from config import settings" 2>&1
-# ValueError: Geçersiz ENV değeri: 'staging'. 'local' veya 'cloud' olmalı.
+# ValueError: Invalid ENV value: 'staging'. Must be 'local', 'cloud' or 'openrouter'.
 ```

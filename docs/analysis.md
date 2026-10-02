@@ -1,5 +1,10 @@
 # analysis.md — Results Analysis
 
+> **Durum (2026-10-02).** §1–§8 eski `benchmark/analysis.py` araç takımını anlatır; bu kod
+> `benchmark/legacy/analysis.py` altına taşındı. Güncel analiz araçları: §9
+> (`paper_results.py`, ELECO bildirisi) ve §10 (`openrouter_results.py`, ana deney).
+> TSR_correctness = pass@1 (teslim edilen kod, gizli testler); bkz. `docs/ablation.md` §1 notu.
+
 ## 1. TSR Tanımı — İki Katman
 
 Pipeline varyantları (V1–V3) ile V0 baseline arasında metodolojik olarak
@@ -484,3 +489,94 @@ Paper project layout: `main.tex` (preamble + `\input` order), `bolumler/00-…07
 
 Because the sample order is seeded-random, a completed prefix of the 150-problem run is itself a
 random subsample; the paper reports `\rN` completed problems.
+
+---
+
+## 10. Main experiment — `benchmark/openrouter_results.py` (2026-10-02)
+
+Inputs: the baseline JSONL from `benchmark/sample_baseline.py` (V0, n = 5 samples per problem),
+the pipeline run ids of design Y (`JUDGE_DECISION=verdict`) and P (`rubric`), and the API ledger.
+Only problems present in every source are used, so all comparisons are paired. Hidden-test
+grading reuses `paper_results.hidden_evaluate` (cache: `<results-root>/hidden_eval_cache.json`)
+with `timeout=HIDDEN_TIMEOUT_SEC` (10 s) and `stop_on_fail=True` — the same rules as the V0
+baseline, stopping at the first failing test as lcb_runner does (`docs/node2.md`). Only
+"all tests pass" is reported, so the early stop does not change any metric. `paper_results`
+itself keeps its defaults (10 s, no early stop) so the ELECO numbers and cache are unchanged.
+Cost is summed from the ledger by run id; baseline and pipeline entries are told apart by the
+`phase` tag, because run ids are second-stamped and the main baseline shared its id
+(`run_20261002_091834`) with pipeline shard Y-0 that started in the same second.
+
+| Output | Definition |
+|---|---|
+| V0 pass@1 | mean over problems of c/n; bootstrap 95% CI over problems |
+| pass@k | unbiased estimator 1 − C(n−c, k)/C(n, k) (Chen et al. 2021); needs hidden tests to pick → upper bound |
+| filt@k | first of the first k samples that passes all public tests is submitted (else the k-th); no hidden-test access |
+| V3 | strict accuracy of the delivered code, Wilson 95% CI |
+| V3 − V0 | mean paired difference (V3_i − c_i/n), bootstrap 95% CI, Wilcoxon signed-rank p |
+| iter 1 → final | exact McNemar on the pipeline's own first attempt vs. delivered code |
+| budget-matched | V3 vs filt@k and pass@k at k = ⌊k̄⌋, ⌈k̄⌉, k̄ = mean generations per problem |
+| Y vs P | exact McNemar on delivered code |
+| `rows` (results.json) | per design, question_id → delivered code passes all hidden tests |
+| `--langfuse` | uploads `hidden_pass` / `hidden_pass_first` scores to the runs' Langfuse traces (`docs/codegen-models.md`) |
+| `--latex <paper dir>` | writes `veri/ana_sonuclar.tex` (`\a…` macros: Turkish decimal comma, plus `…En` variants with a decimal point for the Abstract) and `cizelgeler/cizelge-ana.tex` (difficulty × V0/V3_Y/V3_P table) from `results.json`; the paper never hand-copies a number |
+| `--compare <results.json>` | per design, exact McNemar against another analysis on common problems (ablation: feedback only vs feedback + previous solution) |
+| judge | public-passing attempts, rejections and whether hidden tests agree, acceptance precision, share of verdicts from the judge, JSON/LLM errors |
+| feedback leaks | judge feedback containing solution code (fenced block with logic lines, or ≥ 2 logic lines outside fences; format instructions and empty skeletons excluded) |
+| cost | USD and calls per phase (baseline file stem / run ids in the ledger) |
+
+```bash
+python -m benchmark.openrouter_results \
+    --baseline outputs/openrouter/results/baseline_samples/<run_id>.jsonl \
+    --y-run-ids <run ids> --p-run-ids <run ids> \
+    [--results-root outputs/openrouter/results] [--ledger outputs/api_usage.jsonl] \
+    [--out outputs/openrouter/report]
+```
+
+Writes `results.json` and a Turkish `report.md`. A dry run on the ELECO local runs (n = 1,
+first iteration as V0) reproduced the paper's paired numbers and found solution code in 7/97
+(Y) and 9/109 (P) judge feedbacks — the reason for the no-code rule (`docs/node3.md` §4.3).
+
+
+---
+
+## 11. Offline judge replay — `benchmark/judge_replay.py` (2026-10-02)
+
+Re-judges every recorded attempt that passed all public tests with a candidate judge and
+scores the verdict against the hidden tests. Only these attempts are replayed: a failing
+public test forces REJECT whatever the judge says (`_public_precondition`), so these are the
+decisions that determine the delivered code.
+
+- **Same input.** The candidate receives `JUDGEMENT_SYSTEM_PROMPT` and the user prompt that
+  `_build_judgement_prompt` builds from the iteration JSON (problem excerpt, comment-stripped
+  code, Node 1 findings, Node 2 results), parsed with `_parse_judgement`.
+- **Candidate.** The registry's judge slot, selected with `OPENROUTER_JUDGE_MODEL` /
+  `OPENROUTER_JUDGE_PROVIDER` (entries in `config/models.py`). Reasoning models get
+  `JUDGE_MAX_TOKENS=8192` because reasoning tokens count toward the output budget.
+- **Decision.** The pipeline's own rows use `node3.pass` (a missing verdict already carries its
+  rubric fallback). A candidate's missing verdict (`NONE`/`ERROR`) counts as ACCEPT, because the
+  rubric fallback never rejected public-passing code in the main runs; `no_verdict` reports how
+  often that happened.
+- **Ledger.** Calls carry `phase=judge_replay` and `run_id=replay_<name>`, so pipeline cost
+  figures (`cost()` matches run ids) are unaffected; the spend still counts toward the cap.
+- **Limit.** It measures decision accuracy only. How the loop would have continued after a
+  different verdict needs a full pipeline run; `full_run_estimate` gives its wall time
+  (slowest shard, candidate's mean latency per judge call, same iterations) and judge cost.
+
+| Field (`report.json`) | Meaning |
+|---|---|
+| `precision` | hidden-correct share of accepted attempts (the paper's acceptance precision) |
+| `wrong_caught` | rejected share of hidden-wrong attempts (what the loop gets to repair) |
+| `right_kept` | accepted share of hidden-correct attempts |
+| `accuracy` | decision agrees with the hidden tests |
+| `vs_original` | same attempts, exact McNemar on "decision agrees with hidden tests" against the pipeline's judge; `verdict_changed` counts flipped decisions |
+| `full_run_estimate` | one full Y run with this judge: judge calls, original and estimated wall minutes, judge cost |
+
+```bash
+scripts/run_openrouter.sh judge-replay openai/gpt-oss-120b deepinfra/bf16 gpt-oss-120b \
+    --run-ids <Y-A and Y-B run ids> --groups A_feedback_only=<ids,…> B_main=<ids,…> \
+    --estimate-runs <Y-B run ids> [--workers 8] [--limit N]
+python -m benchmark.judge_replay --run-ids … --groups … --estimate-runs … --report
+```
+
+Output: `outputs/openrouter/judge_replay/<name>.jsonl` (one row per attempt, resumable) and
+`report.json`. Results: `docs/main-results.md`.

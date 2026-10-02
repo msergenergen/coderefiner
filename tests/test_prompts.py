@@ -58,7 +58,7 @@ class TestBuildSystemPromptSubsequentIteration:
 
     def test_feedback_rules_included(self):
         prompt = build_system_prompt(self.SAMPLE_FEEDBACK)
-        assert "COMPLETELY NEW" in prompt
+        assert "COMPLETE corrected solution" in prompt     # default: repair rules
 
     def test_improved_prompt_included(self):
         prompt = build_system_prompt(self.SAMPLE_FEEDBACK)
@@ -82,7 +82,7 @@ class TestBuildSystemPromptSubsequentIteration:
         idx_identity    = prompt.index("expert Python programmer")
         idx_context     = prompt.index("Static Analyzer")
         idx_constraints = prompt.index("stdin")
-        idx_feedback    = prompt.index("COMPLETELY NEW")
+        idx_feedback    = prompt.index("COMPLETE corrected solution")
         idx_notes       = prompt.index(self.SAMPLE_FEEDBACK)
 
         assert idx_identity < idx_context < idx_constraints \
@@ -108,9 +108,50 @@ class TestPromptConstants:
         assert "Judge LLM"        in CODEGEN_CONTEXT
 
     def test_max_iter_in_context(self):
-        assert "10" in CODEGEN_CONTEXT   # max 10 iterations
+        from config import settings
+        assert f"at most {settings.max_iterations} attempts" in CODEGEN_CONTEXT
+
+    def test_import_list_matches_whitelist(self):
+        from sandbox.whitelist import ALLOWED_IMPORTS
+        from models.prompts import CODEGEN_CONSTRAINTS
+        for mod in ALLOWED_IMPORTS - {"unittest"}:
+            assert mod in CODEGEN_CONSTRAINTS
 
     def test_feedback_rules_rewrite_emphasis(self):
         assert "COMPLETELY NEW" in CODEGEN_FEEDBACK_RULES
         assert "patch" in CODEGEN_FEEDBACK_RULES.lower() \
                or "old one" in CODEGEN_FEEDBACK_RULES
+
+
+
+class TestRepairWithPreviousCode:
+    """FEEDBACK_INCLUDE_CODE: previous solution shown on repair (LCB self-repair format)."""
+
+    def test_previous_code_in_user_prompt(self):
+        from models.prompts import build_user_prompt
+        p = build_user_prompt("PROBLEM", previous_code="print(1)")
+        assert "## Your Previous Solution (rejected)" in p and "print(1)" in p
+        assert p.index("PROBLEM") < p.index("print(1)")
+        assert "print(1)" not in build_user_prompt("PROBLEM")      # first iteration
+
+    def test_flag_off_restores_feedback_only_prompts(self, monkeypatch):
+        import dataclasses
+        import models.prompts as mp
+        monkeypatch.setattr(mp, "settings",
+                            dataclasses.replace(mp.settings, feedback_include_code=False))
+        assert "print(1)" not in mp.build_user_prompt("PROBLEM", previous_code="print(1)")
+        assert "COMPLETELY NEW" in mp.build_system_prompt("fix it")
+
+    def test_codegen_passes_previous_code_only_on_repair(self, monkeypatch):
+        import nodes.codegen as cg
+        from models.client import ChatResult
+        seen = []
+        monkeypatch.setattr(cg, "health_check", lambda _m: True)
+        monkeypatch.setattr(cg, "chat", lambda m, msgs, **kw: seen.append(msgs) or
+                            ChatResult("```python\nprint(2)\n```", "", "", "stop", 1, 1, 0, 0.0, "x"))
+        base = {"active_model": "M1", "problem": "PROBLEM", "iteration": 0, "timing": {}, "tokens": {}}
+        cg.codegen_node({**base, "generated_code": "", "node3_improved_prompt": None})
+        cg.codegen_node({**base, "iteration": 1, "generated_code": "print(1)",
+                         "node3_improved_prompt": "wrong for n=1"})
+        assert "print(1)" not in seen[0][1]["content"]
+        assert "print(1)" in seen[1][1]["content"] and "wrong for n=1" in seen[1][0]["content"]

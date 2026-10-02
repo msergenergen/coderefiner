@@ -1,5 +1,9 @@
 #!/bin/bash
-# cloud_setup.sh — Vast.ai A100 one-shot setup script
+# cloud_setup.sh — Vast.ai GPU one-shot setup script (optional path)
+#
+# Self-hosted alternative for the secondary Qwen3.5-9B setting with a larger
+# token budget. The main experiment runs on OpenRouter (CLOUD_README.md,
+# config/openrouter.env) and needs no GPU. Manual steps: CLOUD_README.md §B.
 #
 # Run this script on the cloud instance after SSH connection:
 #   tmux new -s main
@@ -142,23 +146,28 @@ ENV=cloud
 
 # ── Model server URLs ─────────────────────────────────────────────
 M1_BASE_URL=http://localhost:8001/v1
-M2_BASE_URL=http://localhost:8002/v1
-M3_BASE_URL=http://localhost:8003/v1
-QWEN_BASE_URL=http://localhost:8004/v1
 LLAMA_API_KEY=local
 
-# ── Pipeline ──────────────────────────────────────────────────────
-MAX_ITERATIONS=10
-PIPELINE_MODELS=M1,M2,M3
-SANDBOX_TIMEOUT_SEC=10
-SANDBOX_MEMORY_LIMIT_MB=512
-SANDBOX_FLAKINESS_RUNS=5
-SANDBOX_MAX_FAILED_CASES=5
+# ── Pipeline (same settings as the local runs; judge = same Qwen3.5-9B) ──
+PIPELINE_MODELS=M1
+JUDGE_MODEL=M1
+JUDGE_DECISION=verdict
+MAX_ITERATIONS=5
+TREND_EXTENSION_ENABLED=false
+SANDBOX_TIMEOUT_SEC=15
+SANDBOX_MEMORY_LIMIT_MB=256
+SANDBOX_FLAKINESS_RUNS=2
+SANDBOX_MAX_FAILED_CASES=3
 
 # ── LiveCodeBench ─────────────────────────────────────────────────
 LCB_SPLIT=test
 LCB_DIFFICULTY=all
-LCB_SAMPLE_SIZE=50
+LCB_SAMPLE_SIZE=150
+LCB_EVALUATOR=local
+
+# ── The only cloud difference: token budget (model card: 81,920) ─
+CODEGEN_MAX_TOKENS=32768
+JUDGE_MAX_TOKENS=16384
 
 # ── Output ────────────────────────────────────────────────────────
 OUTPUT_DIR=outputs/results
@@ -187,6 +196,8 @@ else
     # M1/M2 are same-family Qwen models at two size tiers (medium/small) —
     # isolates model size as the controlled variable instead of three
     # cross-vendor models. See config/models.py docstring.
+    # Only M1 is needed (generator and judge). M2 (Qwen2.5-Coder-1.5B) and the
+    # separate judge (Qwen3.5-35B-A3B) can be added with MODELS_EXTRA=1.
     declare -A REPOS=(
         [qwen3.5-9b]="unsloth/Qwen3.5-9B-GGUF"
         [qwen2.5-coder-1.5b]="unsloth/Qwen2.5-Coder-1.5B-Instruct-GGUF"
@@ -205,7 +216,9 @@ else
         [qwen3.5-35b]="*UD-Q4_K_XL*"
     )
 
-    for DIR in qwen3.5-9b qwen2.5-coder-1.5b qwen3.5-35b; do
+    DIRS="qwen3.5-9b"
+    [ "${MODELS_EXTRA:-0}" = "1" ] && DIRS="$DIRS qwen2.5-coder-1.5b qwen3.5-35b"
+    for DIR in $DIRS; do
         REPO="${REPOS[$DIR]}"
         SIZE="${SIZES[$DIR]}"
         PATTERN="${INCLUDE_PATTERNS[$DIR]}"
@@ -271,7 +284,8 @@ echo "  [5/6] Dataset OK"
 # 6. Model files present
 echo "  [6/6] Model shards:"
 all_ok=1
-for d in qwen3.5-9b qwen2.5-coder-1.5b qwen3.5-35b; do
+DIRS_CHECK="qwen3.5-9b"; [ "${MODELS_EXTRA:-0}" = "1" ] && DIRS_CHECK="$DIRS_CHECK qwen2.5-coder-1.5b qwen3.5-35b"
+for d in $DIRS_CHECK; do
     count=$(ls "$MODELS/$d/"*.gguf 2>/dev/null | wc -l)
     if [ "$count" -ge 1 ]; then
         echo "    $d: $count shard ✓"
@@ -290,8 +304,8 @@ cat << 'MSG'
 Sonraki adımlar — her model için ayrı tmux penceresi:
 
   tmux new-window -n m1   && bash scripts/start_model.sh M1
+  # only with MODELS_EXTRA=1:
   tmux new-window -n m2   && bash scripts/start_model.sh M2
-  tmux new-window -n m3   && bash scripts/start_model.sh M3
   tmux new-window -n qwen && bash scripts/start_model.sh QWEN
 
 Serverlar ayağa kalktıktan sonra pipeline çalıştırma:
@@ -299,8 +313,5 @@ Serverlar ayağa kalktıktan sonra pipeline çalıştırma:
   source .venv/bin/activate
   python main.py
 
-Ablation benchmark:
-
-  python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
-  python -m benchmark.evaluator --variant V3 --sample 50 --tag v3_full
+Sharded runs and result analysis: CLOUD_README.md §B.
 MSG

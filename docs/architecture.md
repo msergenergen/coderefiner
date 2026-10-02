@@ -1,10 +1,17 @@
 # architecture.md — Pipeline Mimarisi
 
+> Son güncelleme: 2026-10-02. Ayrıntılar: `graph.md` (graf, durum, kapılar), `node1.md`,
+> `node2.md`, `node3.md`, `codegen-models.md`, `config.md`.
+
 ## 1. Overview
 
-The pipeline is a cyclic graph structure managed by LangGraph.
-Three LLMs run sequentially; each model's output passes through three analysis nodes.
-Failing outputs are retried with the same model up to `max_iterations`.
+The pipeline is a cyclic LangGraph state graph. For each problem, the active generator writes
+code; Node 1 and Node 2 produce deterministic evidence; Node 3 — the LLM judge — makes the final
+ACCEPT/REJECT decision and writes the instructions for the next attempt. A rejected attempt is
+retried with the same generator, up to `MAX_ITERATIONS` (5). The loop sees only the public
+example tests; delivered code is graded offline on all hidden tests.
+
+Generators run once per problem in the order of `PIPELINE_MODELS` (default: only `M1`).
 
 ---
 
@@ -14,270 +21,126 @@ Failing outputs are retried with the same model up to `max_iterations`.
 START
   │
   ▼
-┌─────────────────────────────┐
-│   Sequential Model Router   │  M1 → M2 → M3 (sırayla)
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│      Code Generation        │  ← improved_prompt (loop'tan)
-│  aktif model + system prompt│
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│   NODE 1: Static Analysis   │
-│  CC · MI · Bandit · Halstead│
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│       Severity Gate         │
-└──┬──────────┬──────────┬────┘
-   │          │          │
- HIGH        LOW         OK
-   │          │          │
-   ▼          │          ▼
- STOP         │   ┌──────────────────┐
-  END         │   │ NODE 2: Sandbox  │
-              │   │ CPU·RAM·test pass│
-              │   └────────┬─────────┘
-              │            │
-              └──────┬─────┘
-                     │
-                     ▼
-          ┌──────────────────────┐
-          │  NODE 3: Judgement LLM│
-          │  100-puan rubric     │
-          └──────────┬───────────┘
-                     │
-                     ▼
-          ┌──────────────────────┐
-          │    Iteration Gate    │
-          └──┬───────────┬───┬───┘
-             │           │   │
-           PASS      FAIL     FAIL
-             │      <max      =max
-             │         │         │
-             ▼         ▼         ▼
-        memory.md    loop      STOP
-             │      codegen     END
-             ▼
-      Next Model / END
+codegen ── system prompt (+ judge's improved_prompt) + problem (+ previous solution on repair)
+  │
+  ▼
+NODE 1: Static analysis ── CC · MI · Halstead · Bandit · mypy/ruff · import whitelist
+  │
+  ▼
+Severity gate ──── HIGH ──→ log_severity_stop ──→ END (STOP_HIGH)
+  │        └────── LOW  ──→ strip_comments ──┐   (Node 2 skipped)
+  │ OK                                       │
+  ▼                                          │
+NODE 2: Sandbox on public tests              │
+  pass rate · failed cases · cpu_ms · ram_mb │
+  │                                          │
+  ▼                                          │
+strip_comments ◄─────────────────────────────┘
+  │
+  ▼
+NODE 3: Judge ── rubric + tests as evidence → verdict (ACCEPT/REJECT) + improved_prompt
+  │
+  ▼
+log_iteration ── memory.md row + iteration JSON
+  │
+  ▼
+Iteration gate ── PASS (node3_pass)          → write_memory_final → next generator / END
+               ── STOP_MAX (iteration = max) → END
+               ── LOOP                       → codegen (same generator)
 ```
 
 ---
 
 ## 3. Node Details
 
-### Node 1 — Statik Analiz
+### Node 1 — Static analysis (`node1.md`)
 
-Purpose: Detect structural and security issues before executing the code.
+| Metric | Tool | Issue reported | Severity |
+|---|---|---|---|
+| Cyclomatic complexity | radon | CC > 10 | CC > 20 → HIGH |
+| Maintainability index | radon | MI < 65 | MI < 40 → LOW |
+| Halstead volume | radon | > 1000 | > 2000 → LOW |
+| Bandit | bandit | medium findings | any HIGH → HIGH |
+| Imports | AST whitelist | — | non-whitelisted → HIGH |
+| Types / lint | mypy, ruff | findings listed | — |
+| Parse | ast | "failed to parse" | unparseable → LOW |
 
-| Metric | Tool | Threshold | Severity |
-|--------|------|-----------|----------|
-| Cyclomatic Complexity (CC) | `radon cc` | ≤ 10/fonksiyon | CC > 20 → HIGH |
-| Maintainability Index (MI) | `radon mi` | ≥ 65 (A/B grade) | MI < 40 → LOW |
-| Cognitive Complexity | `lizard` | ≤ 15 | — |
-| Halstead Volume | `radon hal` | ≤ 1000 | > 2000 → LOW |
-| Bandit Security Score | `bandit` | HIGH severity = 0 | HIGH → EXIT |
-| Import Security | custom AST | non-whitelisted = BLOCK | → HIGH |
+HIGH stops the attempt (security risk or excessive complexity). Unparseable code is LOW, not
+HIGH: it is usually a cut-off generation, so it goes to the judge and the model gets another try.
 
-**Severity decision:**
-- `HIGH`: Bandit HIGH finding OR CC > 20 OR non-whitelisted import → STOP
-- `LOW`: Warnings present but not critical → skip Node 2, go to Node 3
-- `OK`: All thresholds passed → continue to Node 2
+### Node 2 — Sandbox (`node2.md`)
 
----
+Each public test runs in its own subprocess (timeout `SANDBOX_TIMEOUT_SEC`). Grading follows
+LCB's rules with the pinned local evaluator (`LCB_EVALUATOR=local`): stdin problems compare
+stdout line by line (numeric tolerance), LeetCode problems call the starter method with JSON
+arguments. Up to `SANDBOX_MAX_FAILED_CASES` failures (input, expected, got, error) go to the
+judge; CPU time and peak RAM are measured. Memory limit via `resource.setrlimit` (Linux only).
 
-### Node 2 — Sandbox & Execution
+### Node 3 — Judge (`node3.md`)
 
-Purpose: Execute the code in an isolated environment and measure correctness and performance metrics.
+Evidence: 100-point rubric — 80 points deterministic (accuracy 25 from public pass rate,
+efficiency 20 from CPU/RAM, quality 20 from MI/CC, security 15 from Bandit) and 20 from the judge
+(algorithm choice 10, error handling 10) — plus failed test cases, metric issues and the
+problem's constraints section.
 
-**A) Correctness Metrics**
+Decision (`JUDGE_DECISION=verdict`, default):
+- precondition: every public test passes; otherwise the attempt cannot pass;
+- the judge's ACCEPT/REJECT is final; a REJECT of public-passing code must cite a concrete input
+  allowed by the constraints or an infeasible complexity — style or metrics alone are not grounds;
+- no usable verdict → rubric threshold (Easy 80 / Medium 70 / Hard 60).
 
-| Metrik | Threshold |
-|--------|-----------|
-| Test Pass Rate (pytest + LCB test case'leri) | Easy ≥ %95 / Medium ≥ %80 / Hard ≥ %60 |
-| Edge Case Coverage | ≥ %70 |
-| Output Determinism (5 tekrar) | %100 |
-| Exception Handling Coverage | ≥ %80 |
+`JUDGE_DECISION=rubric` (design P, comparison) uses the threshold only.
 
-**B) Performans Metrikleri**
-
-| Metric | Tool | Threshold |
-|--------|------|-----------|
-| Peak Memory (RSS) | `tracemalloc` + `psutil` | ≤ referans × 2 |
-| CPU Time | `time.process_time()` | ≤ referans × 1.5 |
-| Wall Clock Time | `time.perf_counter()` | LCB limit × %80 |
-| Memory Leak | RSS delta after N iterations | Δ ≤ 5% |
-
-**C) Reliability**
-
-| Metrik | Hedef |
-|--------|-------|
-| Flakiness Rate (5x tekrar) | %0 |
-| Timeout behavior | Graceful exit |
-| Sandbox escape attempt | 0 tolerans |
-
-**Sandbox security:**
-- AST-based import whitelist check (before execution)
-- `subprocess` ile izole process
-- `resource.setrlimit` ile RAM limiti (512 MB)
-- Timeout via `subprocess.TimeoutExpired` (10 seconds)
+Feedback: `improved_prompt` is rewritten from scratch every iteration (≤ 2000 chars), cites
+failing tests and metric values, and must not contain code or pseudo-code.
 
 ---
 
-### Node 3 — Judgement LLM
+## 4. State and Gates
 
-Purpose: Synthesize Node 1 and Node 2 metrics to produce a 100-point score
-and write an improved system prompt on failure.
-
-**Rubric (100 puan)**
-
-| Dimension | Weight | Source |
-|-------|---------|--------|
-| Accuracy | 25p | Node 2: test pass rate normalized |
-| Efficiency | 20p | Node 2: CPU + Memory composite |
-| Quality | 20p | Node 1: MI + CC composite |
-| Security | 15p | Node 1: Bandit severity weighted |
-| Algorithm Choice | 10p | Judgement LLM evaluation |
-| Error Handling | 10p | Judgement LLM evaluation |
-
-**Node 3 Output Schema (JSON)**
-
-```json
-{
-  "total_score": 74.5,
-  "pass": false,
-  "score_breakdown": {
-    "accuracy": 18.75,
-    "efficiency": 16.0,
-    "quality": 14.0,
-    "security": 15.0,
-    "algorithm_choice": 6,
-    "error_handling": 5
-  },
-  "failure_reasons": ["low_pass_rate", "cc_too_high"],
-  "improved_system_prompt": "..."
-}
-```
-
-`improved_system_prompt` completely replaces the previous system prompt — no accumulation.
-The model does not change; the same active model runs again.
-
----
-
-## 4. State Schema
+Full `PipelineState` field list: `graph.md`. Gate logic (`pipeline/gates.py`):
 
 ```python
-class PipelineState(TypedDict):
-    # Routing
-    active_model: Literal["M1", "M2", "M3"]
-    iteration: int
-    max_iterations: int          # = 10
+def severity_gate(state):           # after Node 1
+    if state["node1_severity"] == "HIGH": return "stop_high"   # → log_severity_stop
+    if state["node1_severity"] == "LOW":  return "to_node3"    # → strip_before_judge
+    return "to_node2"                                          # → sandbox
 
-    # Input
-    problem: str
-    difficulty: Literal["easy", "medium", "hard"]
-    generated_code: str
-
-    # Node 1
-    node1_cc: float
-    node1_mi: float
-    node1_bandit_high: bool
-    node1_halstead: float
-    node1_severity: Literal["LOW", "OK", "HIGH"]
-
-    # Node 2
-    node2_pass_rate: float
-    node2_cpu_ms: float
-    node2_ram_mb: float
-    node2_test_diversity_score: float
-
-    # Node 3
-    node3_total_score: float
-    node3_pass: bool
-    node3_failure_reasons: list[str]
-    node3_improved_prompt: str
-
-    # Log
-    memory_log: list[dict]
-    final_status: Literal["PASS", "STOP_HIGH", "STOP_MAX", "PENDING"]
-```
-
----
-
-## 5. Conditional Edge Logic
-
-```python
-# Severity Gate (after Node 1)
-def severity_gate(state) -> str:
-    if state["node1_severity"] == "HIGH":
-        return "stop_end"
-    elif state["node1_severity"] == "LOW":
-        return "to_node3"      # Node 2 atlanır
-    return "to_node2"
-
-# Iteration Gate (after Node 3)
-PASS_THRESHOLDS = {"easy": 80, "medium": 70, "hard": 60}
-
-def iteration_gate(state) -> str:
-    threshold = PASS_THRESHOLDS[state["difficulty"]]
-    if state["node3_total_score"] >= threshold and state["node3_pass"]:
-        return "write_memory"
-    elif state["iteration"] >= state["max_iterations"]:
-        return "stop_end"
+def iteration_gate(state):          # after log_iteration
+    if state["node3_pass"]:                       return "write_memory_final"
+    if state["iteration"] >= state["max_iterations"]:
+        if settings.trend_extension_enabled and _should_extend(state, threshold):
+            return "loop_to_codegen"              # off by default
+        return "stop_max"
     return "loop_to_codegen"
 ```
 
----
-
-## 6. memory.md Format
-
-```markdown
-| iter | model | model_name | q_id | diff | cc  | mi   | severity | pass_rt | score | status    | total_ms | total_tok | json |
-|------|-------|------------|------|------|-----|------|----------|---------|-------|-----------|----------|-----------|------|
-|    1 | M1    | gpt-oss-20b | q001 | easy | 3.0 | 72.1 | OK       |    0.85 |  68.0 | LOOP      |     7245 |      2550 | ...  |
-|    2 | M1    | gpt-oss-20b | q001 | easy | 2.0 | 81.4 | OK       |    1.00 |  84.0 | PASS      |     6100 |      2300 | ...  |
-|    1 | M1    | gpt-oss-20b | q002 | hard | 8.0 | 45.0 | HIGH     |    0.00 |   0.0 | STOP_HIGH |     3142 |       730 | ...  |
-```
-
-Rows are independent per model. The iteration counter resets at the start of each model.
+`graph.md` has the full wiring, including variants V1 (no Node 1) and V2 (no Node 2).
 
 ---
 
-## 7. Hardware Requirements
+## 5. Backends
 
-The three models are not held in memory simultaneously; they are loaded and run sequentially.
-**Dominant model: Qwen3-Coder-Next (~46 GB Q4)** — determines hardware selection.
+| `ENV` | Generator | Judge | Notes |
+|---|---|---|---|
+| `openrouter` (main) | DeepSeek-V3, DeepInfra fp4 | Qwen2.5-72B-Instruct, Novita bf16 | Streamed, retried, provider-pinned, $5 cap |
+| `local` (ELECO paper) | Qwen3.5-9B UD-Q4_K_XL, llama.cpp :8001 | same server | Mac mini M4 16 GB, ~16 tok/s |
+| `cloud` (optional) | Qwen3.5-9B on a rented GPU | same / Qwen3.5-35B-A3B | `CLOUD_README.md` §B |
 
-| Model | Boyut (GGUF Q4) | Min. VRAM | Notlar |
-|-------|----------------|-----------|--------|
-| gpt-oss-20b (M1) | ~11 GB | 24 GB | Runs even on RTX 4090 |
-| Qwen3-Coder-Next (M2) | ~46 GB | **80 GB** | Dominant; requires A100 80GB |
-| GLM-4.7-Flash (M3) | ~18 GB | 24 GB | RTX 4090'da 110 tok/s |
-| Qwen3.5-35B-A3B (Judgement) | ~24 GB | 24 GB | Independent; runs every iteration |
-
-**Vast.ai instance selection:** A100 80GB, 64 GB RAM, 300 GB SSD — ~$0.80/hr.
-50 soru benchmark tahmini: ~$11 toplam.
+All are OpenAI-compatible; nodes call `models/client.chat()`.
 
 ---
 
-## 8. Technology Stack
+## 6. Technology Stack
 
-| Katman | Teknoloji |
-|--------|-----------|
-| Orchestration | LangGraph 0.2+ |
-| LLM Inference | llama.cpp (OpenAI-compat. server) |
-| LLM Client | openai Python SDK |
-| Codegen M1 | gpt-oss-20b Unsloth GGUF (Apache 2.0) |
-| Codegen M2 | Qwen3-Coder-Next Unsloth GGUF |
-| Codegen M3 | GLM-4.7-Flash Unsloth GGUF |
-| Judgement | Qwen3.5-35B-A3B Unsloth GGUF |
-| Statik Analiz | radon, lizard, bandit |
-| Execution | subprocess + tracemalloc + psutil |
-| Test Runner | pytest |
-| Veri Seti | LiveCodeBench (HuggingFace datasets) |
-| Loglama | loguru |
-| Ortam | Python 3.11, Ubuntu 22.04 (Vast.ai A100 80GB) |
+| Layer | Technology |
+|---|---|
+| Orchestration | LangGraph |
+| Inference | OpenRouter API; llama.cpp server (local/cloud) |
+| Client | `openai` Python SDK (`models/client.py`), spend ledger (`models/budget.py`) |
+| Static analysis | radon, lizard, bandit, mypy, ruff |
+| Execution | subprocess, psutil, `resource` |
+| Data | LiveCodeBench `code_generation_lite` (release_v6), `datasets<3.0` |
+| Statistics | statsmodels (McNemar, Wilson), scipy (Wilcoxon) |
+| Logging | loguru; memory.md + per-iteration JSON |
+| Runtime | Python 3.11 (macOS / Ubuntu) |

@@ -7,7 +7,7 @@ and writes it to state.
 import re
 import time
 from pipeline.state import PipelineState
-from models.client import get_client, get_model_name, get_temperature, health_check
+from models.client import chat, health_check
 from models.prompts import build_system_prompt, build_user_prompt
 from config import settings
 
@@ -33,32 +33,30 @@ def codegen_node(state: PipelineState) -> PipelineState:
     system_prompt = build_system_prompt(
         improved_prompt=state.get("node3_improved_prompt")
     )
-    user_prompt = build_user_prompt(state["problem"])
+    # On a repair iteration the generator sees its own previous code, which
+    # the judge's feedback refers to (no history beyond that one attempt).
+    previous = state.get("generated_code") if state.get("node3_improved_prompt") else None
+    user_prompt = build_user_prompt(state["problem"], previous_code=previous)
 
     # Generate code
-    from config import model_registry
-    cfg    = model_registry.get(model_id)
-    client = get_client(model_id)
-
-    response = client.chat.completions.create(
-        model=cfg.model_name,
-        messages=[
+    res = chat(
+        model_id,
+        [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
-        temperature=cfg.temperature,
         # 4096 was too tight for a reasoning model: thinking consumed the
         # budget before the closing ```python fence, so the fallback
         # extraction returned the whole raw (unparseable) response as "code".
         max_tokens=settings.codegen_max_tokens,
+        tag={"question_id": state.get("question_id"), "iteration": state.get("iteration", 0) + 1,
+             "run_id": state.get("run_id")},
     )
-
-    message = response.choices[0].message
     # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a separate
-    # reasoning_content field and can leave `content` empty if max_tokens is
-    # exhausted during "thinking" — fall back to reasoning_content so a
+    # reasoning field and can leave `content` empty if max_tokens is
+    # exhausted during "thinking" — chat() then returns the reasoning so a
     # response is still extracted rather than silently returning nothing.
-    raw_response = message.content or getattr(message, "reasoning_content", None) or ""
+    raw_response = res.text
     code = _extract_code(raw_response)
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
@@ -73,9 +71,9 @@ def codegen_node(state: PipelineState) -> PipelineState:
 
     # Update token counts
     tokens = dict(state.get("tokens", {}))
-    if response.usage:
-        tokens["codegen_prompt"]     = response.usage.prompt_tokens
-        tokens["codegen_completion"] = response.usage.completion_tokens
+    if res.prompt_tokens or res.completion_tokens:
+        tokens["codegen_prompt"]     = res.prompt_tokens
+        tokens["codegen_completion"] = res.completion_tokens
         tokens["total"] = (
             tokens.get("codegen_prompt", 0) + tokens.get("codegen_completion", 0) +
             tokens.get("judgement_prompt", 0) + tokens.get("judgement_completion", 0)

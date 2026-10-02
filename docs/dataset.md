@@ -56,7 +56,7 @@ Node 2 Faz 2 (runtime metrics): sadece public (2–3 test yeterli)
 ```bash
 pip install datasets
 
-# For lcb_runner evaluation layer
+# Optional: lcb_runner (not used for reported results; LCB_EVALUATOR=local)
 git clone https://github.com/LiveCodeBench/LiveCodeBench.git
 cd LiveCodeBench
 pip install -e .
@@ -293,18 +293,16 @@ def augment_row(row: dict) -> dict:
 ## 8. dataset/verify.py
 
 ```bash
-python dataset/verify.py
+python -m dataset.verify
 ```
 
-Also checks that `lcb_runner` is importable — `sandbox/lcb_eval.py` silently falls
-back to a crude exact-string-match evaluator (with fabricated `crash_count`/
-`test_diversity_score` placeholders) when it isn't installed, which would
-otherwise invalidate the thesis's "official LCB evaluator" correctness claim
-without anyone noticing.
+Reports whether `lcb_runner` is installed (informational only — every reported result uses the
+pinned local evaluator, `LCB_EVALUATOR=local`), checks that the main-experiment window
+2025-01..2025-04 loads 182 problems, and prints test counts for a 10-problem sample.
 
 ```python
 """
-Veri seti kurulum doğrulama scripti.
+Dataset installation verification script.
 """
 import sys
 from dataset.loader import load_lcb
@@ -313,27 +311,34 @@ from dataset.edge_cases import augment_row, needs_edge_cases
 
 
 def main():
-    print("LiveCodeBench doğrulanıyor...")
+    print("Verifying LiveCodeBench...")
 
+    # All reported results use the local LCB-compatible evaluator
+    # (LCB_EVALUATOR=local, sandbox/lcb_eval.py::_fallback_evaluate), pinned so
+    # every machine grades identically; lcb_runner is optional.
     try:
         from lcb_runner.evaluation.utils_execute import check_correctness  # noqa: F401
-        print("  lcb_runner: OK (resmi evaluator kullanılabilir)")
+        print("  lcb_runner: installed (unused unless LCB_EVALUATOR=lcb_runner)")
     except ImportError:
-        print(
-            "  UYARI: lcb_runner kurulu değil — sandbox/lcb_eval.py sessizce "
-            "fallback evaluator'a düşecek (crash_count/test_diversity_score "
-            "gerçek ölçüm değil, sabit değer olacak). Çalıştır: pip install -e LiveCodeBench/"
-        )
+        print("  lcb_runner: not installed — fine, the local evaluator is used (LCB_EVALUATOR=local)")
+
+    # Main experiment window: LCB 2025-01..2025-04 (docs/dataset.md §10).
+    try:
+        window = load_lcb(split="test", difficulty="all", date_from="2025-01", date_to="2025-04")
+        print(f"  Window 2025-01..2025-04: {len(window)} problems (expected 182)")
+    except Exception as e:
+        print(f"  ERROR loading window: {e}")
+        sys.exit(1)
 
     try:
         rows = load_lcb(split="test", difficulty="all", sample_size=10)
-        print(f"  Yükleme OK — {len(rows)} örnek")
+        print(f"  Load OK — {len(rows)} examples")
     except Exception as e:
-        print(f"  HATA: {e}")
+        print(f"  ERROR: {e}")
         sys.exit(1)
 
     stats = dataset_stats(rows)
-    print(f"  Dağılım: {stats}")
+    print(f"  Distribution: {stats}")
 
     # Test case counts
     for row in rows[:3]:
@@ -347,15 +352,15 @@ def main():
     # Format conversion
     sample    = rows[0]
     formatted = format_problem(sample)
-    print(f"\n--- Format örneği ({sample['title']}) ---")
+    print(f"\n--- Format example ({sample['title']}) ---")
     print(formatted[:500])
     print("...")
 
     # Edge case generation
     aug = augment_row(rows[0])
-    print(f"\n  Edge case sayısı (ilk soru): {len(aug['edge_cases'])}")
+    print(f"\n  Edge cases for first question: {len(aug['edge_cases'])}")
 
-    print("\nDoğrulama tamamlandı.")
+    print("\nVerification complete.")
 
 
 if __name__ == "__main__":
@@ -391,3 +396,44 @@ Doğrulama tamamlandı.
 - Edge case'lerdeki `output=None` case'ler Node 2'de crash testi olarak
   are counted separately — not included in pass_rate, used only for runtime error detection.
 - The `EDGE_CASE_THRESHOLD = 8` value can be tuned during the pilot run.
+
+---
+
+## 10. Veri sızıntısı ve zaman penceresi (2026-10-02)
+
+**Durum.** LCB'nin son sürümü `release_v6` (= `release_latest`): Mayıs 2023 – Nisan 2025 arası
+1055 problem. Hugging Face veri setinin son güncellemesi 2025-06-05, GitHub deposundaki son
+commit 2025-07-16; v6'dan sonra yeni sürüm yayımlanmadı ve bunun nedenine dair resmî bir
+açıklama bulamadık. 2026'daki "LCB" tablolarının çoğu hâlâ v6 üzerinden, üretici beyanı puanlar.
+
+**Neden önemli.** LCB'nin sızıntıya karşı temel önlemi, bir modeli yalnızca eğitim verisinin
+kesim tarihinden *sonra* yayımlanan problemlerle sınamaktır (Jain vd., arXiv:2403.07974,
+Şekil 1). Yayın tarihi, kesim tarihinin üst sınırıdır. Güncel modellerde bu artık uygulanamaz:
+
+| Model | HF yayın tarihi | LCB'nin son problemine göre |
+|---|---|---|
+| Qwen3.5-9B | 2026-02-27 | Tüm v6 problemleri öncesinde → ezber dışlanamaz |
+| gpt-oss-120b | 2025-08-04 | Tüm v6 problemleri öncesinde → ezber dışlanamaz |
+| DeepSeek-V3 (ana deney üreticisi) | 2024-12-26 | Ocak–Nisan 2025 problemlerinden önce yayımlanmış → temiz |
+| Qwen2.5-72B-Instruct (ana deney yargıcı) | 2024-09-19 | Ocak–Nisan 2025 problemlerinden önce yayımlanmış → temiz |
+| Qwen2.5-Coder-32B-Instruct (yalnızca ilk pilot) | 2024-11-06 | temiz |
+| Llama-3.3-70B-Instruct (yalnızca ilk pilot) | 2024-11-26 | temiz |
+
+Seed 42 ile çekilen mevcut 150'lik örneğin yıl dağılımı: 2023: 52, 2024: 77, 2025: 21.
+v6'da 2025-01 ve sonrası: 182 problem (kolay 45, orta 55, zor 82).
+
+**Etkisi.** Eşleştirilmiş V0–V3 karşılaştırmasında ezber iki koşulu birlikte şişirir; ancak
+ilk denemede (ezberden) çözülen problemler arıtıma yer bırakmaz, yani kazanç olduğundan
+*küçük* görünebilir. Yargıç da çözümü ezberlemiş olabilir ve yönergeye sızdırabilir.
+
+**Uygulama.** `load_lcb(..., date_from="2025-01", date_to="2025-04")` (ayar: `LCB_DATE_FROM`,
+`LCB_DATE_TO`) pencereyi ay bazında, sınırlar dahil uygular; filtre seed'li örneklemeden önce
+çalışır ve her satıra `contest_date` (YYYY-MM-DD) eklenir. Ana deneyde `LCB_SAMPLE_SIZE=150`:
+pencereden seed 42 ile 150 problem (kolay 40, orta 38, zor 72; Ocak 40, Şubat 42, Mart 56, Nisan
+12; 55'i LeetCode). Pencere: 182 problem, 70'i LeetCode
+(başlangıç kodlu), hepsinde açık test var.
+
+**Karar.** Ana deney sızıntısız tasarımla yapılır (bkz. `docs/ablation.md` §7): üretici ve
+yargıç Ocak 2025'ten önce yayımlanmış modeller, problemler yalnızca 2025-01 – 2025-04
+penceresinden. Qwen3.5-9B ile yerelde alınan sonuçlar "güncel akıl yürütme modeli" ek bulgusu
+olarak kalır ve ezber riski hem bildiride hem tezde sınırlılık olarak açıkça yazılır.

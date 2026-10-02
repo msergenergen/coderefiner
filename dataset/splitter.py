@@ -34,9 +34,17 @@ def format_problem(row: dict) -> str:
                       f"Input:\n{inp}",
                       f"Output:\n{out}", ""]
 
+    if row.get("starter_code", "").strip():
+        # LeetCode-style: the method is called directly (one JSON value per
+        # example line, in parameter order); stdin/print would be wrong here.
+        io_rule = ("Implement the Starter Code method. It is called directly with the "
+                   "arguments shown in each example (one value per line, in parameter "
+                   "order) and its return value is checked. Do not read stdin or print.")
+    else:
+        io_rule = "Read input from stdin. Write answer to stdout."
     parts += [
         "## Output Format",
-        "Read input from stdin. Write answer to stdout.",
+        io_rule,
         "Output only Python code inside ```python ... ``` markers.",
     ]
 

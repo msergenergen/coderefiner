@@ -78,7 +78,9 @@ class AllThresholds:
 Bandit HIGH severity: zero tolerance.
 MI < {n1.mi_warn:.0f} means the code is hard to maintain.
 CC > {n1.cc_warn:.0f} means the function has too many branches.
-IMPORTANT: Apply the pass rate row that matches the problem's difficulty level."""
+IMPORTANT: Apply the pass rate row that matches the problem's difficulty level.
+The pass rate bands are for rubric scoring only: a verdict of ACCEPT always
+requires every visible test to pass."""
 
 
 thresholds = AllThresholds()

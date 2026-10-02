@@ -1,5 +1,7 @@
 # Sensitivity Analysis Plan — `benchmark/sensitivity.py`
 
+> **Durum (2026-10-02): plan.** Henüz uygulanmadı. Dosya adları artık `<model>_iter<n>_<run_id>.json`, ana deney çıktıları `outputs/openrouter/results/` altında; yineleme sınırı 5 (eğilim uzatması kapalı).
+
 Cloud sonuçları geldikten sonra uygulanacak analiz modülü.
 Yeni çalıştırma gerektirmez — mevcut iteration JSON'lardan türetilir.
 

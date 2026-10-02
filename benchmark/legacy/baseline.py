@@ -5,8 +5,8 @@ Generates code once per model without any pipeline.
 Results are used for ablation comparison.
 
 Usage:
-    python benchmark/baseline.py --model M1 --sample 50 --tag v0_M1
-    python benchmark/baseline.py --model M2 --sample 50 --tag v0_M2
+    python -m benchmark.legacy.baseline --model M1 --sample 50 --tag v0_M1
+    python -m benchmark.legacy.baseline --model M2 --sample 50 --tag v0_M2
 """
 import argparse
 import json
@@ -122,6 +122,8 @@ def run_baseline(
         split=settings.lcb_split,
         difficulty=difficulty,
         sample_size=sample_size,
+        date_from=settings.lcb_date_from,
+        date_to=settings.lcb_date_to,
     )
 
     logger.info(

@@ -10,6 +10,8 @@ Codegen prompt consists of four layers:
 First iteration:  layers 1 + 2 + 3
 Subsequent:       layers 1 + 2 + 3 + 4 + improved_prompt
 """
+from config import settings
+from sandbox.whitelist import ALLOWED_IMPORTS
 
 # ── Layer 1: Identity ─────────────────────────────────────────────────────────
 
@@ -26,13 +28,14 @@ You are operating as the code generation node of an automated iterative \
 refinement pipeline. After you produce a solution, it passes through \
 three evaluation stages:
 
-  1. Static Analyzer  — checks complexity (CC, MI) and security (Bandit)
-  2. Sandbox Executor — runs your code against public and private test cases
-  3. Judge LLM        — scores your solution 0–100 on a structured rubric
+  1. Static Analyzer  — checks complexity (CC, MI), security (Bandit) and imports
+  2. Sandbox Executor — runs your code on the example tests shown in the problem
+  3. Judge LLM        — reviews this evidence and accepts or rejects the solution
 
-If your solution scores below the acceptance threshold, you will receive
-specific improvement feedback and be asked to produce a new solution.
-This process repeats up to 10 times per model.\
+If the judge rejects your solution, you will receive specific feedback and be \
+asked to produce a new one (at most """ + str(settings.max_iterations) + """ attempts in total). \
+An accepted solution is finally graded on hidden tests, so it must be correct \
+for every input the constraints allow, not only for the examples.\
 """
 
 # ── Layer 3: Behavior rules ───────────────────────────────────────────────────
@@ -54,13 +57,13 @@ I/O format:
 - Do not include any print() calls for debugging or examples
 
 Correctness:
-- Handle ALL edge cases: empty input, negative numbers, zero, large N
-- Do not assume input is always well-formed
+- Handle every input the constraints allow: minimum and maximum sizes,
+  boundary values, duplicates and the special cases named in the statement
+- Input always follows the stated format and constraints
+- Choose an algorithm whose time complexity fits the largest inputs
 
 Security (enforced by static analyzer):
-- Allowed imports only: os, sys, math, random, time, datetime,
-  collections, itertools, functools, heapq, bisect, string,
-  re, json, copy, typing, dataclasses
+- Allowed imports only: """ + ", ".join(sorted(m for m in ALLOWED_IMPORTS if m != "unittest")) + """
 - Do NOT use: subprocess, socket, requests, exec(), eval(), __import__()
 
 Code quality:
@@ -84,6 +87,29 @@ How to use this feedback:
 What NOT to do:
 - Do not copy the previous solution with minor edits
 - Do not add print() statements for the failing cases
+- Do not explain what you changed — just produce the fixed code\
+"""
+
+
+# Used when FEEDBACK_INCLUDE_CODE=true (default since 2026-10-02): the previous
+# solution is shown with the feedback, as in LiveCodeBench's self-repair
+# scenario (Jain et al. 2024, App. C.3: question + code to be corrected +
+# feedback) and Olausson et al. (ICLR 2024). Before that, the feedback said
+# "your code returns X for input Y" about code the generator could not see.
+CODEGEN_REPAIR_RULES = """\
+You are receiving improvement feedback on your previous solution, which is
+shown after the problem statement.
+
+How to use this feedback:
+- Read every point carefully — each one comes from the judge, who saw your code,
+  the static analysis and the execution results on the example tests
+- Write a COMPLETE corrected solution: keep what the feedback does not criticise,
+  change what it identifies; if it says the approach is wrong, use a different one
+- Address EVERY correctness issue mentioned — skipping one will cause the same failure
+
+What NOT to do:
+- Do not resubmit the previous solution unchanged
+- Do not special-case the example inputs or add print() statements for them
 - Do not explain what you changed — just produce the fixed code\
 """
 
@@ -119,16 +145,23 @@ def build_system_prompt(improved_prompt: str = None) -> str:
         CODEGEN_IDENTITY,
         CODEGEN_CONTEXT,
         CODEGEN_CONSTRAINTS,
-        CODEGEN_FEEDBACK_RULES,
+        CODEGEN_REPAIR_RULES if settings.feedback_include_code else CODEGEN_FEEDBACK_RULES,
         f"## Improvement Notes from Previous Attempt\n\n{improved_prompt}",
     ])
 
 
-def build_user_prompt(formatted_problem: str) -> str:
+def build_user_prompt(formatted_problem: str, previous_code: str = None) -> str:
     """
     Converts an LCB question to user prompt format.
-    Does not repeat the system prompt — only provides the problem.
+    Does not repeat the system prompt — only provides the problem and, on a
+    repair iteration with FEEDBACK_INCLUDE_CODE=true, the previous solution.
     """
+    if previous_code and settings.feedback_include_code:
+        return (
+            f"Solve the following problem:\n\n{formatted_problem}\n\n"
+            f"## Your Previous Solution (rejected)\n```python\n{previous_code[:8000]}\n```\n\n"
+            "Write your complete corrected Python solution:"
+        )
     return (
         f"Solve the following problem:\n\n{formatted_problem}\n\n"
         "Write your complete Python solution:"

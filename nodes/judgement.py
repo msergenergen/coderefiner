@@ -5,7 +5,7 @@ Critical design decisions:
   1. improved_prompt is COMPLETELY REWRITTEN every iteration — no accumulation.
   2. Threshold table is embedded in the system prompt.
   3. Failing test cases (input/expected/got) are included verbatim in the prompt.
-  4. Judgement model (Judge) is independent of the code generation models (M1/M2/M3).
+  4. Judgement model (Judge) is independent of the code generation models (M1/M2).
 """
 import ast
 import json
@@ -14,7 +14,8 @@ import time
 from loguru import logger
 from pipeline.state import PipelineState
 from metrics.scoring import compute_numeric_scores
-from models.client import get_client, get_model_name, get_temperature
+from models.budget import BudgetExceeded
+from models.client import chat
 from config import model_registry, settings, thresholds
 
 # ── Rule-based fix hints for common static analysis issues ───────────────────
@@ -53,7 +54,7 @@ def _hint_for_issue(issue: str) -> str | None:
     return None
 
 # Configurable via .env: JUDGE_MODEL=QWEN (default)
-# Change to any registry key (M1/M2/M3/QWEN) to swap the judge.
+# Change to any registry key (M1/M2/QWEN) to swap the judge.
 JUDGEMENT_MODEL: str = settings.judge_model
 
 JUDGEMENT_SYSTEM_PROMPT = f"""You are a strict code quality judge for an iterative code refinement pipeline.
@@ -92,6 +93,9 @@ Rules for improved_system_prompt:
   - Reference SPECIFIC metric violations: "CC is 14, reduce branching in the main loop"
   - Include at least 3 concrete, actionable instructions
   - Do NOT reference "previous attempts" or "last iteration"
+  - Do NOT write code or pseudo-code (no code blocks, no function bodies, no
+    line-by-line algorithm). Describe defects and required changes in words;
+    you may name a technique or a target complexity.
   - End with: "Output only Python code inside ```python ... ``` markers."
 
 Respond ONLY with valid JSON. No text outside the JSON object.
@@ -141,6 +145,7 @@ def judgement_node(state: PipelineState) -> PipelineState:
         difficulty=state["difficulty"],
         iteration=state["iteration"],
         question_id=state.get("question_id", "?"),
+        run_id=state.get("run_id"),
     )
 
     total = round(
@@ -250,6 +255,7 @@ def _get_llm_judgement(
     difficulty: str,
     iteration: int,
     question_id: str = "?",
+    run_id: str | None = None,
 ) -> dict:
     user_prompt = _build_judgement_prompt(
         numeric_scores=numeric_scores,
@@ -264,36 +270,28 @@ def _get_llm_judgement(
     )
 
     try:
-        cfg    = model_registry.get(JUDGEMENT_MODEL)
-        client = get_client(JUDGEMENT_MODEL)
-
-        response = client.chat.completions.create(
-            model=cfg.model_name,
-            messages=[
+        res = chat(
+            JUDGEMENT_MODEL,
+            [
                 {"role": "system", "content": JUDGEMENT_SYSTEM_PROMPT},
                 {"role": "user",   "content": user_prompt},
             ],
-            temperature=cfg.temperature,
             max_tokens=settings.judge_max_tokens,
+            tag={"question_id": question_id, "iteration": iteration, "run_id": run_id},
         )
-        message = response.choices[0].message
-        # Reasoning models (e.g. qwen3.5-9b) emit chain-of-thought in a
-        # separate reasoning_content field and can leave `content` empty
-        # if max_tokens is exhausted during "thinking" — fall back to
-        # reasoning_content so _parse_judgement has something to work with.
-        raw = message.content or getattr(message, "reasoning_content", None) or ""
-        result = _parse_judgement(raw)
+        # Reasoning models can leave `content` empty if max_tokens is
+        # exhausted during "thinking" — chat() then returns the reasoning
+        # so _parse_judgement has something to work with.
+        result = _parse_judgement(res.text)
 
         # Store token counts so judgement_node can write them to state
-        if hasattr(response, "usage") and response.usage:
-            result["_judgement_prompt_tokens"]     = response.usage.prompt_tokens
-            result["_judgement_completion_tokens"] = response.usage.completion_tokens
-        else:
-            result.setdefault("_judgement_prompt_tokens",     0)
-            result.setdefault("_judgement_completion_tokens", 0)
+        result["_judgement_prompt_tokens"]     = res.prompt_tokens
+        result["_judgement_completion_tokens"] = res.completion_tokens
 
         return result
 
+    except BudgetExceeded:
+        raise   # spending cap reached: stop the run, never fake a verdict
     except Exception as e:
         # LLM error → do not stop pipeline, use rule-based fallback.
         # Logged (not silently swallowed) because this fallback hardcodes
@@ -343,8 +341,8 @@ def _build_judgement_prompt(
 
     lines = [
         f"## Iteration {iteration} | Difficulty: {difficulty.upper()}",
-        f"> Pass rate target for {difficulty.upper()}: ≥ {_pr_target:.0%} is Good. "
-        f"Current pass rate: {pass_rate:.0%}",
+        f"> Visible tests passed: {pass_rate:.0%}. ACCEPT requires 100% "
+        f"(rubric 'Good' band for {difficulty.upper()}: ≥ {_pr_target:.0%}, scoring only).",
         "",
         "## Problem",
         _problem_excerpt(problem),
@@ -360,7 +358,7 @@ def _build_judgement_prompt(
     ]
 
     if node1_issues:
-        lines.append("- Issues (with required fixes):")
+        lines.append("- Quality findings (evidence; not grounds for REJECT on their own):")
         seen_hints: set[str] = set()
         for issue in node1_issues:
             lines.append(f"  • {issue}")
@@ -403,7 +401,19 @@ def _build_judgement_prompt(
     lines += [
         "",
         "Evaluate algorithm_choice (0–10) and error_handling (0–10).",
-        "Write a NEW, COMPLETE improved_system_prompt addressing the specific issues above.",
+        "Write a NEW, COMPLETE improved_system_prompt. Correctness comes first: failing tests,",
+        "and any input on which the code would be wrong, crash or too slow. Quality findings",
+        "come after that, briefly; do not ask for type annotations or renaming.",
+    ]
+    if failed_cases or pass_rate < 1.0:
+        lines.append("Visible tests failed, so the verdict must be REJECT.")
+    else:
+        lines.append(
+            "All visible tests passed. REJECT only if you can name a concrete input allowed by "
+            "the constraints on which this code is wrong or crashes, or a time complexity that "
+            "cannot meet the constraints; quality findings alone mean ACCEPT."
+        )
+    lines += [
         "Give your verdict (ACCEPT / REJECT) with verdict_reason, following the rules.",
         "Respond with JSON only.",
     ]

@@ -7,78 +7,77 @@ to quickly understand it. Refer to this file when navigating the codebase.
 
 ## Project Purpose
 
-A LangGraph-based pipeline that routes Easy / Medium / Hard Python problems
-from the LiveCodeBench (LCB) dataset to two LLMs (M1, M2) sequentially,
-passes generated code through three analysis nodes, and automatically
-improves failing outputs.
+A LangGraph pipeline that solves LiveCodeBench (LCB) Python problems iteratively: a generator
+writes code, three analysis nodes produce evidence (static analysis, sandboxed execution on the
+public tests, rubric), and an **LLM judge makes the final ACCEPT/REJECT decision** and writes the
+feedback (`improved_prompt`) for the next attempt. Delivered code is graded offline on the
+hidden tests. The judge-as-decider premise is central to the thesis: deterministic metrics are
+evidence and a hallucination guard, never the decision itself.
 
-This system is being developed as part of a **master's thesis**.
-For empirical evaluation, all run results are written to `outputs/memory.md`
-and compared against a single-shot baseline.
-
----
-
-## Environment
-
-Active environment is determined by the `.env` symlink in the project root.
-
-| Environment | Hardware | Backend | `.env` symlink |
-|-------------|----------|---------|----------------|
-| `local` | Mac Mini M4 16GB | Apple Metal | `ln -sf .env.local .env` |
-| `cloud` | Vast.ai GPU (≥32GB; A100 80GB no longer confirmed necessary — see Models section) | CUDA | `ln -sf .env.cloud .env` |
-
-**Local** (ENV=local): qwen3.5-9b (Unsloth UD-Q4_K_XL GGUF, ~6 GB) on port 8001 — used for all roles (M1/M2 + judgement).
-**Cloud** (ENV=cloud): Full model set on separate ports (see Models section).
-
-The `.env` file is never committed to git. Create the appropriate env file and symlink
-as the first setup step (see `docs/setup.md` section A6 for local, B6 for cloud).
+Developed for a **master's thesis**; an ELECO 2026 paper (Turkish, 5 pages) reports the local
+results. Paper sources: `~/Desktop/eleco2026-bildiri/` (outside this repo).
 
 ---
 
-## Models
+## Experiments
 
-| ID | Model | Format | Port | Min. Memory | Notes |
-|----|-------|--------|------|-------------|-------|
-| M1 | Qwen3.5-9B (Unsloth GGUF) | GGUF | 8001 | ~6 GB | Medium-scale anchor; reasoning model; `--jinja --cache-ram 0` required |
-| M2 | Qwen2.5-Coder-1.5B-Instruct (GGUF) | GGUF | 8002 | ~1 GB | Small-scale anchor; standard quant (no UD variant) |
-| QWEN | Qwen3.5-35B-A3B (Unsloth GGUF) | GGUF | 8004 | ~24 GB | Judgement only; independent model |
+| Setting | Generator | Judge | Problems | Backend |
+|---|---|---|---|---|
+| **Main (contamination-free)** | DeepSeek-V3 (2024-12, DeepInfra fp4) | Qwen2.5-72B-Instruct (2024-09, Novita bf16) | LCB v6 2025-01..2025-04, seed-42 sample of 150 (of 182) | OpenRouter |
+| Secondary (ELECO paper) | Qwen3.5-9B (2026-02) | same model | seeded LCB sample of 150, first 50 reported | Mac mini M4, llama.cpp |
 
-All models expose an **OpenAI-compatible API** (`/v1/chat/completions`).
-The pipeline connects to all via the `openai` Python library.
-Codegen order is fixed: M1 → M2. Judgement calls QWEN every iteration.
+- All models are open-weight (DeepSeek Model License, Qwen License, Apache-2.0 for Qwen3.5); state this in the paper.
+- LCB stopped at v6 (problems up to 2025-04). Newer models may have trained on it, so the main
+  setting follows LCB's post-cutoff protocol; the contamination risk of newer models must
+  always be stated (paper + docs). Details: `docs/dataset.md` §10.
+- Main protocol (`docs/ablation.md` §7): ≤ 5 generations, no trend extension; V0 = 5 samples per
+  problem with the first-iteration prompt (`benchmark/sample_baseline.py`); metric = pass@1 of
+  the delivered code; budget-matched baselines (filt@k, pass@k), cost, judge accuracy and
+  feedback-leak counts (`benchmark/openrouter_results.py`). Designs: Y (`JUDGE_DECISION=verdict`,
+  proposed) and P (`rubric`, comparison). Budget cap $5 (`API_BUDGET_USD`).
 
-In local mode, all roles (M1/M2/QWEN) route to port 8001 (qwen3.5-9b). Note: qwen3.5-9b returns reasoning_content (chain-of-thought) which the client falls back to if content is empty.
+---
+
+## Environments
+
+| `ENV` | Hardware | Backend | Settings |
+|---|---|---|---|
+| `openrouter` | none (API) | OpenRouter | `config/openrouter.env` (tracked) + key from `.env.openrouter` (git-ignored), loaded by `scripts/run_openrouter.sh` |
+| `local` | Mac mini M4 16 GB | llama.cpp, Metal | `.env` → `.env.local`; one server on :8001 (qwen3.5-9b) for all roles |
+| `cloud` | rented GPU (Vast.ai), optional | llama.cpp, CUDA | `.env` → `.env.cloud`; `CLOUD_README.md` §B |
+
+All backends are OpenAI-compatible; nodes call `models/client.chat()`. With `ENV=openrouter`
+every call is streamed, retried with backoff, pinned to one provider endpoint
+(`allow_fallbacks=false`, `max_price`), and logged to `outputs/api_usage.jsonl`; `models/budget.py`
+refuses a call that could push total spend past the cap. Optional Langfuse tracing
+(`models/tracing.py`) turns on when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (keys only in
+`.env.openrouter`); it records every call, iteration events and judge/hidden-test scores.
+
+Local model flags: Qwen3.5-9B needs `--jinja --cache-ram 0` (reasoning model; the default 8 GiB
+prompt cache causes Metal OOM). The client falls back to the reasoning text if `content` is empty.
 
 ---
 
 ## Pipeline Summary
 
 ```
-START
-  ↓
-Sequential Router (M1 → M2)
-  ↓
-Code Generation      ← improved_prompt fed back here on loop
-  ↓
-Node 1: Static Analysis  (CC · MI · Bandit · Halstead)
-  ↓
-Severity Gate
-  ├─ HIGH  → log_severity_stop → END
-  ├─ LOW   → strip_comments → Node 3  (Node 2 skipped)
-  └─ OK    ↓
-Node 2: Sandbox & Execution  (lcb_runner correctness + cpu_ms · ram_mb)
-  ↓
-strip_comments          ← removes comments before judgement (bias prevention)
-  ↓
-Node 3: Judgement LLM  (rubric as evidence + ACCEPT/REJECT verdict + improved_prompt)
-  ↓
-log_iteration           ← writes to memory.md + iterations/JSON
-  ↓
-Iteration Gate
-  ├─ PASS      → write_memory_final → next model → END
-  ├─ STOP_MAX  → stop_max → END
-  └─ LOOP      → Code Generation (same model, next iteration)
+START → codegen (active model; on loop: judge's improved_prompt + its own previous code)
+  → Node 1: Static Analysis (CC · MI · Halstead · Bandit · mypy/ruff · import whitelist)
+  → Severity Gate ── HIGH → log_severity_stop → END
+                  ── LOW  → strip_comments → Node 3   (Node 2 skipped)
+                  ── OK   ↓
+  → Node 2: Sandbox on public tests (local LCB-compatible evaluator; cpu_ms · ram_mb)
+  → strip_comments (bias prevention)
+  → Node 3: Judge — rubric + tests as evidence → ACCEPT/REJECT verdict + improved_prompt
+  → log_iteration (memory.md + iteration JSON)
+  → Iteration Gate ── PASS     → write_memory_final → next generator → END
+                   ── STOP_MAX → END
+                   ── LOOP     → codegen (same model, next iteration)
 ```
+
+PASS = `node3_pass`: all public tests pass AND judge ACCEPT (verdict design); without a usable
+verdict, rubric threshold Easy ≥ 80 / Medium ≥ 70 / Hard ≥ 60. The judge must not put code in
+its feedback.
 
 ---
 
@@ -86,118 +85,68 @@ Iteration Gate
 
 ```
 project/
-├── CLAUDE.md                  ← this file
-├── docs/                      ← full phase documentation
-│   ├── project-plan.md        ← thesis work plan + status indicators
-│   ├── architecture.md        ← system overview
-│   ├── setup.md               ← Mac Mini + Vast.ai installation
-│   ├── config.md              ← ENV flag, model registry, thresholds
-│   ├── dataset.md             ← LCB loading, all_tests, edge cases
-│   ├── codegen-models.md      ← models/client.py, prompts.py
-│   ├── node1.md               ← static analysis: CC, MI, Halstead, Bandit
-│   ├── node2.md               ← two-phase sandbox: lcb_runner + runtime
-│   ├── node3.md               ← judgement LLM, rubric, improved_prompt
-│   ├── graph.md               ← LangGraph graph, PipelineState, gates, cleaner
-│   ├── memory-logging.md      ← run_info.json, memory.md, iteration JSON
-│   ├── testing.md             ← 10 test files, pilot checklist, benchmark
-│   ├── ablation.md            ← V0–V4 variants, baseline.py, analysis
-│   ├── sensitivity.md         ← post-hoc sensitivity analysis plan (run after cloud)
-│   ├── analysis.md            ← TSR, McNemar, hypothesis validation
-│   ├── future-work.md         ← research directions
-│   ├── cloud-comparison.md    ← Vast.ai vs RunPod vs Modal
-│   └── unsloth-model-comparison.md  ← LCB scores, memory, cost table
-├── pipeline/
-│   ├── state.py               ← PipelineState TypedDict
-│   ├── graph.py               ← LangGraph graph definition
-│   ├── router.py              ← sequential model router
-│   └── gates.py               ← severity_gate, iteration_gate
-├── nodes/
-│   ├── codegen.py             ← code generation node
-│   ├── static_analysis.py     ← Node 1
-│   ├── cleaner.py             ← strip_comments_node
-│   ├── sandbox.py             ← Node 2
-│   └── judgement.py            ← Node 3
-├── metrics/
-│   ├── complexity.py          ← radon + lizard
-│   ├── security.py            ← bandit
-│   └── scoring.py             ← 100-point rubric
-├── sandbox/
-│   ├── lcb_eval.py            ← lcb_runner wrapper + fallback
-│   ├── runner.py              ← runtime metrics (cpu_ms, ram_mb)
-│   └── whitelist.py           ← allowed imports
-├── models/
-│   ├── client.py              ← OpenAI-compatible client
-│   └── prompts.py             ← four-layer codegen system prompt
-├── dataset/
-│   ├── loader.py              ← LCB loading + all_tests merge
-│   ├── splitter.py            ← format_problem, dataset_stats
-│   ├── edge_cases.py          ← rule-based edge case generation
-│   └── verify.py              ← installation verification script
-├── memory/
-│   └── logger.py              ← write_run_info, log_iteration_node, read_memory
-├── benchmark/
-│   ├── evaluator.py           ← full benchmark runner (V1–V4 variants)
-│   ├── baseline.py            ← single-shot baseline runner (V0)
-│   └── analysis.py            ← TSR, McNemar, hypothesis validation
-├── tests/
-│   ├── conftest.py
-│   ├── test_cleaner.py
-│   ├── test_metrics.py
-│   ├── test_gates.py
-│   ├── test_lcb_eval.py
-│   ├── test_runtime.py
-│   ├── test_edge_cases.py
-│   ├── test_dataset.py
-│   ├── test_logger.py
-│   ├── test_nodes.py
-│   ├── test_prompts.py
-│   └── test_baseline.py
-├── outputs/
-│   ├── run_info.json          ← auto-generated per run
-│   ├── memory.md              ← auto-generated, one row per iteration
-│   └── results/               ← JSON benchmark results
-├── scripts/
-│   └── start_model.sh         ← start a single llama.cpp server
+├── CLAUDE.md / README.md / CLOUD_README.md (Turkish runbook: §A OpenRouter, §B Vast.ai)
+├── main.py                    ← pipeline entry (MAX_PROBLEMS → SKIP_QIDS → SHARD_* filters)
 ├── config/
-│   ├── __init__.py            ← from config import settings, thresholds, model_registry
-│   ├── pipeline.py            ← max_iter, sandbox, LCB settings
-│   ├── thresholds.py          ← Node 1/2/3 thresholds
-│   └── models.py              ← model endpoint, name, temperature
-├── main.py                    ← pipeline entry point
-├── requirements.txt           ← Python dependencies
-├── .env                       ← symlink → .env.local or .env.cloud
-├── .env.local                 ← Mac Mini M4 config (never commit)
-└── .env.cloud                 ← Vast.ai config (never commit)
+│   ├── pipeline.py            ← settings (all env vars), thresholds.py, models.py (registries)
+│   └── openrouter.env         ← main-experiment settings (no secrets)
+├── pipeline/                  ← state.py, graph.py (V1/V2/V3), gates.py, router.py
+├── nodes/                     ← codegen, static_analysis, sandbox, cleaner, judgement
+├── metrics/                   ← complexity, security, linting, scoring (100-point rubric)
+├── sandbox/                   ← lcb_eval.py (local evaluator), runner.py, whitelist.py
+├── models/                    ← client.py (chat), budget.py (spend ledger), prompts.py, tracing.py (optional Langfuse)
+├── dataset/                   ← loader.py (date window, seed 42 sample), splitter, edge_cases, verify
+├── memory/logger.py           ← memory.md, iteration JSON, run_info_<run_id>.json
+├── benchmark/
+│   ├── sample_baseline.py     ← V0, n samples/problem (main experiment)
+│   ├── openrouter_results.py  ← main-experiment analysis
+│   ├── judge_replay.py        ← offline re-judging of recorded attempts with another judge
+│   ├── paper_results.py       ← ELECO paper numbers/tables/figure (local runs)
+│   ├── evaluator.py           ← ablation runner (V1/V2/V3)
+│   ├── sample50_qids.txt      ← first 50 qids of the local sample
+│   └── legacy/                ← old V0–V3 JSON toolkit (not comparable; kept for reference)
+├── scripts/                   ← run_openrouter.sh, start_model.sh, local_setup.sh, cloud_setup.sh
+├── tests/                     ← 18 test files + conftest.py (pytest -q: 272 passed, 1 skipped)
+├── docs/                      ← see index below
+├── judge_training/            ← future work: fine-tuned judge
+└── outputs/                   ← git-ignored; results/ (local), openrouter/ (main), api_usage.jsonl
 ```
+
+### Docs index
+
+| Doc | Status |
+|---|---|
+| `project-plan.md` | Work plan and current status |
+| `architecture.md`, `graph.md` | System overview; graph, state, gates |
+| `config.md`, `setup.md` | All settings; installation |
+| `dataset.md` | LCB loading, date window, contamination (§10) |
+| `codegen-models.md`, `node1.md`, `node2.md`, `node3.md` | Components (chat client, judge verdict, no-code rule) |
+| `memory-logging.md` | Output files |
+| `ablation.md` (§7 main protocol), `analysis.md` | Experiment design and analysis |
+| `main-results.md` | Main-experiment results (2026-10-02): V0 vs Y/P, refinement gain, budget match, judge accuracy, ablation |
+| `testing.md` | Test suite |
+| `future-work.md`, `judge-model-training.md`, `sensitivity.md` | Plans |
+| `metrics.md` | Metric thresholds and rubric reference |
+| `paper.md`, `cloud-comparison.md`, `unsloth-model-comparison.md` | Historical (superseded; see banner in each) |
 
 ---
 
 ## Key Architecture Decisions
 
-1. **Sequential model execution**: M1 → M2 run in order. When a model gets PASS,
-   results are written to memory.md and the next model starts. No parallel execution.
-   Both are same-family Qwen models isolating model size as the controlled variable.
-   Largest concurrent memory footprint: ~M1 (6 GB) + QWEN (24 GB) ≈ 30 GB; likely reduces hardware requirement — may allow smaller than A100 80GB, pending verification with actual Vast.ai pricing.
-
-2. **Early exit — Severity Gate**: If Node 1 detects Bandit HIGH severity or CC > 20,
-   the code is stopped before reaching the sandbox. On LOW severity (minor warnings),
-   Node 2 is skipped, going directly to Node 3.
-
-3. **Loop target — active model**: The `improved_prompt` produced by Node 3
-   is sent back to the currently active model (M1 or M2). The model does not change.
-
-4. **Termination criteria**:
-   - `max_iterations = 10` (independent counter per model)
-   - PASS threshold: Easy ≥ 80 / Medium ≥ 70 / Hard ≥ 60 (out of 100)
-
-5. **Environment via symlink** — no env flag needed at runtime:
-   - `ln -sf .env.local .env` → Mac Mini M4 local debug (done once)
-   - `ln -sf .env.cloud .env`  → Vast.ai production (done once)
-   - Then just: `python main.py`
-
-6. **Model-specific required parameters**:
-   - Qwen3.5-9B (M1, cloud + local): `--jinja --cache-ram 0` — Qwen3.5-9B is a reasoning model that emits reasoning_content before content (client falls back if content is empty); the default 8 GiB prompt cache causes Metal GPU OOM when combined with the model's resident weights on local hardware.
-   - Qwen2.5-Coder-1.5B-Instruct (M2, cloud): No special flags required; only standard GGUF quants available (no Unsloth UD variant).
+1. **Judge decides.** The judge's justified ACCEPT/REJECT is final; passing every public test is
+   a precondition. A REJECT of public-passing code must name a concrete input or a complexity
+   violation. Design P (rubric threshold) exists only as the comparison.
+2. **Leakage-free evaluation.** The loop sees public tests only; hidden tests are used offline.
+   One pinned evaluator (`LCB_EVALUATOR=local`) grades everything.
+3. **Early exit — Severity Gate.** Bandit HIGH, non-whitelisted import or CC > 20 → stop.
+   Unparseable code or poor MI/Halstead → LOW: skip the sandbox, go to the judge.
+4. **Loop target — active model.** `improved_prompt` (rewritten each iteration, ≤ 2000 chars) goes
+   back to the same generator together with its previous solution (LCB self-repair format,
+   `FEEDBACK_INCLUDE_CODE=true`); no history beyond that one attempt accumulates.
+5. **Termination.** `MAX_ITERATIONS=5`; trend extension off by default (the ELECO local runs used
+   5 + up to 3).
+6. **Generator and judge from different families** in the main setting (self-preference bias),
+   and the judge may not write code (solution leak).
 
 ---
 
@@ -208,17 +157,17 @@ project/
 | Modified file | Docs file to update |
 |---|---|
 | `memory/logger.py` | `docs/memory-logging.md` |
-| `benchmark/evaluator.py` | `docs/ablation.md` |
-| `benchmark/analysis.py` | `docs/analysis.md` |
-| `benchmark/baseline.py` | `docs/ablation.md` |
-| `pipeline/graph.py`, `pipeline/gates.py` | `docs/graph.md` |
-| `nodes/codegen.py`, `models/prompts.py` | `docs/codegen-models.md` |
+| `benchmark/sample_baseline.py`, `benchmark/evaluator.py` | `docs/ablation.md` |
+| `benchmark/openrouter_results.py`, `benchmark/paper_results.py`, `benchmark/judge_replay.py` | `docs/analysis.md` |
+| `pipeline/graph.py`, `pipeline/gates.py`, `pipeline/state.py` | `docs/graph.md` |
+| `nodes/codegen.py`, `models/prompts.py`, `models/client.py`, `models/budget.py`, `models/tracing.py` | `docs/codegen-models.md` |
 | `nodes/static_analysis.py`, `metrics/` | `docs/node1.md` |
 | `nodes/sandbox.py`, `sandbox/` | `docs/node2.md` |
 | `nodes/judgement.py`, `metrics/scoring.py` | `docs/node3.md` |
-| `config/` | `docs/config.md` |
+| `config/` (incl. `openrouter.env`) | `docs/config.md` |
 | `dataset/` | `docs/dataset.md` |
-| `pipeline/state.py` | `docs/graph.md` |
+| `scripts/run_openrouter.sh`, `scripts/*setup.sh` | `CLOUD_README.md`, `docs/setup.md` |
+| `tests/` | `docs/testing.md` |
 
 Do not ask for permission — update docs automatically as part of the same change.
 If the docs update would overwrite thesis-authored prose (design rationale, methodology explanation),
@@ -228,9 +177,8 @@ preserve the existing text and only add/update the affected code snippet or fiel
 
 ## Important Notes
 
-- All models run locally on llama.cpp. Internet is only needed for model download.
-- Never commit `.env`, `.env.local`, or `.env.cloud` to git.
-- Copy `outputs/` to your local machine regularly when running on Vast.ai.
-- Node 2 sandbox uses `resource.setrlimit` — Linux only (Vast.ai runs Ubuntu).
-- Each phase has a dedicated `docs/*.md` file. Read the relevant doc if stuck.
-- Hardware requirement on Vast.ai: largest concurrent memory ≈ 30 GB (M1 ~6 GB + QWEN ~24 GB), likely no longer requires A100 80GB but re-verification with current Vast.ai pricing is needed before finalizing a specific tier.
+- Never commit `.env`, `.env.local`, `.env.cloud` or `.env.openrouter` (the API key lives only in `.env.openrouter`).
+- Paid runs: check spend with `scripts/run_openrouter.sh status`; never raise `API_BUDGET_USD` without the user's approval.
+- Every reference in the paper/thesis must be verified against a primary source (no ghost references).
+- Node 2 memory limit uses `resource.setrlimit` — Linux only; skipped on macOS.
+- `datasets<3.0` is required; radon/bandit are invoked via `sys.executable -m`.

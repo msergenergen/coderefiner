@@ -62,9 +62,12 @@ def lcb_meta() -> dict:
     return {q: (p, s) for q, p, s in zip(ds["question_id"], ds["platform"], ds["starter_code"])}
 
 
-def hidden_evaluate(problems: dict, meta: dict, cache_path: str) -> None:
+def hidden_evaluate(problems: dict, meta: dict, cache_path: str,
+                    timeout: int = 10, stop_on_fail: bool = False) -> None:
     """Re-executes every iteration's code on all public + private tests and
-    stores the pass rate on the iteration dict under "_hidden"."""
+    stores the pass rate on the iteration dict under "_hidden".
+    stop_on_fail: stop at the first failing test (LCB behaviour); the
+    pass/fail result is the same, the pass rate becomes a lower bound."""
     sys.path.insert(0, os.getcwd())
     from sandbox.lcb_eval import _fallback_evaluate
 
@@ -92,7 +95,8 @@ def hidden_evaluate(problems: dict, meta: dict, cache_path: str) -> None:
                "starter_code": meta.get(it["question_id"], ("", ""))[1]}
         if not code.strip() or not row["all_tests"].get("input"):
             return it, 0.0
-        return it, _fallback_evaluate(code, row, timeout=10)["pass_rate"]
+        return it, _fallback_evaluate(code, row, timeout=timeout,
+                                      stop_on_fail=stop_on_fail)["pass_rate"]
 
     with cf.ThreadPoolExecutor(max_workers=8) as ex:
         for it, pr in ex.map(run, todo):

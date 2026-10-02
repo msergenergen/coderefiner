@@ -10,7 +10,7 @@ V0 baseline uses only TSR_correctness (lcb pass_rate == 1.0).
 Primary McNemar test and H1–H4 comparisons use TSR_correctness.
 
 Usage:
-    python benchmark/analysis.py --pipeline outputs/results/benchmark_V3_*.json
+    python -m benchmark.legacy.analysis --pipeline outputs/results/benchmark_V3_*.json
                                   --baseline  outputs/results/baseline_v0_M1_*.json
 """
 import argparse

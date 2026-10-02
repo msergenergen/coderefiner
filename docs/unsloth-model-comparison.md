@@ -1,5 +1,7 @@
 # unsloth-model-comparison.md — Unsloth Model Comparison
 
+> **Durum (2026-10-02): tarihsel belge.** Model seçimi bu tablodan sonra değişti: yerel ek bulgu Qwen3.5-9B, ana deney sızıntısız tasarımla OpenRouter üzerinde DeepSeek-V3 (üretici) + Qwen2.5-72B-Instruct (yargıç).3-70B (yargıç). Gerekçe: `docs/dataset.md` §10, `docs/ablation.md` §7. Tablolar kayıt amacıyla korunuyor.
+
 > Criteria: LiveCodeBench (LCB) pass@1 performance · Unsloth GGUF memory requirement · Vast.ai cost estimate  
 > Kaynak: Unsloth Model Catalog · Artificial Analysis · Onyx Coding Leaderboard · BenchLM.ai (Mart 2026)  
 > Note: LCB pass@1 scores come from different test windows (v5/v6 mixed); use for relative ranking, not absolute comparison.

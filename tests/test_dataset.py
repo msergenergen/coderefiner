@@ -87,3 +87,43 @@ class TestDatasetStats:
         assert stats["easy"]   == 2
         assert stats["medium"] == 1
         assert stats["hard"]   == 1
+
+
+class TestDateWindow:
+
+    def _item(self, qid, date):
+        return {"question_id": qid, "question_title": qid, "question_content": "x",
+                "difficulty": "easy", "starter_code": "", "contest_date": date,
+                "public_test_cases": "[]", "private_test_cases": ""}
+
+    def test_window_is_inclusive_by_month(self, monkeypatch):
+        import dataset.loader as loader
+        items = [self._item("a", "2024-12-31T00:00:00"), self._item("b", "2025-01-04T00:00:00"),
+                 self._item("c", "2025-04-06T00:00:00"), self._item("d", "2025-05-01T00:00:00")]
+        monkeypatch.setattr(loader, "load_dataset", lambda *a, **kw: items)
+        rows = loader.load_lcb(date_from="2025-01", date_to="2025-04")
+        assert [r["id"] for r in rows] == ["b", "c"]
+        assert rows[0]["contest_date"] == "2025-01-04"
+
+    def test_no_window_keeps_everything(self, monkeypatch):
+        import dataset.loader as loader
+        items = [self._item("a", "2023-05-01T00:00:00"), self._item("b", "2025-04-06T00:00:00")]
+        monkeypatch.setattr(loader, "load_dataset", lambda *a, **kw: items)
+        assert len(loader.load_lcb()) == 2
+
+
+
+class TestIoInstruction:
+
+    def _row(self, starter):
+        return {"title": "t", "difficulty": "easy", "content": "c", "starter_code": starter,
+                "public_tests": {"input": ["1"], "output": ["1"]}}
+
+    def test_leetcode_problem_is_not_told_to_use_stdin(self):
+        from dataset.splitter import format_problem
+        text = format_problem(self._row("class Solution:\n    def f(self, n: int) -> int:\n"))
+        assert "Read input from stdin" not in text and "Do not read stdin" in text
+
+    def test_stdin_problem_keeps_stdin_instruction(self):
+        from dataset.splitter import format_problem
+        assert "Read input from stdin" in format_problem(self._row(""))

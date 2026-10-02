@@ -6,10 +6,10 @@ publication-ready figures for the paper (IEEE two-column format).
 
 Usage:
     # Auto-discover all JSON files in dated subdirectory:
-    python benchmark/plot.py --results-dir outputs/results/2026-04-10/
+    python -m benchmark.legacy.plot --results-dir outputs/results/2026-04-10/
 
     # Explicit files:
-    python benchmark/plot.py \\
+    python -m benchmark.legacy.plot \\
         --baseline  outputs/results/.../baseline_v0_M1_*.json \\
                     outputs/results/.../baseline_v0_M2_*.json \\
                     outputs/results/.../baseline_v0_M3_*.json \\
@@ -18,7 +18,7 @@ Usage:
                     outputs/results/.../benchmark_V3_*.json
 
     # Save figures to a directory:
-    python benchmark/plot.py --results-dir outputs/results/2026-04-10/ \\
+    python -m benchmark.legacy.plot --results-dir outputs/results/2026-04-10/ \\
         --out outputs/figures/
 
 Outputs (saved as PNG + PDF):
@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-from benchmark.analysis import compute_tsr, compute_tsr_with_ci
+from benchmark.legacy.analysis import compute_tsr, compute_tsr_with_ci
 
 # ── Style ─────────────────────────────────────────────────────────────────────
 # IEEE two-column: text width ≈ 3.5 in per column; full width ≈ 7.16 in

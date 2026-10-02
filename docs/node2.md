@@ -1,12 +1,19 @@
 # node2.md — Sandbox & Execution (Node 2)
 
+> **Durum (2026-10-02).** Raporlanan tüm sonuçlar yerel LCB uyumlu değerlendiriciyle
+> (`sandbox/lcb_eval.py::_fallback_evaluate`, `LCB_EVALUATOR=local`) üretilir; `lcb_runner`
+> kurulu olsa bile kullanılmaz (her makine aynı notlasın diye sabitlendi, bkz. §`LCB_EVALUATOR`).
+> Aşağıdaki `lcb_runner` merkezli anlatım özgün tasarımı belgeler. Döngü yalnızca açık testleri
+> görür; aynı değerlendirici gizli testleri çevrimdışı notlar (`paper_results.py`,
+> `sample_baseline.py`, `openrouter_results.py`).
+
 ## 1. Purpose
 
 Evaluate the generated code in two independent phases:
 
 | Phase | Tool | Measured |
 |-----|------|---------|
-| **Faz 1 — Correctness** | lcb_runner.evaluation | pass/fail, pass_rate, failed_cases |
+| **Faz 1 — Correctness** | local LCB-compatible evaluator (lcb_runner optional) | pass/fail, pass_rate, failed_cases |
 | **Faz 2 — Runtime** | Kendi subprocess runner | cpu_ms, ram_mb, timeout |
 
 The two phases run independently. Phase 1 measures correctness;
@@ -199,6 +206,7 @@ def _fallback_evaluate(
     code: str,
     problem_row: dict,
     timeout: int,
+    stop_on_fail: bool = False,   # True: stop at the first failure (offline grading)
 ) -> dict:
     """
     lcb_runner kurulu değilse devreye giren basit subprocess evaluator.
@@ -658,6 +666,14 @@ Faz 2 — timed_out:   False
 (`_fallback_evaluate`) unless `LCB_EVALUATOR=lcb_runner` **and** `lcb_runner` is importable.
 Default `local`: every reported result (Mac runs and the offline hidden-test grading in
 `benchmark/paper_results.py`) used this evaluator, so a cloud machine that happens to have
-`lcb_runner` installed must not silently switch graders. Correctness timeout stays 10 s per test
-and at most 5 failing cases are passed to the judge (both fixed in code; `SANDBOX_TIMEOUT_SEC`
-only affects the runtime measurement in `sandbox/runner.py`).
+`lcb_runner` installed must not silently switch graders. Correctness timeout is 10 s per test
+(`CORRECTNESS_TIMEOUT_SEC` in `sandbox/lcb_eval.py`; the V0 baseline grades its public tests with
+the same constant) and at most 5 failing cases are passed to the judge; `SANDBOX_TIMEOUT_SEC`
+only affects the runtime measurement in `sandbox/runner.py`.
+
+Offline hidden grading (`benchmark/sample_baseline.py`, `benchmark/openrouter_results.py`) calls
+`_fallback_evaluate(..., timeout=HIDDEN_TIMEOUT_SEC, stop_on_fail=True)`: it stops at the first
+failing test, as lcb_runner's `grade_stdio` / `grade_call_based` do (LiveCodeBench repository,
+`lcb_runner/evaluation/testing_util.py`). The problem's pass/fail result is unchanged;
+`pass_rate` becomes a lower bound (passed so far / all tests). Node 2 keeps running every public
+test, because the judge needs every failing case.
