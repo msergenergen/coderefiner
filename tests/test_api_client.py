@@ -250,9 +250,12 @@ def test_write_latex_macros_and_table(tmp_path):
     mac = (tmp_path / "veri" / "ana_sonuclar.tex").read_text()
     assert "\\newcommand{\\aVo}{25{,}0}" in mac and "\\newcommand{\\aVoEn}{25.0}" in mac
     assert "\\newcommand{\\aYW}{$=$~0{,}200}" in mac
+    assert "\\newcommand{\\aPGainEn}{5.0}" in mac      # gain in points, decimal point (Abstract)
     tab = (tmp_path / "cizelgeler" / "cizelge-ana.tex").read_text()
     # V0, filt@2 (budget-matched), V3_Y, V3_P; the row's best value in bold
     assert "\\textbf{Toplam} & 2 & 25{,}0 & \\textbf{50{,}0} & 30{,}0 & 40{,}0" in tab
+    # paper terminology: TÖ (tek-örnekli) baseline, İ_Y / İ_P (iyileştirme) delivered code
+    assert "\\textbf{TÖ} & \\textbf{filt@2} & \\textbf{İ$_Y^{Q}$} & \\textbf{İ$_P$}" in tab
     proc = (tmp_path / "cizelgeler" / "cizelge-surec.tex").read_text()
     assert "Düzeltilen / bozulan problem & 1/0 & 1/0 \\\\" in proc
     assert "Kod içeren geri bildirim & 0/3 & 0/3" in proc
@@ -271,7 +274,7 @@ def test_write_latex_macros_and_table(tmp_path):
                            "iter1_vs_final_mcnemar": {"b": 7, "c": 1, "p": 0.03}})
     write_latex(rep, str(tmp_path), [("Gen", "Judge", "G", er)])
     mac = (tmp_path / "veri" / "ana_sonuclar.tex").read_text()
-    assert "\\newcommand{\\eGY}{45{,}0}" in mac and "\\newcommand{\\eGW}{$<$~0{,}001}" in mac
+    assert "\\newcommand{\\eGY}{45{,}0}" in mac and "\\newcommand{\\eGGainEn}{5.0}" in mac and "\\newcommand{\\eGW}{$<$~0{,}001}" in mac
     assert "\\newcommand{\\aVo}{50{,}0}" in mac          # main macros still there (pass@1 set to 0.5 above)
     yt = (tmp_path / "cizelgeler" / "cizelge-yargic.tex").read_text()
     assert "Gen & Judge & 50{,}0 & \\textbf{45{,}0} & $<$0{,}001 & 7/1 & 60{,}0 & 0{,}50 \\\\" in yt

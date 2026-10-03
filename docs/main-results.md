@@ -166,14 +166,14 @@ hazır olur. Kalan bütçe (1,39 $) bir koşuya yeter.
 sürümle (`sandbox/runner.py`, `docs/node2.md` §3): bellek ve işlemci süresi bu koşularda doğru,
 Qwen yargıçlı B koşularında değildi.
 
-| Koşu | Üretici | TA (taban) | Run id'leri | Analiz |
+| Koşu | Üretici | TÖ (taban) | Run id'leri | Analiz |
 |---|---|---|---|---|
 | C | DeepSeek-V3 (DeepInfra fp4) | `run_20261002_091834.regraded` (B ile aynı) | `run_20261003_093242/44/46/48` | `outputs/openrouter/analysis_C_gptoss_judge/` |
 | D | Llama-3.1-8B-Instruct (DeepInfra fp8; 2024-07-23) | `run_20261003_093410` (150 × 5) | `run_20261003_100935/37/39/41` | `outputs/openrouter/analysis_D_llama8b_gptoss/` |
 
 **Sonuçlar** (gizli testlerle katı doğruluk, %):
 
-| | TA | A_Y | Fark (%95 GA) | Wilcoxon p | D/B (1. iter → son) | Kabul isabeti | Ort. üretim | Maliyet |
+| | TÖ | İ_Y | Fark (%95 GA) | Wilcoxon p | D/B (1. iter → son) | Kabul isabeti | Ort. üretim | Maliyet |
 |---|---|---|---|---|---|---|---|---|
 | B: DeepSeek-V3 + Qwen2.5-72B | 34,1 | 36,7 | +2,5 (−0,7…6,0) | 0,175 | 5/0 | 57,9 | 2,56 | 0,68 $ |
 | C: DeepSeek-V3 + gpt-oss-120b | 34,1 | 50,0 | +15,9 (10,3…21,9) | 3,5e-6 | 27/1 | 88,1 | 2,83 | 0,50 $ |
