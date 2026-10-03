@@ -215,7 +215,10 @@ Step-by-step cloud procedure: `CLOUD_README.md`.
 ### Hosted-API backend (`ENV=openrouter`)
 
 Runs the same pipeline against OpenRouter instead of llama.cpp servers. Experiment settings
-live in `config/openrouter.env` (tracked, no secrets); `scripts/run_openrouter.sh` sources it and
+live in `config/openrouter.env` (tracked, no secrets); `scripts/run_openrouter.sh` exports each of its
+variables unless the variable is already set in the environment (so
+`OPENROUTER_JUDGE_MODEL=openai/gpt-oss-120b OPENROUTER_JUDGE_PROVIDER=deepinfra/bf16 scripts/run_openrouter.sh run`
+swaps the judge for one run; before 2026-10-03 the file overrode the environment) and
 reads only `OPENROUTER_API_KEY` from `.env.openrouter` (git-ignored; template
 `.env.openrouter.example`). The `.env` symlink is untouched.
 
@@ -571,6 +574,11 @@ _OPENROUTER_MODELS = {
     ),
     ("meta-llama/llama-3.3-70b-instruct", "novita/bf16"): dict(
         temperature=0.6, top_p=0.9, price=(0.135, 0.40), extra={},
+    ),
+    # Small-generator setting (2026-10-03): Llama-3.1-8B-Instruct (2024-07-23,
+    # released before the problem window), generation_config.json values.
+    ("meta-llama/llama-3.1-8b-instruct", "deepinfra/fp8"): dict(
+        temperature=0.6, top_p=0.9, price=(0.02, 0.04), extra={},
     ),
     # Secondary "modern reasoning model" setting.
     ("qwen/qwen3.5-9b", "deepinfra/bf16"): dict(

@@ -14,12 +14,17 @@
 #
 # Settings: config/openrouter.env (tracked). Keys: only OPENROUTER_API_KEY and the
 # optional LANGFUSE_* keys are read from .env.openrouter (git-ignored). The .env symlink is not touched.
+# Any setting of config/openrouter.env can be overridden from the environment.
 # Extra env vars (SKIP_QIDS, DESIGNS="verdict", RESUME=file, LOG_TAG=_x for
 # distinct log names, FEEDBACK_INCLUDE_CODE=false for feedback-only repair) pass through.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-set -a; source config/openrouter.env; set +a
+# config/openrouter.env gives the defaults; a variable already set in the
+# environment wins (e.g. OPENROUTER_JUDGE_MODEL=... scripts/run_openrouter.sh run).
+while IFS='=' read -r K V; do
+  [ -z "${!K+x}" ] && export "$K=$V"
+done < <(grep -E '^[A-Z_][A-Z0-9_]*=' config/openrouter.env)
 KEY_FILE=${KEY_FILE:-.env.openrouter}
 [ -f "$KEY_FILE" ] || { echo "Missing $KEY_FILE (copy .env.openrouter.example)"; exit 1; }
 OPENROUTER_API_KEY=$(grep -E '^OPENROUTER_API_KEY=' "$KEY_FILE" | tail -1 | cut -d= -f2- | tr -d '"'"'"' \r')

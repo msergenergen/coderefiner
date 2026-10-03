@@ -227,6 +227,11 @@ _OPENROUTER_MODELS = {
     ("meta-llama/llama-3.3-70b-instruct", "novita/bf16"): dict(
         temperature=0.6, top_p=0.9, price=(0.135, 0.40), extra={},
     ),
+    # Small-generator setting (2026-10-03): Llama-3.1-8B-Instruct (2024-07-23,
+    # released before the problem window), generation_config.json values.
+    ("meta-llama/llama-3.1-8b-instruct", "deepinfra/fp8"): dict(
+        temperature=0.6, top_p=0.9, price=(0.02, 0.04), extra={},
+    ),
     # Secondary "modern reasoning model" setting.
     ("qwen/qwen3.5-9b", "deepinfra/bf16"): dict(
         temperature=0.6, top_p=0.95, price=(0.10, 0.15),

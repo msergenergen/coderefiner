@@ -87,3 +87,16 @@ def test_full_run_estimate_uses_slowest_shard():
     assert est["judge_calls"] == 2
     assert est["estimated_wall_min"] == round((2 * 1.2 + 2 * 60) / 60, 1)
     assert est["estimated_judge_cost_usd"] == round(2 * 0.002, 3)
+
+
+def test_write_latex_macros(tmp_path):
+    stats = {"n": 10, "hidden_ok": 4, "reject_wrong_code": 1, "precision": 0.5}
+    cand = {"precision": 0.9, "reject_wrong_code": 5, "reject_correct_code": 1,
+            "vs_original": {"p": 0.0001}}
+    rep = {"groups": {"B_main": {jr.ORIGINAL: stats, "gpt-oss-120b": cand}}}
+    path = jr.write_latex(rep, str(tmp_path), "B_main", {"gpt-oss-120b": "G"})
+    tex = open(path).read()
+    assert "\\newcommand{\\jN}{10}" in tex
+    assert "\\newcommand{\\jWrong}{6}" in tex
+    assert "\\newcommand{\\jGPrec}{90{,}0}" in tex
+    assert "\\newcommand{\\jGP}{$<$~0{,}001}" in tex

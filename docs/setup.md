@@ -4,7 +4,7 @@
 
 | Ortam | Amaç | Donanım | Nasıl seçilir |
 |-------|------|---------|----------|
-| **openrouter** | Ana deney (sızıntısız) | Yok — API | `scripts/run_openrouter.sh` (`config/openrouter.env` + `.env.openrouter` anahtarı) |
+| **openrouter** | Ana deney (sızıntısız) | Yok — API | `scripts/run_openrouter.sh` (`config/openrouter.env` + `.env.openrouter` anahtarı; ortamdaki değişken dosyadakini ezer) |
 | **local** | ELECO bildirisi deneyi, geliştirme | Mac mini M4 16 GB | `ln -sf .env.local .env` |
 | **cloud** | İsteğe bağlı: yerel deneyin büyük bütçeli tekrarı | Kiralık GPU (Vast.ai) | `ln -sf .env.cloud .env` |
 
@@ -98,7 +98,7 @@ pip install -r requirements.txt
 python -c "import langgraph; print('LangGraph OK')"
 python -c "import radon, bandit, lizard; print('Metrics OK')"
 python -m dataset.verify     # "Window 2025-01..2025-04: 182 problems"
-pytest -q                    # 272 passed, 1 skipped
+pytest -q                    # 277 passed, 1 skipped
 ```
 
 ### A6. Create .env.local

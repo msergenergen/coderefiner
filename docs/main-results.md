@@ -2,8 +2,8 @@
 
 > Protokol: `docs/ablation.md` §7. Araç: `benchmark/openrouter_results.py` (`docs/analysis.md` §10).
 > Ham çıktılar: `outputs/openrouter/analysis_B_main/` (ana), `outputs/openrouter/analysis_A_feedback_only/`
-> (ablasyon), `outputs/openrouter/judge_replay/` (yargıç tekrarı, §10). Harcama: 3,35 $ / 5 $ (deneme ve problar
-> dahil); yargıç tekrarıyla 3,61 $.
+> (ablasyon), `outputs/openrouter/judge_replay/` (yargıç tekrarı, §10), `analysis_C_gptoss_judge/` ve `analysis_D_llama8b_gptoss/` (gpt-oss yargıçlı tam
+> koşular, §11). Harcama: 3,35 $ / 5 $ (deneme ve problar dahil); yargıç tekrarıyla 3,61 $; §11 koşularıyla 4,41 $.
 
 ## 1. Düzen
 
@@ -158,3 +158,58 @@ her kararı gizli testlerle karşılaştırdı. Kod üretilmedi. Harcama 0,27 $ 
 45 açık-testi-geçen denemeyi daha reddediyor ve her biri en çok 4 iterasyon daha getirebilir; gerçekçi
 aralık 70–100 dk ve 0,45–0,65 $. Gizli test notlaması ve analizle (~10 dk) sonuç yaklaşık 1,5–2 saatte
 hazır olur. Kalan bütçe (1,39 $) bir koşuya yeter.
+
+## 11. Tam koşular: gpt-oss-120b yargıç (2026-10-03)
+
+**Düzen.** Yalnızca Y tasarımı (`JUDGE_DECISION=verdict`), aynı 150 problem, en çok 5 üretim. Yargıç
+`openai/gpt-oss-120b` (DeepInfra; T 1,0, akıl yürütme `medium`). Çalışma zamanı ölçümü düzeltilmiş
+sürümle (`sandbox/runner.py`, `docs/node2.md` §3): bellek ve işlemci süresi bu koşularda doğru,
+Qwen yargıçlı B koşularında değildi.
+
+| Koşu | Üretici | TA (taban) | Run id'leri | Analiz |
+|---|---|---|---|---|
+| C | DeepSeek-V3 (DeepInfra fp4) | `run_20261002_091834.regraded` (B ile aynı) | `run_20261003_093242/44/46/48` | `outputs/openrouter/analysis_C_gptoss_judge/` |
+| D | Llama-3.1-8B-Instruct (DeepInfra fp8; 2024-07-23) | `run_20261003_093410` (150 × 5) | `run_20261003_100935/37/39/41` | `outputs/openrouter/analysis_D_llama8b_gptoss/` |
+
+**Sonuçlar** (gizli testlerle katı doğruluk, %):
+
+| | TA | A_Y | Fark (%95 GA) | Wilcoxon p | D/B (1. iter → son) | Kabul isabeti | Ort. üretim | Maliyet |
+|---|---|---|---|---|---|---|---|---|
+| B: DeepSeek-V3 + Qwen2.5-72B | 34,1 | 36,7 | +2,5 (−0,7…6,0) | 0,175 | 5/0 | 57,9 | 2,56 | 0,68 $ |
+| C: DeepSeek-V3 + gpt-oss-120b | 34,1 | 50,0 | +15,9 (10,3…21,9) | 3,5e-6 | 27/1 | 88,1 | 2,83 | 0,50 $ |
+| D: Llama-3.1-8B + gpt-oss-120b | 13,2 | 30,0 | +16,8 (11,6…22,3) | 9,5e-8 | 23/1 | 95,7 | 4,04 | 0,19 $ (+0,02 $ taban) |
+
+- C zorluğa göre: kolay 87,0 → 97,5; orta 28,9 → 57,9; zor 7,5 → 19,4. Bütçe eğrisi (k = 1..5):
+  32,7 / 40,7 / 45,3 / 50,0 / 50,0; filt@3 38,7, pass@5 39,3. C, B'nin Y koşusuna göre 22'ye 2
+  (McNemar p = 3,6e-5).
+- D zorluğa göre: kolay 43,5 → 85,0; orta 5,8 → 26,3; zor 0,3 → 1,4. Taban pass@5 20,7, filt@4 18,7.
+- Açık testleri geçen deneme / ret / retlerin gizli testte gerçekten hatalı olanı: C 157 / 73 / 55,
+  D 73 / 27 / 22.
+
+**Geri bildirim içeriği.**
+- `has_code` C'de 2/404, D'de 4/601 geri bildirimi işaretledi. Elle inceleme: 5'i örnek girdi-çıktı
+  ya da boş (`...your code...`) kod bloğu; 1'i (C, `abc391_e` iter 2) kod içermiyor ama formülleriyle
+  adım adım bir DP tarifi veriyor (sözde koda yakın).
+- Basit anahtar sözcük taraması (`dp[`, `= min(`, segment tree, Fenwick, Dijkstra, binary search,
+  two pointer, prefix sum, `O(n log n)` …): somut algoritma/formül adlandıran geri bildirim oranı
+  C %45 (181/398), D %39 (236/600), B'nin Y koşusu %10 (36/373). gpt-oss daha yönlendirici; kazancın
+  bir kısmı yargıcın kendi çözüm bilgisinden gelebilir.
+
+**Sınırlılıklar.** gpt-oss-120b problem penceresinden sonra yayımlandı (bkz. §10); ezber
+dışlanamaz. Bildiride ek koşular ana deneyin yerine değil, tamamlayıcı bulgu olarak verildi.
+
+**Komut** (bildiri çizelgeleri/şekil):
+
+```bash
+B=outputs/openrouter/results/baseline_samples/run_20261002_091834.regraded.jsonl
+.venv/bin/python -m benchmark.openrouter_results --baseline $B \
+  --y-run-ids run_20261002_100638 run_20261002_100640 run_20261002_100642 run_20261002_100644 \
+  --p-run-ids run_20261002_100646 run_20261002_100648 run_20261002_100650 run_20261002_100652 \
+  --out outputs/openrouter/analysis_B_main --compare outputs/openrouter/analysis_A_feedback_only/results.json \
+  --latex ~/Desktop/eleco2026-bildiri \
+  --extra DeepSeek-V3 gpt-oss-120b G outputs/openrouter/analysis_C_gptoss_judge/results.json \
+  --extra Llama-3.1-8B gpt-oss-120b L outputs/openrouter/analysis_D_llama8b_gptoss/results.json
+```
+
+**Harcama.** Bu iki koşu + Llama tabanı ≈ 0,72 $; yanlış yargıçla başlayıp durdurulan koşu
+(betik `config/openrouter.env` ile ortamı eziyordu, düzeltildi) ≈ 0,07 $. Toplam 4,41 $ / 5 $.

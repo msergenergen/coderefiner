@@ -50,3 +50,43 @@ class TestMeasureRuntime:
         result = measure_runtime(CORRECT_CODE, inputs)
         # 3 tests × ~20ms = at most ~200ms expected (with margin for slow CI)
         assert result["cpu_ms"] < 10_000
+
+
+SLEEPER = "import time\ntime.sleep(0.5)\nprint(1)\n"
+BUSY = "s = 0\nfor i in range(3_000_000):\n    s += i\nprint(s)\n"
+ALLOC = "x = bytearray(80 * 1024 * 1024)\nprint(len(x))\n"
+LEETCODE = (
+    "class Solution:\n"
+    "    def total(self, nums: List[int]) -> int:\n"
+    "        s = 0\n"
+    "        for _ in range(3_000_000):\n"
+    "            s += 1\n"
+    "        return sum(nums) + s\n"
+)
+STARTER = "class Solution:\n    def total(self, nums: List[int]) -> int:\n        "
+
+
+class TestResourceUsage:
+    """cpu_ms/ram_mb come from the child's rusage (os.wait4), not psutil after exit."""
+
+    def test_peak_memory_is_measured(self):
+        result = measure_runtime(ALLOC, [""])
+        assert result["ram_mb"] >= 80
+
+    def test_cpu_time_not_wall_time(self):
+        # sleeping costs wall time but almost no CPU time
+        sleep = measure_runtime(SLEEPER, [""])
+        busy = measure_runtime(BUSY, [""])
+        assert sleep["cpu_ms"] < 300
+        assert busy["cpu_ms"] > sleep["cpu_ms"]
+
+    def test_leetcode_method_is_called(self):
+        called = measure_runtime(LEETCODE, ["[1, 2, 3]"], starter_code=STARTER)
+        as_script = measure_runtime(LEETCODE, ["[1, 2, 3]"])
+        assert called["error"] is None
+        # the busy method body only runs when the driver calls it
+        assert called["cpu_ms"] > as_script["cpu_ms"] + 20
+
+    def test_failing_program_reports_error(self):
+        result = measure_runtime("raise ValueError('x')\n", [""])
+        assert "ValueError" in result["error"]

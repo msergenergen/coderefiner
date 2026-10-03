@@ -267,138 +267,35 @@ def _fallback_evaluate(
 
 ## 3. Faz 2 — Runtime Metrics (Kendi Subprocess Runner)
 
-Runs only on `public_tests` (2–3 tests).
-Does not touch correctness — measures cpu_ms and ram_mb.
+Runs only on `public_tests` (at most 3). Does not touch correctness.
 RAM limit enforced via `resource.setrlimit` (Linux only).
 
-### sandbox/runner.py
+### sandbox/runner.py (2026-10-03)
 
-```python
-"""
-Runtime metrik ölçüm modülü.
+| Metric | Source | Meaning |
+|---|---|---|
+| `cpu_ms` | `os.wait4()` rusage: `ru_utime + ru_stime` | CPU time of the child, mean over tests |
+| `ram_mb` | `os.wait4()` rusage: `ru_maxrss` (bytes on macOS, KB on Linux) | peak resident memory, max over tests |
 
-Faz 1 (lcb_runner) correctness'ı ölçtü.
-Bu modül YALNIZCA cpu_ms ve ram_mb ölçer.
-Public testlerde çalışır — 2–3 test yeterli.
-"""
-import os
-import sys
-import time
-import subprocess
-import tempfile
-import psutil
-from config import settings
+- **Functional (LeetCode) problems** run through the correctness evaluator's call driver
+  (`_CALL_DRIVER`, `_LCB_IMPORT_HEADER`, `_starter_method` from `sandbox/lcb_eval.py`): the starter
+  method is called with the JSON arguments of each test. `nodes/sandbox.py` passes
+  `starter_code=problem_row["starter_code"]`.
+- **Stdin problems** run the program with the test input on stdin.
+- stdin/stderr go through temporary files so the child can be reaped with `os.wait4()`, which
+  returns that child's own rusage; on timeout the child is killed and `cpu_ms = timeout`.
+- Both numbers include interpreter start-up (about 15 ms CPU, about 10 MB).
 
-
-def measure_runtime(
-    code: str,
-    test_inputs: list[str],
-    timeout_sec: int | None = None,
-) -> dict:
-    """
-    Kodu public testlerde çalıştırır, runtime metriklerini ölçer.
-
-    Args:
-        code:        Çalıştırılacak kod
-        test_inputs: public_tests["input"] — 2–3 test yeterli
-        timeout_sec: None → settings.sandbox_timeout_sec
-
-    Returns:
-        {
-            "cpu_ms":    float,   # Average CPU time
-            "ram_mb":    float,   # Peak RAM usage
-            "timed_out": bool,
-            "error":     str | None,
-        }
-    """
-    timeout = timeout_sec or settings.sandbox_timeout_sec
-
-    cpu_times = []
-    peak_ram  = 0.0
-    timed_out = False
-    error     = None
-
-    with tempfile.NamedTemporaryFile(
-        suffix=".py", mode="w", delete=False
-    ) as f:
-        f.write(code)
-        tmp = f.name
-
-    try:
-        for inp in test_inputs[:3]:   # At most 3 tests — speed is priority
-            result = _run_single(tmp, inp, timeout)
-            cpu_times.append(result["cpu_ms"])
-            peak_ram = max(peak_ram, result["ram_mb"])
-            if result["timed_out"]:
-                timed_out = True
-            if result["error"] and not error:
-                error = result["error"]
-    finally:
-        os.unlink(tmp)
-
-    avg_cpu = sum(cpu_times) / len(cpu_times) if cpu_times else 0.0
-
-    return {
-        "cpu_ms":    round(avg_cpu, 1),
-        "ram_mb":    round(peak_ram, 1),
-        "timed_out": timed_out,
-        "error":     error,
-    }
-
-
-def _run_single(tmp_path: str, stdin_data: str, timeout: int) -> dict:
-    """Tek test case için subprocess çalıştırır."""
-
-    def _set_limits():
-        """RAM limiti — sadece Linux."""
-        if sys.platform.startswith("linux"):
-            import resource
-            limit = settings.sandbox_memory_limit_mb * 1024 * 1024
-            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-
-    try:
-        t0 = time.perf_counter()
-
-        proc = subprocess.Popen(
-            ["python3", tmp_path],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=_set_limits,
-        )
-
-        try:
-            _, stderr = proc.communicate(input=stdin_data, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            return {
-                "cpu_ms": timeout * 1000, "ram_mb": 0.0,
-                "timed_out": True, "error": "timeout",
-            }
-
-        elapsed_ms = (time.perf_counter() - t0) * 1000
-
-        ram_mb = 0.0
-        try:
-            p = psutil.Process(proc.pid)
-            ram_mb = p.memory_info().rss / (1024 * 1024)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-
-        error = stderr.strip() if proc.returncode != 0 else None
-
-        return {
-            "cpu_ms": elapsed_ms, "ram_mb": ram_mb,
-            "timed_out": False, "error": error,
-        }
-
-    except Exception as e:
-        return {
-            "cpu_ms": 0.0, "ram_mb": 0.0,
-            "timed_out": False, "error": str(e)[:200],
-        }
-```
+> **Known defect in the 2026-10-02 main experiment.** The previous version read memory with
+> `psutil` after the child had exited, so `ram_mb` was 0 in all 375 executions of the main Y run
+> (and every other run), and `cpu_ms` was wall-clock time. LeetCode-style problems were also run
+> as plain scripts, so the solution method was never called: their `cpu_ms` (median 16.8 ms) is
+> interpreter start-up only. Consequences for that experiment: the memory half of the efficiency
+> score gave every executed attempt full marks, and the time half only discriminated stdin
+> (AtCoder) problems. Correctness, the public-test precondition and the hidden-test grading are
+> unaffected (they use `sandbox/lcb_eval.py`). The run was not repeated (user decision,
+> 2026-10-03); the paper states that only run time was measured. Tests:
+> `tests/test_runtime.py::TestResourceUsage`.
 
 ---
 

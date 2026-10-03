@@ -14,8 +14,8 @@ feedback (`improved_prompt`) for the next attempt. Delivered code is graded offl
 hidden tests. The judge-as-decider premise is central to the thesis: deterministic metrics are
 evidence and a hallucination guard, never the decision itself.
 
-Developed for a **master's thesis**; an ELECO 2026 paper (Turkish, 5 pages) reports the local
-results. Paper sources: `~/Desktop/eleco2026-bildiri/` (outside this repo).
+Developed for a **master's thesis**; an ELECO 2026 paper (Turkish, 5 pages) reports the
+OpenRouter main experiment and the gpt-oss-120b judge runs. Paper sources: `~/Desktop/eleco2026-bildiri/` (outside this repo).
 
 ---
 
@@ -24,7 +24,8 @@ results. Paper sources: `~/Desktop/eleco2026-bildiri/` (outside this repo).
 | Setting | Generator | Judge | Problems | Backend |
 |---|---|---|---|---|
 | **Main (contamination-free)** | DeepSeek-V3 (2024-12, DeepInfra fp4) | Qwen2.5-72B-Instruct (2024-09, Novita bf16) | LCB v6 2025-01..2025-04, seed-42 sample of 150 (of 182) | OpenRouter |
-| Secondary (ELECO paper) | Qwen3.5-9B (2026-02) | same model | seeded LCB sample of 150, first 50 reported | Mac mini M4, llama.cpp |
+| Judge effect (2026-10-03, Y only) | DeepSeek-V3 / Llama-3.1-8B (2024-07, DeepInfra fp8) | gpt-oss-120b (2025-08, DeepInfra) | same 150 | OpenRouter |
+| Secondary (local, not in the paper) | Qwen3.5-9B (2026-02) | same model | seeded LCB sample of 150, first 50 reported | Mac mini M4, llama.cpp |
 
 - All models are open-weight (DeepSeek Model License, Qwen License, Apache-2.0 for Qwen3.5); state this in the paper.
 - LCB stopped at v6 (problems up to 2025-04). Newer models may have trained on it, so the main
@@ -106,7 +107,7 @@ project/
 │   ├── sample50_qids.txt      ← first 50 qids of the local sample
 │   └── legacy/                ← old V0–V3 JSON toolkit (not comparable; kept for reference)
 ├── scripts/                   ← run_openrouter.sh, start_model.sh, local_setup.sh, cloud_setup.sh
-├── tests/                     ← 18 test files + conftest.py (pytest -q: 272 passed, 1 skipped)
+├── tests/                     ← 18 test files + conftest.py (pytest -q: 277 passed, 1 skipped)
 ├── docs/                      ← see index below
 ├── judge_training/            ← future work: fine-tuned judge
 └── outputs/                   ← git-ignored; results/ (local), openrouter/ (main), api_usage.jsonl
@@ -123,7 +124,7 @@ project/
 | `codegen-models.md`, `node1.md`, `node2.md`, `node3.md` | Components (chat client, judge verdict, no-code rule) |
 | `memory-logging.md` | Output files |
 | `ablation.md` (§7 main protocol), `analysis.md` | Experiment design and analysis |
-| `main-results.md` | Main-experiment results (2026-10-02): V0 vs Y/P, refinement gain, budget match, judge accuracy, ablation |
+| `main-results.md` | Main-experiment results (2026-10-02): V0 vs Y/P, refinement gain, budget match, judge accuracy, ablation; §11 gpt-oss-120b judge runs (2026-10-03) |
 | `testing.md` | Test suite |
 | `future-work.md`, `judge-model-training.md`, `sensitivity.md` | Plans |
 | `metrics.md` | Metric thresholds and rubric reference |

@@ -20,7 +20,7 @@ Ana deney sızıntısız tasarımdır (gerekçe: `docs/dataset.md` §10, protoko
 üretici `deepseek/deepseek-chat` = DeepSeek-V3 (DeepInfra fp4, 2024-12-26), yargıç
 `qwen/qwen-2.5-72b-instruct` (Novita bf16, 2024-09-19); ikisi de 2025'ten önce yayımlandı. Problemler
 yalnızca LCB'nin 2025-01 – 2025-04 penceresinden: 182 problemden seed 42 ile seçilen 150 problem. Koşu Mac'te çalışır; sandbox ve
-değerlendirme yerelde kalır. Deney ayarları `config/openrouter.env` dosyasındadır.
+değerlendirme yerelde kalır. Deney ayarları `config/openrouter.env` dosyasındadır; ortamda önceden tanımlanmış bir değişken dosyadakinin önüne geçer (ör. `OPENROUTER_JUDGE_MODEL=openai/gpt-oss-120b OPENROUTER_JUDGE_PROVIDER=deepinfra/bf16 scripts/run_openrouter.sh run` yargıcı yalnızca o koşu için değiştirir).
 
 1. **Kredi ve anahtar.** https://openrouter.ai → Credits ($5) → Keys → yeni anahtar (anahtara
    $5 kredi sınırı koymak önerilir). Anahtarı **sohbete yapıştırmayın**; yalnızca şu dosyaya:

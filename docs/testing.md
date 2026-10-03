@@ -1,13 +1,13 @@
 # testing.md — Test Stratejisi
 
-> **Güncel envanter (2026-10-02).** `pytest -q` → **272 passed, 1 skipped**. Aşağıdaki bölümlerdeki
+> **Güncel envanter (2026-10-02).** `pytest -q` → **277 passed, 1 skipped**. Aşağıdaki bölümlerdeki
 > test kopyaları açıklama amaçlıdır ve bazıları eskidir; doğru kaynak `tests/` dizinidir.
 
 | Dosya | Test | Kapsam |
 |---|---|---|
 | `test_tracing.py` | 5 | Langfuse: anahtarsız kapalı, gerçek SDK + bellek içi dışa aktarıcıyla üretim düğümü (model, token, maliyet, oturum), deterministik iz kimliği, hatalı çağrının ERROR kaydı, skorlar ve gizli test yüklemesi, izleme hatasının koşuyu bozmaması |
-| `test_api_client.py` | 17 | `models/client.chat()` (akış, gerekçe yedeği, maliyet defteri, bütçe sınırı, yeniden deneme), üretici/yargıç örnekleme ayarları (DeepSeek-V3 top_p gönderilmez; Qwen2.5-72B generation_config), sağlayıcı ikilisi kontrolü, pass@k / filt@k, geri bildirimde kod sızıntısı, gizli notlamada ilk hatada durma, yargıç isteminde metriklerin kanıt olarak sunulması, aynı run_id paylaşan taban/hat maliyetlerinin ayrılması, `--compare` eşleştirmesi, `--latex` makro ve çizelge çıktısı |
-| `test_judge_replay.py` | 6 | Çevrimdışı yargıç tekrarı: açık testleri geçen ve gizli sonucu bilinen denemelerin seçimi, istemin hattaki yargıç istemiyle aynı kurulması, kararsız yanıtın rubrik yedeğiyle KABUL sayılması, kabul isabeti, McNemar yönü, tam koşu süre tahmini |
+| `test_api_client.py` | 17 | `models/client.chat()` (akış, gerekçe yedeği, maliyet defteri, bütçe sınırı, yeniden deneme), üretici/yargıç örnekleme ayarları (DeepSeek-V3 top_p gönderilmez; Qwen2.5-72B generation_config), sağlayıcı ikilisi kontrolü, pass@k / filt@k, geri bildirimde kod sızıntısı, gizli notlamada ilk hatada durma, yargıç isteminde metriklerin kanıt olarak sunulması, aynı run_id paylaşan taban/hat maliyetlerinin ayrılması, `--compare` eşleştirmesi, `--latex` makro, çizelge (en iyi değer kalın, süreç özeti) ve bütçe eğrisi çıktısı |
+| `test_judge_replay.py` | 7 | Çevrimdışı yargıç tekrarı: açık testleri geçen ve gizli sonucu bilinen denemelerin seçimi, istemin hattaki yargıç istemiyle aynı kurulması, kararsız yanıtın rubrik yedeğiyle KABUL sayılması, kabul isabeti, McNemar yönü, tam koşu süre tahmini, bildiri makroları (`--latex`) |
 | `test_judgement.py` | 38 | Yargıç: ayrıştırma, yedek yönerge, verdict kuralları, `BudgetExceeded` yutulmaz |
 | `test_gates.py` | 33 | severity / iteration gate, trend uzatması |
 | `test_scoring.py` | 27 | 100 puanlık rubrik |
@@ -22,7 +22,7 @@
 | `test_router.py` | 7 | Sıralı model yönlendirici |
 | `test_baseline.py` | 6 | `benchmark/legacy/baseline.py` kod çıkarma (eski) |
 | `test_nodes.py` | 6 | Düğüm durum dönüşümleri |
-| `test_runtime.py` | 6 | Çalışma zamanı ölçümü |
+| `test_runtime.py` | 10 | Çalışma zamanı ölçümü: alt sürecin rusage'ından işlemci süresi ve tepe bellek (`os.wait4`), uyuyan programın düşük CPU süresi, LeetCode metodunun sürücüyle çağrılması |
 
 Ağ bağlantısı gerektiren test yoktur; ücretli API çağrıları sahte istemciyle sınanır.
 

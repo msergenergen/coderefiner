@@ -57,6 +57,7 @@ def sandbox_node(state: PipelineState) -> PipelineState:
         faz2 = measure_runtime(
             code=code,
             test_inputs=pub_inputs,
+            starter_code=problem_row.get("starter_code", ""),
         )
 
     node2_ms = int((time.perf_counter() - t0) * 1000)

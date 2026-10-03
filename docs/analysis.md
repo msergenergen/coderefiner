@@ -518,7 +518,8 @@ Cost is summed from the ledger by run id; baseline and pipeline entries are told
 | Y vs P | exact McNemar on delivered code |
 | `rows` (results.json) | per design, question_id → delivered code passes all hidden tests |
 | `--langfuse` | uploads `hidden_pass` / `hidden_pass_first` scores to the runs' Langfuse traces (`docs/codegen-models.md`) |
-| `--latex <paper dir>` | writes `veri/ana_sonuclar.tex` (`\a…` macros: Turkish decimal comma, plus `…En` variants with a decimal point for the Abstract) and `cizelgeler/cizelge-ana.tex` (difficulty × V0/V3_Y/V3_P table) from `results.json`; the paper never hand-copies a number |
+| `--latex <paper dir>` | writes `veri/ana_sonuclar.tex` (`\a…` macros: Turkish decimal comma, plus `…En` variants with a decimal point for the Abstract) `cizelgeler/cizelge-ana.tex` (difficulty × TA / filt@2 / A_Y / A_P — the paper's names for V0 and the delivered code of Y and P — best value per row in bold), `cizelgeler/cizelge-surec.tex` (process summary for Y and P: mean generations, share stopped at iteration 1, fixed/broken problems, public-passing attempts, valid verdicts, feedback with code, API cost) and `sekiller/sekil2-butce-egrisi.pdf` (pass@1 against the generation budget k: the pipeline's delivered code after at most k iterations — `analyse()`'s `curve` — next to filt@k and pass@k of the V0 samples); the paper never hand-copies a number |
+| `--extra GEN JUDGE TAG results.json` (repeatable, with `--latex`) | a further Y-design analysis (its own `results.json`, own baseline allowed) becomes a row of `cizelgeler/cizelge-yargic.tex` (generator × judge: TA, A_Y, Wilcoxon p, fixed/broken vs. the run's first attempt, acceptance precision, API cost) and `\e<TAG>…` macros appended to `veri/ana_sonuclar.tex`; when it shares the main baseline its budget curve is added to `sekil2-butce-egrisi.pdf` (legend then moves below the axes) |
 | `--compare <results.json>` | per design, exact McNemar against another analysis on common problems (ablation: feedback only vs feedback + previous solution) |
 | judge | public-passing attempts, rejections and whether hidden tests agree, acceptance precision, share of verdicts from the judge, JSON/LLM errors |
 | feedback leaks | judge feedback containing solution code (fenced block with logic lines, or ≥ 2 logic lines outside fences; format instructions and empty skeletons excluded) |
@@ -575,8 +576,12 @@ decisions that determine the delivered code.
 scripts/run_openrouter.sh judge-replay openai/gpt-oss-120b deepinfra/bf16 gpt-oss-120b \
     --run-ids <Y-A and Y-B run ids> --groups A_feedback_only=<ids,…> B_main=<ids,…> \
     --estimate-runs <Y-B run ids> [--workers 8] [--limit N]
-python -m benchmark.judge_replay --run-ids … --groups … --estimate-runs … --report
+python -m benchmark.judge_replay --run-ids … --groups … --estimate-runs … --report \
+    [--latex ~/Desktop/eleco2026-bildiri]   # veri/yargic_tekrari.tex: \j… macros of group B_main
 ```
 
 Output: `outputs/openrouter/judge_replay/<name>.jsonl` (one row per attempt, resumable) and
-`report.json`. Results: `docs/main-results.md`.
+`report.json`. With `--latex DIR` it writes `DIR/veri/yargic_tekrari.tex`: `\jN`, `\jWrong`,
+`\jQCaught`, `\jQPrec` (pipeline judge) and per candidate `\j<T>Prec`, `\j<T>Caught`, `\j<T>RejOk`,
+`\j<T>P` (`--latex-tags deepseek-v3=D gpt-oss-120b=G`, group `--latex-group B_main`).
+Results: `docs/main-results.md`.

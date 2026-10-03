@@ -238,7 +238,8 @@ def test_write_latex_macros_and_table(tmp_path):
     des = lambda v: {k: {"v3": v, "v3_ci": [0.1, 0.9], "delta_vs_v0": 0.05, "delta_ci": [-0.01, 0.1],
                          "wilcoxon_p": 0.2, "iter1": 0.25,
                          "iter1_vs_final_mcnemar": {"b": 1, "c": 0, "p": 1.0},
-                         "mean_generations": 2.5} for k in ("all", "easy", "medium", "hard")}
+                         "mean_generations": 2.5, "first_stop": 0.5}
+                     for k in ("all", "easy", "medium", "hard")}
     jd = {"public_passing": 4, "rejected": 1, "rejected_and_hidden_wrong": 1,
           "rejected_but_hidden_correct": 0, "accepted_precision": 0.6, "verdict_from_judge": 1.0,
           "feedback_with_code": 0, "feedback_total": 3}
@@ -250,4 +251,28 @@ def test_write_latex_macros_and_table(tmp_path):
     assert "\\newcommand{\\aVo}{25{,}0}" in mac and "\\newcommand{\\aVoEn}{25.0}" in mac
     assert "\\newcommand{\\aYW}{$=$~0{,}200}" in mac
     tab = (tmp_path / "cizelgeler" / "cizelge-ana.tex").read_text()
-    assert "\\textbf{Toplam} & 2 & 25{,}0 & 30{,}0 & 40{,}0" in tab
+    # V0, filt@2 (budget-matched), V3_Y, V3_P; the row's best value in bold
+    assert "\\textbf{Toplam} & 2 & 25{,}0 & \\textbf{50{,}0} & 30{,}0 & 40{,}0" in tab
+    proc = (tmp_path / "cizelgeler" / "cizelge-surec.tex").read_text()
+    assert "Düzeltilen / bozulan problem & 1/0 & 1/0 \\\\" in proc
+    assert "Kod içeren geri bildirim & 0/3 & 0/3" in proc
+    # the budget figure needs the pipeline curves
+    assert not (tmp_path / "sekiller" / "sekil2-butce-egrisi.pdf").exists()
+    for d, v in (("Y", 0.3), ("P", 0.4)):
+        rep[d]["curve"] = {"all": [v - 0.1, v]}
+    for k in (1, 4, 5):
+        rep["V0"]["all"].update({f"filt@{k}": 0.5, f"pass@{k}": 0.5})
+    write_latex(rep, str(tmp_path))
+    assert (tmp_path / "sekiller" / "sekil2-butce-egrisi.pdf").stat().st_size > 0
+    # a further Y-design analysis with its own judge: table row, \e<tag> macros, extra curve
+    import copy
+    er = copy.deepcopy(rep)
+    er["Y"]["all"].update({"v3": 0.45, "wilcoxon_p": 0.0001,
+                           "iter1_vs_final_mcnemar": {"b": 7, "c": 1, "p": 0.03}})
+    write_latex(rep, str(tmp_path), [("Gen", "Judge", "G", er)])
+    mac = (tmp_path / "veri" / "ana_sonuclar.tex").read_text()
+    assert "\\newcommand{\\eGY}{45{,}0}" in mac and "\\newcommand{\\eGW}{$<$~0{,}001}" in mac
+    assert "\\newcommand{\\aVo}{50{,}0}" in mac          # main macros still there (pass@1 set to 0.5 above)
+    yt = (tmp_path / "cizelgeler" / "cizelge-yargic.tex").read_text()
+    assert "Gen & Judge & 50{,}0 & \\textbf{45{,}0} & $<$0{,}001 & 7/1 & 60{,}0 & 0{,}50 \\\\" in yt
+    assert "DeepSeek-V3 & Qwen2.5-72B & 50{,}0 & \\textbf{30{,}0} & 0{,}200 & 1/0" in yt

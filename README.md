@@ -61,7 +61,7 @@ START → codegen (prompt + judge's improved_prompt and the previous solution on
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m dataset.verify          # expects "Window 2025-01..2025-04: 182 problems"
-pytest -q                         # 272 passed, 1 skipped
+pytest -q                         # 277 passed, 1 skipped
 ```
 
 ### Main experiment (OpenRouter)
