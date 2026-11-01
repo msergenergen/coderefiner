@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+type: software
+title: CodeRefiner
+authors:
+  - family-names: Ergen
+    given-names: Mehmet Sergen
+    affiliation: Department of Computer Engineering, Kocaeli University
+  - family-names: Sayar
+    given-names: Ahmet
+    affiliation: Department of Computer Engineering, Kocaeli University
+repository-code: https://github.com/msergenergen/coderefiner
+license: MIT
+description: >-
+  A LangGraph pipeline that solves LiveCodeBench problems iteratively using
+  LLM-as-a-Judge. A code generator produces solutions, static analysis and
+  sandboxed execution provide evidence, and an LLM judge makes the final
+  ACCEPT/REJECT decision with feedback for refinement.
+keywords:
+  - code generation
+  - LLM-as-a-Judge
+  - iterative refinement
+  - code evaluation
+version: 1.0.0
+
+preferred-citation:
+  type: conference-paper
+  title: >-
+    LLM-as-a-Judge for Iterative Code Refinement: A Multi-Stage Approach
+  authors:
+    - family-names: Ergen
+      given-names: Mehmet Sergen
+      affiliation: Department of Computer Engineering, Kocaeli University
+    - family-names: Sayar
+      given-names: Ahmet
+      affiliation: Department of Computer Engineering, Kocaeli University
+  languages:
+    - tr
+  conference:
+    name: "National Conference on Electrical and Electronics Engineering (ELECO 2026)"
+    city: Bursa
+    country: TR
+    date-start: 2026-11-26
+    date-end: 2026-11-28
+  year: 2026

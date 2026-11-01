@@ -202,6 +202,15 @@ dışlanamaz. Bildiride ek koşular ana deneyin yerine değil, tamamlayıcı bul
 
 ```bash
 B=outputs/openrouter/results/baseline_samples/run_20261002_091834.regraded.jsonl
+# C ve D (önce bunlar; ana komut --extra ile okur)
+.venv/bin/python -m benchmark.openrouter_results --baseline $B \
+  --y-run-ids run_20261003_093242 run_20261003_093244 run_20261003_093246 run_20261003_093248 \
+  --out outputs/openrouter/analysis_C_gptoss_judge --compare outputs/openrouter/analysis_B_main/results.json
+.venv/bin/python -m benchmark.openrouter_results \
+  --baseline outputs/openrouter/results/baseline_samples/run_20261003_093410.jsonl \
+  --y-run-ids run_20261003_100935 run_20261003_100937 run_20261003_100939 run_20261003_100941 \
+  --out outputs/openrouter/analysis_D_llama8b_gptoss
+# B (ana) + bildiri makroları, çizelgeler ve şekil
 .venv/bin/python -m benchmark.openrouter_results --baseline $B \
   --y-run-ids run_20261002_100638 run_20261002_100640 run_20261002_100642 run_20261002_100644 \
   --p-run-ids run_20261002_100646 run_20261002_100648 run_20261002_100650 run_20261002_100652 \
@@ -213,3 +222,117 @@ B=outputs/openrouter/results/baseline_samples/run_20261002_091834.regraded.jsonl
 
 **Harcama.** Bu iki koşu + Llama tabanı ≈ 0,72 $; yanlış yargıçla başlayıp durdurulan koşu
 (betik `config/openrouter.env` ile ortamı eziyordu, düzeltildi) ≈ 0,07 $. Toplam 4,41 $ / 5 $.
+
+## 12. Statik analizin (Düğüm 1) etkisi (2026-11-01, mevcut kayıtlarla)
+
+Hakem gözüyle değerlendirmedeki E2 sorusu ("statik analiz neden var?") için yeni koşu yapılmadan
+`openrouter_results.py`'nin `static` çıktısıyla ölçüldü (tanımlar: `docs/analysis.md` §10). Durdurulan
+kod, gizli testlerde yerel değerlendiriciyle yeniden çalıştırıldı; teslim edilen sonuç değişmez.
+
+| | Y (Qwen) | P (Qwen) | C: Y (gpt-oss) | D: Llama + gpt-oss |
+|---|---|---|---|---|
+| Deneme | 384 | 357 | 424 | 606 |
+| Önem OK / LOW / HIGH | 375 / 1 / 8 | 342 / 4 / 11 | 395 / 9 / 20 | 579 / 22 / 5 |
+| Durdurma: CC > 20 / izinsiz modül | 7 / 1 | 11 / 0 | 19 / 1 | 3 / 2 |
+| Durdurulan kodun gizli testte doğru olanı | 0 | 1 | 2 | 0 |
+| Bandit HIGH | 0 | 0 | 0 | 0 |
+| Açık testleri geçip rubrik eşiğinin altında | 0 / 110 | 0 / 97 | 2 / 157 | 1 / 73 |
+| Açık testleri geçen kodun reddi (yargıç kararı) | 15 | 21 (P'de karar puanda) | 73 | 27 |
+| … gerekçesi statik ölçüt adlandıran | 6 | 5 | 0 | 0 |
+| … bunlardan gizli testte doğru | 2 (aynı problem, `arc193_a`) | 1 | – | – |
+| Statik ölçüt adlandıran geri bildirim | %48,8 | %44,6 | %47,7 | %48,7 |
+
+- Durdurmaların 44'ünün 35'i zor, 9'u orta problemde; kolay problemde durdurma yok.
+- Açık testleri geçen ilk denemelerde (Qwen koşuları, n = 163) statik ölçütler zorluk düzeyi
+  içinde doğru/yanlış kodu ayırmıyor: AUC (doğru > yanlış) CC 0,48 (orta) / 0,66 (zor), MI 0,44 / 0,49,
+  Halstead 0,39 / 0,67. Toplamdaki ilişki (CC 0,30) zorluk karışımından kaynaklanıyor. (Tek seferlik
+  betikle hesaplandı, araçta yok.)
+- Y'de yargıcın gizli testte doğru kodu reddettiği 4 durumun 4'ünde de döngü sonunda doğru kod teslim
+  edildi (yanlış ret yalnızca ek üretime mal oldu). C'de 18 yanlış ret 12 problemde, 3'ünde son kod
+  yanlış. (Tek seferlik betikle hesaplandı.)
+- Yorum: statik analiz doğruluğu artırmadı (eşik bağlayıcı değil, kapı bir doğru kodu durdurdu,
+  Bandit HIGH yok). Güçlü yargıç statik bulguyu karar gerekçesi yapmadı (0/73), zayıf yargıç yaptı
+  (6/15) — yargıç istemindeki "statik bulgular kanıttır, tek başına ret gerekçesi değildir" kuralı
+  güçlü yargıçta işliyor. Doğruluğa katkı bileşen çıkarma (V1) ile tezde ölçülecek.
+
+## 13. Literatürle karşılaştırma: kaynak sayılar (2026-11-01)
+
+Bildirinin "Literatürdeki Yöntemlerle Karşılaştırma" çizelgesindeki literatür satırları; hepsi birincil
+kaynaktan okundu. Δ = son − taban (yüzde puan); Δ↑/Δ↓ ilk denemeye göre düzeltilen/bozulan problem
+oranı (CTRL'nin tanımı; bizim değerler `\a<Y|P>Up/Down`, `\e<TAG>Up/Down`).
+
+| Kaynak | Ayar | Satır | Taban → son | Δ | Δ↑/Δ↓ |
+|---|---|---|---|---|---|
+| LiveCodeBench (Jain vd., ICLR 2025; arXiv 2403.07974v2, Ek D.2 Çizelge 3 ve 4) | Öz-onarım: tüm testlerde (gizli dahil) başarısız programa başarısız test + hata gösterilir, 1 tur; taban 10 örnek, T 0,2, top-p 0,95 (`lcb_runner/prompts/self_repair.py`, `benchmarks/code_generation.py`) | GPT-4o-2024-05-13 | 41,9 → 49,1 | +7,2 | –/0 (yapı gereği) |
+| | | LLama3-8b-Ins | 14,2 → 17,7 | +3,5 | –/0 |
+| | | 28 modelin tümü | | −0,1 … +7,7 (ort. +3,3) | |
+| CTRL (Xie vd., ICML 2025; arXiv 2502.03492, Çizelge 3) | LCB 08–11/2024, eleştiri kod çalıştırılmadan, 5 tur | Qwen2.5-Coder-32B + kendisi | 30,54 → 29,64 | −0,9 | 2,14/3,04 |
+| | | + GPT-4o | → 32,86 | +2,3 | 4,82/2,50 |
+| | | + CTRL | → 33,39 | +2,9 | 3,75/0,89 |
+| | | tüm LCB satırları (2 üretici, 1 ve 5 tur) | | −0,9 … +3,2 | Δ↓ 0,2 … 3,0 |
+| Chen vd., ACL 2025 (Revisit Self-Debugging, DOI 10.18653/v1/2025.acl-long.881) | LCB 450 problem (09/2023–09/2024), açgözlü; kendi ürettiği testler, 2 tur, etiket geri bildirimi | GPT-4o | 46,0 → 49,1 | +3,1 | – |
+| | | Claude-3.5-Sonnet | 55,8 → 55,8 | 0,0 | – |
+| | | 4 model × 2 geri bildirim × 2 tur | | −6,5 … +3,3 | – |
+| Bu çalışma | LCB 01–04/2025, açık testler + statik analiz + yargıç, ≤ 5 üretim | §2, §11 | | +2,5 / +5,9 / +15,9 / +16,8 | 3,3/0,0; 3,3/0,0; 18,0/0,7; 15,3/0,7 |
+
+- Literatür aralığı −6,5 … +7,7. Qwen yargıçla kazanç bu aralıkta, gpt-oss yargıçla en yüksek değerin
+  iki katının üzerinde. LCB öz-onarımı kâhinli (gizli testler hangi programın onarılacağını seçer ve
+  başarısız test gösterilir); döngümüz gizli testleri görmez.
+- Olausson vd. (ICLR 2024): "using a stronger model to artificially boost the quality of the feedback,
+  we observe substantially larger performance gains" — gpt-oss bulgusuyla uyumlu.
+
+## 14. Resmî değerlendiriciyle karşılaştırma (2026-11-01)
+
+Bildirinin bütün sayıları yerel değerlendiriciyle (`sandbox/lcb_eval.py`, `LCB_EVALUATOR=local`, test
+başına 10 s) notlandı. Aynı kayıtlı programlar LiveCodeBench'in resmî aracıyla (`lcb_runner`, commit
+`28fef95`, test başına 6 s, `check_correctness`) yeniden notlandı: `benchmark/official_regrade.py`
+(komut: `docs/analysis.md` §12). Ücretli çağrı yok.
+
+- **Kapsam:** 3227 program = 1500 TÖ örneği (DeepSeek-V3 ve Llama-3.1-8B, 150 × 5) + ana deney (Y, P)
+  ve ek koşuların (C, D) 16 parçasındaki 1727 deneme (STOP_HIGH denemeleri hiç notlanmadığı için yok).
+- **Toplu koşu (`--workers 6`):** 3215/3227 uyum (%99,6). Yalnızca resmî aracın geçirdiği program yok;
+  12 programı yalnızca yerel değerlendirici geçirdi.
+
+| Grup | Program | Uyum | Yalnız yerel geçti |
+|---|---|---|---|
+| TÖ DeepSeek-V3 (`run_20261002_091834.regraded`) | 750 | 750 | 0 |
+| TÖ Llama-3.1-8B (`run_20261003_093410`) | 750 | 747 | 3 |
+| Y, Qwen2.5-72B (100638–44) | 376 | 376 | 0 |
+| P, Qwen2.5-72B (100646–52) | 346 | 344 | 2 |
+| C, DeepSeek-V3 + gpt-oss-120b (093242–48) | 404 | 401 | 3 |
+| D, Llama-3.1-8B + gpt-oss-120b (100935–41) | 601 | 597 | 4 |
+
+12 uyuşmazlığın nedenleri (her biri tek tek incelendi):
+
+- **7 program, resmî aracın çalıştırma biçimi (hepsi Llama-3.1-8B kodu).** 6'sı
+  `from sys import stdin, stdout` ile `stdout.write` kullanıyor; lcb_runner çıktıyı `sys.stdout`'u
+  değiştirerek yakaladığından önceden alınmış `stdout` nesnesine yazılan doğru çıktı boş sayılıyor
+  (-2). 1'i stdin problemi için `class Solution` yazmış; lcb_runner bu adı görünce kodu LeetCode türü
+  sanıyor (-4). Mantığa dokunmadan yalnızca `sys.stdout` erişimi / sınıf adı değiştirilince 7'si de
+  resmî araçta bütün testleri (42–43) geçiyor.
+- **4 program, toplu koşudaki makine yükü.** `run_20261002_100648/abc397_f/1` (P) ve
+  `run_20261003_093248/3692/2–4` (C) toplu koşuda zaman aşımına (-3) düştü; tek başına, aynı 6 s
+  sınırıyla çalıştırılınca resmî araçta bütün testleri geçiyor.
+- **1 program, resmî kurala göre gerçek başarısızlık.** `run_20261002_100646/3714/1` (P, teslim edilen
+  kod) faktöriyel tablolarını ilk testteki n boyutunda `self` üzerinde saklıyor. lcb_runner bütün
+  testleri tek bir `Solution` nesnesiyle çağırdığından daha büyük n'li testte `IndexError` (-4); yerel
+  değerlendirici her testi ayrı süreçte yeni nesneyle çalıştırdığı için geçiyor.
+
+Yük kaynaklı 4 zaman aşımı düzeltildiğinde uyum 3219/3227 (%99,75).
+
+**Bildirideki sayılara etkisi** (teslim edilen kod; yük kaynaklı zaman aşımları geçti sayılarak):
+
+| Sonuç | Yerel | Resmî araç | Neden |
+|---|---|---|---|
+| TÖ DeepSeek-V3 | %34,1 | %34,1 | — |
+| İ_Y^Q | %36,7 (+2,5; p 0,175) | %36,7 | — |
+| İ_P | %40,0 (+5,9; GA 1,3–10,7; p 0,015) | %39,3 (+5,2; GA 0,9–9,7; p 0,026) | 3714 (nesne yeniden kullanımı) |
+| İ_Y^G (C) | %50,0 | %50,0 | — |
+| TÖ Llama-3.1-8B | %13,2 | %12,8 | 3 örnek, çıktı yakalama / sınıf adı |
+| İ_Y^G Llama (D) | %30,0 (+16,8) | %28,0 (+15,2; p < 0,001) | 3 teslim, çıktı yakalama |
+
+- Ana deneyde yalnızca İ_P değişiyor (−0,7 yüzde puan) ve artış anlamlı kalıyor. Llama'daki fark,
+  çıktısı doğru olan programların resmî araçta yakalanamamasından geliyor.
+- Dosyalar: `outputs/openrouter/official_regrade/official.jsonl` (toplu koşunun ham sonuçları; 4 zaman
+  aşımı satırı olduğu gibi), `summary.json`, `run.log` (ilk koşu), `run2.log` (düzeltmeden sonra kalan
+  1126 program).

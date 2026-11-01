@@ -164,6 +164,7 @@ def test_baseline_metrics_and_budget_match():
     v0 = baseline_metrics(base, ["q1", "q2"], n=2)
     assert v0["all"]["pass@1"] == 0.5 and v0["all"]["pass@2"] == 1.0
     assert v0["all"]["filt@2"] == 0.5   # q1 picks sample 1 (correct), q2 picks sample 0 (wrong)
+    assert v0["all"]["per_sample"] == [0.0, 1.0]   # each single sample's pass@1
     bm = budget_matched({"all": {"mean_generations": 1.5, "v3": 1.0}}, v0, n=2)
     assert bm["filt@1"] == 0.0 and bm["filt@2"] == 0.5 and bm["pass@2"] == 1.0
 
@@ -230,6 +231,39 @@ def test_compare_rows_counts_discordant_pairs():
 
 
 
+def test_static_evidence_counts_gate_stops_and_static_reasons():
+    from benchmark.openrouter_results import static_evidence
+    def it(status="PASS", sev="OK", cc=5, issues=(), pr=1.0, score=90, verdict="ACCEPT",
+           reason="", fb="", hidden=1.0, diff="medium"):
+        return {"status": status, "difficulty": diff, "_hidden": hidden,
+                "node1": {"severity": sev, "cc": cc, "issues": list(issues), "bandit_high": False},
+                "node2": {"pass_rate": pr},
+                "node3": {"total_score": score, "verdict": verdict, "verdict_reason": reason,
+                          "improved_prompt": fb},
+                "training": {"generated_code": "x", "all_tests": {"input": ["1"]}}}
+    probs = {
+        "a": [it(status="STOP_HIGH", sev="HIGH", cc=25, diff="hard")],
+        "b": [it(status="STOP_HIGH", sev="HIGH", issues=["Forbidden import: `numpy` — not in whitelist."])],
+        "c": [it(verdict="REJECT", reason="Cyclomatic Complexity (15) is high", fb="Lower the CC.",
+                 hidden=1.0, status="LOOP"),
+              it(verdict="REJECT", reason="Fails n = 10^5: O(n^2) is too slow", fb="Use a prefix sum.",
+                 hidden=0.0, status="LOOP"),
+              it(pr=0.5, verdict="REJECT", reason="Wrong answer on example 2", score=50, status="LOOP"),
+              it(score=65)],                      # public-passing, rubric below 70 (medium)
+    }
+    s = static_evidence(probs, stopped_pass=lambda x: 1.0 if x["node1"]["cc"] > 20 else 0.0)
+    assert s["attempts"] == 6 and s["severity"] == {"HIGH": 2, "OK": 4}
+    assert s["stops"] == 2 and s["stops_by_reason"] == {"cc": 1, "import": 1}
+    assert s["stops_by_difficulty"] == {"hard": 1, "medium": 1} and s["stops_hidden_correct"] == 1
+    assert s["public_passing"] == 3 and s["public_below_threshold"] == 1
+    assert s["public_rejected"] == 2 and s["public_rejected_static"] == 1   # time complexity is not static
+    assert s["public_rejected_static_hidden_correct"] == 1
+    assert s["feedback"] == 2 and s["feedback_static"] == 1
+    assert static_evidence(probs)["stops_hidden_correct"] is None
+    # stripped public logs: unknown, not zero
+    assert static_evidence(probs, stopped_pass=lambda x: None)["stops_hidden_correct"] is None
+
+
 def test_write_latex_macros_and_table(tmp_path):
     from benchmark.openrouter_results import write_latex
     pr = lambda: {k: {"n_problems": 2, "pass@1": 0.25, "pass@1_ci": [0.1, 0.5], "pass@2": 0.5,
@@ -251,6 +285,20 @@ def test_write_latex_macros_and_table(tmp_path):
     assert "\\newcommand{\\aVo}{25{,}0}" in mac and "\\newcommand{\\aVoEn}{25.0}" in mac
     assert "\\newcommand{\\aYW}{$=$~0{,}200}" in mac
     assert "\\newcommand{\\aPGainEn}{5.0}" in mac      # gain in points, decimal point (Abstract)
+    assert "\\newcommand{\\aYUp}{50{,}0}" in mac and "\\newcommand{\\aYDown}{0{,}0}" in mac   # b/n, c/n
+    assert "aVoMin" not in mac and "aStops" not in mac   # only when per-sample / static data exist
+    rep["V0"]["all"]["per_sample"] = [0.2, 0.3]
+    st = {"stops": 2, "stops_by_reason": {"cc": 1, "import": 1}, "stops_hidden_correct": 1,
+          "public_rejected_static": 3, "public_rejected_static_hidden_correct": 1,
+          "feedback": 4, "feedback_static": 2}
+    rep["static"] = {"Y": st, "P": st}
+    write_latex(rep, str(tmp_path))
+    mac = (tmp_path / "veri" / "ana_sonuclar.tex").read_text()
+    assert "\\newcommand{\\aVoMin}{20{,}0}" in mac and "\\newcommand{\\aVoMax}{30{,}0}" in mac
+    assert "\\newcommand{\\aStops}{4}" in mac and "\\newcommand{\\aStopsCC}{2}" in mac
+    assert "\\newcommand{\\aStopsOk}{2}" in mac and "\\newcommand{\\aYStatRej}{3}" in mac
+    assert "\\newcommand{\\aYStatFb}{50{,}0}" in mac
+    del rep["static"], rep["V0"]["all"]["per_sample"]
     tab = (tmp_path / "cizelgeler" / "cizelge-ana.tex").read_text()
     # V0, filt@2 (budget-matched), V3_Y, V3_P; the row's best value in bold
     assert "\\textbf{Toplam} & 2 & 25{,}0 & \\textbf{50{,}0} & 30{,}0 & 40{,}0" in tab
@@ -275,6 +323,7 @@ def test_write_latex_macros_and_table(tmp_path):
     write_latex(rep, str(tmp_path), [("Gen", "Judge", "G", er)])
     mac = (tmp_path / "veri" / "ana_sonuclar.tex").read_text()
     assert "\\newcommand{\\eGY}{45{,}0}" in mac and "\\newcommand{\\eGGainEn}{5.0}" in mac and "\\newcommand{\\eGW}{$<$~0{,}001}" in mac
+    assert "\\newcommand{\\eGDown}{50{,}0}" in mac   # c/n: 1 broken of n = 2
     assert "\\newcommand{\\aVo}{50{,}0}" in mac          # main macros still there (pass@1 set to 0.5 above)
     yt = (tmp_path / "cizelgeler" / "cizelge-yargic.tex").read_text()
     assert "Gen & Judge & 50{,}0 & \\textbf{45{,}0} & $<$0{,}001 & 7/1 & 60{,}0 & 0{,}50 \\\\" in yt

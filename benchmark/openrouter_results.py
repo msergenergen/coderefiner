@@ -19,6 +19,12 @@ Reported
   Y vs P: exact McNemar on delivered code
   Judge: rejections of public-passing code and whether hidden tests agree;
          code fragments in judge feedback (solution-leak check)
+  Node 1: severity of every attempt; Severity-Gate stops by reason and whether
+         the stopped code would pass the hidden tests; rubric threshold below
+         which public-passing code fell; judge REJECTs and feedback that name a
+         static metric (keyword scan)
+  Noise floor: pass@1 of each single V0 sample; Δ↑/Δ↓ (fixed/broken vs. the
+         first attempt, in % of problems) for the literature table
   Cost: $ per phase and per solved problem (from the ledger)
 
 Usage
@@ -32,15 +38,19 @@ import math
 import os
 import random
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from scipy.stats import wilcoxon
 
 from benchmark.paper_results import (DIFFS, analyse, hidden_evaluate, lcb_meta,
-                                     load_problems, mcnemar_p, num, pval_rel, wilson)
+                                     load_problems, mcnemar_p, num, pval_rel, strict, wilson)
 from benchmark.paper_results import pct as tr_pct
 from benchmark.sample_baseline import pass_at_k
 from config.pipeline import settings
+from config.thresholds import thresholds
+
+# Judge text that names a Node-1 tool or metric (keyword scan; time complexity is not static).
+_STATIC = re.compile(r"cyclomatic|maintainab|halstead|bandit|mypy|ruff|static analy|\bCC\b|\bMI\b", re.I)
 
 # Inline mentions of the answer format ("wrap code in ```python ... ```")
 # are instructions, not code.
@@ -97,6 +107,8 @@ def baseline_metrics(base: dict, qids: list, n: int) -> dict:
                 filt.append(first["hidden"] >= 1.0)
             m[f"filt@{k}"] = sum(filt) / len(sel)
         m["pass@1_ci"] = bootstrap_ci([c / n for c in cs])
+        # pass@1 of each single sample: the spread of a one-sample run (noise floor)
+        m["per_sample"] = [sum(base[q][s]["hidden"] >= 1.0 for q in sel) / len(sel) for s in range(n)]
         out[key] = m
     return out
 
@@ -143,6 +155,66 @@ def judge_metrics(res: dict, problems: dict) -> dict:
         "accepted_precision": pr["rub_prec"], "verdict_from_judge": pr["verdict_judge"],
         "judge_llm_error": pr["judge_err"], "json_error": pr["json_err"],
         "feedback_with_code": len(leaks), "feedback_total": len(judged),
+    }
+
+
+def stop_reason(it: dict) -> str:
+    n1 = it["node1"]
+    if n1.get("cc", 0) > thresholds.node1.cc_hard_limit:
+        return "cc"
+    if any("Forbidden import" in s for s in n1.get("issues", [])):
+        return "import"
+    return "bandit" if n1.get("bandit_high") else "other"
+
+
+def stopped_hidden(meta: dict, timeout: int):
+    """Hidden pass rate of a STOP_HIGH attempt's code. The delivered result of
+    such a problem stays a failure; this only says what the gate cost."""
+    from sandbox.lcb_eval import _fallback_evaluate
+
+    def run(it):
+        code = it["training"].get("generated_code") or ""
+        if "all_tests" not in it["training"]:
+            return None   # public log archive: tests stripped (scripts/export_release_logs.py)
+        row = {"all_tests": it["training"]["all_tests"],
+               "starter_code": meta.get(it["question_id"], ("", ""))[1]}
+        if not code.strip() or not row["all_tests"].get("input"):
+            return 0.0
+        return _fallback_evaluate(code, row, timeout=timeout, stop_on_fail=True)["pass_rate"]
+    return run
+
+
+def static_evidence(problems: dict, stopped_pass=None) -> dict:
+    """What Node 1 did in one design's runs: severity of every attempt, Severity-Gate
+    stops by reason and difficulty (and, given stopped_pass(it) -> hidden pass rate,
+    how many stopped codes were correct; None without stopped_pass or tests),
+    public-passing attempts under the rubric
+    threshold, judge REJECTs of public-passing code whose reason names a static
+    metric, and judge feedback that names one."""
+    its = [it for iters in problems.values() for it in iters]
+    stops = [it for it in its if it["status"] == "STOP_HIGH"]
+    judged = [it for it in its if it["status"] != "STOP_HIGH"]
+    pub = [it for it in judged if it["node2"].get("pass_rate", 0) == 1.0]
+    rej = [it for it in pub if (it["node3"].get("verdict") or "").upper() == "REJECT"]
+    rej_static = [it for it in rej if _STATIC.search(it["node3"].get("verdict_reason") or "")]
+    fb = [it["node3"]["improved_prompt"] for it in judged if (it["node3"].get("improved_prompt") or "").strip()]
+    count = lambda xs: dict(sorted(Counter(xs).items()))
+    passed = [stopped_pass(it) for it in stops] if stopped_pass else [None]
+    return {
+        "attempts": len(its),
+        "severity": count([it["node1"]["severity"] for it in its]),
+        "stops": len(stops),
+        "stops_by_reason": count([stop_reason(it) for it in stops]),
+        "stops_by_difficulty": count([it["difficulty"] for it in stops]),
+        "stops_hidden_correct": (None if None in passed else sum(p == 1.0 for p in passed)),
+        "public_passing": len(pub),
+        "public_below_threshold": sum(it["node3"].get("total_score", 0)
+                                      < thresholds.node3.for_difficulty(it["difficulty"]) for it in pub),
+        "public_rejected": len(rej),
+        "public_rejected_static": len(rej_static),
+        "public_rejected_static_hidden_correct": sum(strict(it) for it in rej_static),
+        "feedback": len(fb),
+        "feedback_static": sum(bool(_STATIC.search(t)) for t in fb),
     }
 
 
@@ -206,7 +278,23 @@ def write_latex(rep: dict, out_dir: str, extras: list = ()) -> None:
                   f"a{d}Mp": pval_rel(a["iter1_vs_final_mcnemar"]["p"]),
                   f"a{d}Gen": num(a["mean_generations"], 2),
                   f"a{d}Prec": tr_pct(jd[d]["accepted_precision"]),
-                  f"a{d}Cost": num(rep["cost"][d]["usd"], 2)})
+                  f"a{d}Cost": num(rep["cost"][d]["usd"], 2),
+                  # Δ↑/Δ↓ (CTRL, Xie et al. 2025): % of problems fixed / broken vs. the first attempt
+                  f"a{d}Up": tr_pct(a["iter1_vs_final_mcnemar"]["b"] / rep["n"]),
+                  f"a{d}Down": tr_pct(a["iter1_vs_final_mcnemar"]["c"] / rep["n"])})
+    if "per_sample" in v0["all"]:
+        m.update({"aVoMin": tr_pct(min(v0["all"]["per_sample"])),
+                  "aVoMax": tr_pct(max(v0["all"]["per_sample"]))})
+    if "static" in rep:
+        sy, sp = rep["static"]["Y"], rep["static"]["P"]
+        m.update({"aStops": sy["stops"] + sp["stops"],
+                  "aStopsCC": sy["stops_by_reason"].get("cc", 0) + sp["stops_by_reason"].get("cc", 0),
+                  "aStopsOk": ("?" if None in (sy["stops_hidden_correct"], sp["stops_hidden_correct"])
+                               else sy["stops_hidden_correct"] + sp["stops_hidden_correct"]),
+                  "aYStatRej": sy["public_rejected_static"],
+                  "aYStatRejOk": sy["public_rejected_static_hidden_correct"]})
+        for d, s in (("Y", sy), ("P", sp)):
+            m[f"a{d}StatFb"] = tr_pct(s["feedback_static"] / s["feedback"]) if s["feedback"] else "0{,}0"
     m.update({"aFiltTwo": tr_pct(rep["V0"]["all"]["filt@2"]), "aFiltThree": tr_pct(rep["V0"]["all"]["filt@3"]),
               "aPassTwo": tr_pct(rep["V0"]["all"]["pass@2"]), "aPassThree": tr_pct(rep["V0"]["all"]["pass@3"]),
               "aYPub": jd["Y"]["public_passing"], "aYRej": jd["Y"]["rejected"],
@@ -271,7 +359,14 @@ def extra_macros(er: dict, tag: str) -> dict:
            "FiltTwo": tr_pct(v0["filt@2"]), "FiltThree": tr_pct(v0["filt@3"]),
            "PassFive": tr_pct(v0["pass@5"]),
            "YEn": f"{100 * a['v3']:.1f}", "VoEn": f"{100 * v0['pass@1']:.1f}",
-           "GainEn": f"{100 * a['delta_vs_v0']:.1f}"}
+           "GainEn": f"{100 * a['delta_vs_v0']:.1f}",
+           "Up": tr_pct(mc["b"] / er["n"]), "Down": tr_pct(mc["c"] / er["n"])}
+    if "static" in er:
+        s = er["static"]["Y"]
+        out.update({"Stops": s["stops"],
+                    "StopsOk": "?" if s["stops_hidden_correct"] is None else s["stops_hidden_correct"],
+                    "StatRej": s["public_rejected_static"],
+                    "StatFb": tr_pct(s["feedback_static"] / s["feedback"]) if s["feedback"] else "0{,}0"})
     for d in ("easy", "medium", "hard"):
         key = {"easy": "Kolay", "medium": "Orta", "hard": "Zor"}[d]
         out[f"Vo{key}"] = tr_pct(er["V0"][d]["pass@1"])
@@ -458,6 +553,17 @@ def write_report(rep: dict, path: str) -> None:
         L.append(f"\n**{name}, karşılaştırılan analize göre** (n = {c['n']}): {pct(c['this'])} vs "
                  f"{pct(c['other'])}; yalnız bu koşuda doğru / yalnız ötekinde doğru = "
                  f"{c['b']}/{c['c']}, McNemar p = {c['p']:.3g}")
+    if "per_sample" in v0["all"]:
+        L.append(f"\n**V0 tek örnekler:** pass@1 = {', '.join(pct(x) for x in v0['all']['per_sample'])}")
+    for d, s in rep.get("static", {}).items():
+        L.append(f"\n**Düğüm 1 ({d}):** {s['attempts']} deneme, önem {s['severity']}; "
+                 f"durdurma {s['stops']} {s['stops_by_reason']} {s['stops_by_difficulty']}, "
+                 f"gizli testte doğru olan durdurulmuş kod {s['stops_hidden_correct']}; "
+                 f"açık testleri geçen {s['public_passing']} denemeden rubrik eşiğinin altında "
+                 f"{s['public_below_threshold']}; bunların reddi {s['public_rejected']}, gerekçesi statik "
+                 f"ölçüt adlandıran {s['public_rejected_static']} (gizli testte doğru "
+                 f"{s['public_rejected_static_hidden_correct']}); statik ölçüt adlandıran geri bildirim "
+                 f"{s['feedback_static']}/{s['feedback']}.")
     L.append(f"\n**Maliyet:** {json.dumps(rep['cost'])}")
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
@@ -506,10 +612,11 @@ def main():
         raise SystemExit("No problems common to the baseline and the given runs.")
 
     rep = {"n": len(qids), "V0": baseline_metrics(base, qids, args.n),
-           "budget": {}, "judge": {}}
+           "budget": {}, "judge": {}, "static": {}}
     analysed = {}
     for name, probs in designs.items():
         probs = {q: probs[q] for q in qids}
+        rep["static"][name] = static_evidence(probs, stopped_hidden(meta, settings.hidden_timeout_sec))
         res = analyse(probs, meta)
         analysed[name] = res
         rep[name] = design_metrics(res, base, args.n)

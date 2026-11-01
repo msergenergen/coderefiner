@@ -41,7 +41,7 @@ done
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 WORKSPACE=/workspace
-PROJECT=$WORKSPACE/llm-code-refinement
+PROJECT=$WORKSPACE/coderefiner
 LLAMACPP=$WORKSPACE/llama.cpp
 MODELS=$WORKSPACE/models
 
@@ -113,7 +113,7 @@ if [ -d "$PROJECT/.git" ]; then
     ok "Repo zaten mevcut — git pull"
     cd "$PROJECT" && git pull --ff-only
 else
-    git clone git@github.com:msergenergen/llm-code-refinement.git
+    git clone git@github.com:msergenergen/coderefiner.git
 fi
 
 cd "$PROJECT"

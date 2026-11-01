@@ -524,6 +524,9 @@ Cost is summed from the ledger by run id; baseline and pipeline entries are told
 | judge | public-passing attempts, rejections and whether hidden tests agree, acceptance precision, share of verdicts from the judge, JSON/LLM errors |
 | feedback leaks | judge feedback containing solution code (fenced block with logic lines, or ≥ 2 logic lines outside fences; format instructions and empty skeletons excluded) |
 | cost | USD and calls per phase (baseline file stem / run ids in the ledger) |
+| V0 per sample (`V0.<diff>.per_sample`) | pass@1 of each single V0 sample — the spread a one-sample run can show (noise floor; paper: `\aVoMin`–`\aVoMax`) |
+| Δ↑/Δ↓ (macros `\a<Y|P>Up/Down`, `\e<TAG>Up/Down`) | fixed / broken problems vs. the run's own first attempt (McNemar b, c) in % of problems — the metric of CTRL (Xie et al., ICML 2025, Table 3) for the paper's literature table |
+| `static` (results.json, per design) | what Node 1 did: severity of every attempt; Severity-Gate stops by reason (`cc` = CC > `cc_hard_limit`, `import`, `bandit`) and difficulty; `stops_hidden_correct` = stopped codes re-run on all tests with `sandbox.lcb_eval._fallback_evaluate` (10 s, early stop; not cached; the delivered result of such a problem stays a failure); public-passing attempts under the rubric threshold (`thresholds.node3`); judge REJECTs of public-passing code whose `verdict_reason` names a static tool/metric and how many of those were hidden-correct; judge feedback naming one. "Names a static metric" is a keyword scan (`_STATIC`: cyclomatic, maintainab…, Halstead, Bandit, mypy, ruff, static analy…, CC, MI; time complexity is not static). Macros: `\aStops`, `\aStopsCC`, `\aStopsOk` (Y + P), `\aYStatRej`, `\aYStatRejOk`, `\a<Y|P>StatFb` (%), `\e<TAG>Stops/StopsOk/StatRej/StatFb`. Results: `docs/main-results.md` §12 |
 
 ```bash
 python -m benchmark.openrouter_results \
@@ -532,6 +535,10 @@ python -m benchmark.openrouter_results \
     [--results-root outputs/openrouter/results] [--ledger outputs/api_usage.jsonl] \
     [--out outputs/openrouter/report]
 ```
+
+The paper's analyses C and D (gpt-oss-120b judge, `docs/main-results.md` §11) are produced the same way
+with `--y-run-ids` only (C also `--compare outputs/openrouter/analysis_B_main/results.json`) and passed to the
+main command with `--extra`; the full commands are in `docs/main-results.md` §11.
 
 Writes `results.json` and a Turkish `report.md`. A dry run on the ELECO local runs (n = 1,
 first iteration as V0) reproduced the paper's paired numbers and found solution code in 7/97
@@ -585,3 +592,45 @@ Output: `outputs/openrouter/judge_replay/<name>.jsonl` (one row per attempt, res
 `\jQCaught`, `\jQPrec` (pipeline judge) and per candidate `\j<T>Prec`, `\j<T>Caught`, `\j<T>RejOk`,
 `\j<T>P` (`--latex-tags deepseek-v3=D gpt-oss-120b=G`, group `--latex-group B_main`).
 Results: `docs/main-results.md`.
+
+---
+
+## 12. Official-evaluator check — `benchmark/official_regrade.py` (2026-11-01)
+
+Every paper number was graded by the pinned local evaluator (`sandbox/lcb_eval.py`,
+`LCB_EVALUATOR=local`); the paper lists this as a limitation. This tool re-grades the same
+recorded programs with LiveCodeBench's own evaluator and reports how often the two agree.
+
+- **Official path.** Tests are built with `lcb_runner.benchmarks.code_generation.CodeGenerationProblem
+  .get_evaluation_sample()` (public + private tests, `fn_name` from the metadata) from the same cached
+  `livecodebench/code_generation_lite` dataset the pipeline loads; each program runs through
+  `lcb_runner.evaluation.compute_code_generation_metrics.check_correctness` (per-test timeout, default
+  6 s as in lcb_runner; first failure stops). Correct = every test result > 0 (`official_pass`).
+- **Local result.** Baseline samples: the JSONL's `hidden` field. Pipeline attempts: the
+  `hidden_eval_cache.json` entry `run_id/question_id/iter` (STOP_HIGH attempts were never graded).
+- **lcb_runner is not a dependency.** Pass a clone of https://github.com/LiveCodeBench/LiveCodeBench
+  with `--lcb-repo`; its heavy requirements (vLLM etc.) are not needed for grading.
+- **Output.** `<out>/official.jsonl` (one row per program, appended, so a stopped run resumes) and
+  `<out>/summary.json`: agreement overall and per group (`baseline:<file stem>`, `run:<run_id>`), both
+  pass / both fail / local only / official only, pass rates under each evaluator, and the list of
+  disagreements with lcb_runner's `error_code` (-2 wrong answer, -3 time limit exceeded, -4 runtime error).
+- **Runs are loaded one at a time.** `load_problems` keys by `question_id`, and the designs' runs solve
+  the same problems, so loading all run ids together kept one run per problem (first full run graded
+  only the D runs; fixed 2026-11-01, `test_collect_items_keeps_every_run_of_a_shared_problem`).
+- **Timing.** With `--workers 6` the machine is loaded; programs close to the 6 s limit can time out
+  in the batch and pass when re-run alone (four did, see the results).
+
+```bash
+git clone https://github.com/LiveCodeBench/LiveCodeBench ../LiveCodeBench-official
+R=outputs/openrouter/results/baseline_samples
+.venv/bin/python -m benchmark.official_regrade --lcb-repo ../LiveCodeBench-official \
+  --baseline $R/run_20261002_091834.regraded.jsonl $R/run_20261003_093410.jsonl \
+  --run-ids run_20261002_100638 run_20261002_100640 run_20261002_100642 run_20261002_100644 \
+            run_20261002_100646 run_20261002_100648 run_20261002_100650 run_20261002_100652 \
+            run_20261003_093242 run_20261003_093244 run_20261003_093246 run_20261003_093248 \
+            run_20261003_100935 run_20261003_100937 run_20261003_100939 run_20261003_100941 \
+  --out outputs/openrouter/official_regrade --workers 6
+```
+
+Clone used for the paper check: commit `28fef95` (2025-07-15). Results: `docs/main-results.md` §14.
+

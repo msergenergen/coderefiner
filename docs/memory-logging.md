@@ -920,3 +920,26 @@ iter1 improved_prompt: Boş listeyi kontrol et.
 event per iteration and, when the problem ends, trace scores (`status`, `iterations`,
 `public_pass_rate`, `rubric_total`, `judge_verdict`). No-op without Langfuse keys. Details:
 `docs/codegen-models.md` → "Langfuse tracing".
+
+
+## Release archive (public experiment logs, 2026-11-01)
+
+`scripts/export_release_logs.py` (stdlib only) packs the ELECO 2026 runs into
+`release/coderefiner-eleco2026-logs.zip` (git-ignored; about 6 MB, 2,551 files) for a GitHub
+release. It only reads `outputs/`. Contents, restricted to the run ids in `RUN_IDS_BY_SETTING`
+(V0 baselines, ablation A, main B, gpt-oss runs C and D — the table in `docs/main-results.md`):
+
+| In the archive | Source | Change |
+|---|---|---|
+| `openrouter/results/<date>/iterations/<qid>/M1_iter<N>_<run_id>.json` | iteration JSONs (§4) | `training.problem` and `training.all_tests` removed (LiveCodeBench content); everything else kept |
+| `openrouter/results/baseline_samples/*.jsonl` | `benchmark/sample_baseline.py` | none (code and pass rates only) |
+| `openrouter/results/hidden_eval_cache.json` | `paper_results.hidden_evaluate` cache | only keys of the included runs |
+| `openrouter/results/<date>/run_info_<run_id>.json` | §2 | none |
+| `openrouter/analysis_*/{results.json,report.md}`, `openrouter/judge_replay/` | analyses | none |
+| `openrouter/api_usage.jsonl` | API ledger | only lines of the included runs (no prompts, responses or keys) |
+| `DATA_README.md` | written by the script | field glossary, run table, how to re-join problems with `dataset.loader.load_lcb`, CC BY 4.0 |
+
+With the archive unzipped into `outputs/`, `benchmark/openrouter_results.py` reproduces every
+number from the cached hidden-test results; only the Severity-Gate check on stopped code needs the
+stripped tests and is then reported as unknown (`docs/analysis.md` §10).
+

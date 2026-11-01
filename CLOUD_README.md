@@ -25,7 +25,7 @@ değerlendirme yerelde kalır. Deney ayarları `config/openrouter.env` dosyasın
 1. **Kredi ve anahtar.** https://openrouter.ai → Credits ($5) → Keys → yeni anahtar (anahtara
    $5 kredi sınırı koymak önerilir). Anahtarı **sohbete yapıştırmayın**; yalnızca şu dosyaya:
    ```bash
-   cd ~/Desktop/llm-code-refinement
+   cd ~/Desktop/coderefiner
    open -e .env.openrouter        # OPENROUTER_API_KEY=<anahtar>
    ```
    Bu dosyadan yalnızca anahtar satırı okunur; dosya git tarafından yok sayılır.
@@ -73,7 +73,7 @@ uzatması açıktır; yeni protokol için `TREND_EXTENSION_ENABLED=false` yapın
 1. **Kodu GitHub'a gönderin.** Bulut makinesi kodu GitHub'dan çeker; yereldeki son değişiklikler
    henüz orada değil.
    ```bash
-   cd ~/Desktop/llm-code-refinement
+   cd ~/Desktop/coderefiner
    git status          # "ahead of origin" yazıyorsa:
    git push origin main
    ```
@@ -155,9 +155,9 @@ olmalı (Qwen3.5 mimarisi yeni sürümlerde destekleniyor). Model yüklenirken
 
 ```bash
 cd /workspace
-git clone https://github.com/msergenergen/llm-code-refinement.git
-#   (depo özelse)  git clone https://<GITHUB_KULLANICI>:<TOKEN>@github.com/msergenergen/llm-code-refinement.git
-cd llm-code-refinement
+git clone https://github.com/msergenergen/coderefiner.git
+#   (depo özelse)  git clone https://<GITHUB_KULLANICI>:<TOKEN>@github.com/msergenergen/coderefiner.git
+cd coderefiner
 git log --oneline -1                 # Mac'teki son commit ile aynı mı?
 
 # Python 3.11 (Mac'te kullanılan sürüm) — uv, Python'u kendisi indirir
@@ -220,7 +220,7 @@ kart seçin.
 ## 6. Modeli indirme (yereldeki dosyanın aynısı)
 
 ```bash
-source /workspace/llm-code-refinement/.venv/bin/activate
+source /workspace/coderefiner/.venv/bin/activate
 mkdir -p /workspace/models/qwen3.5-9b
 hf download unsloth/Qwen3.5-9B-GGUF \
     --include "Qwen3.5-9B-UD-Q4_K_XL.gguf" \
@@ -238,7 +238,7 @@ tekrar çalıştırın, kaldığı yerden devam eder.
 Ayrı bir tmux penceresinde (`Ctrl-b c`):
 
 ```bash
-cd /workspace/llm-code-refinement
+cd /workspace/coderefiner
 PARALLEL=16 CTX_PER_SLOT=40960 bash scripts/start_model.sh M1
 ```
 
@@ -258,7 +258,7 @@ olmalı.
 ## 8. Duman testi (2 problem, ~5–10 dk)
 
 ```bash
-cd /workspace/llm-code-refinement && source .venv/bin/activate
+cd /workspace/coderefiner && source .venv/bin/activate
 MAX_PROBLEMS=2 JUDGE_DECISION=verdict python main.py 2>&1 | tee outputs/smoke.log
 grep -c "Problem done" outputs/smoke.log            # 2 olmalı
 python - << 'EOF'
@@ -284,7 +284,7 @@ Beklenen: `verdict` alanı ACCEPT/REJECT, `verdict_source` çoğunlukla `judge`,
 Her tasarım 8 parçaya bölünür (toplam 16 süreç = `PARALLEL=16`):
 
 ```bash
-cd /workspace/llm-code-refinement && source .venv/bin/activate
+cd /workspace/coderefiner && source .venv/bin/activate
 mkdir -p outputs/logs
 for DESIGN in verdict rubric; do
   for i in $(seq 0 7); do
@@ -328,12 +328,12 @@ Bir parça çökerse yalnızca o parçayı yeniden başlatın; biten problemleri
 Mac'te (bulut makinesinde değil):
 
 ```bash
-cd ~/Desktop/llm-code-refinement
+cd ~/Desktop/coderefiner
 mkdir -p outputs/results/cloud
 rsync -avz -e "ssh -p <PORT>" \
-    root@<HOST>:/workspace/llm-code-refinement/outputs/results/ outputs/results/cloud/
+    root@<HOST>:/workspace/coderefiner/outputs/results/ outputs/results/cloud/
 rsync -avz -e "ssh -p <PORT>" \
-    root@<HOST>:/workspace/llm-code-refinement/outputs/logs/ outputs/results/cloud/logs/
+    root@<HOST>:/workspace/coderefiner/outputs/logs/ outputs/results/cloud/logs/
 
 # Hangi run_id hangi tasarıma ait?
 grep -h "run_id:" outputs/results/cloud/logs/verdict_shard*.log | awk '{print $NF}'

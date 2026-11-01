@@ -86,7 +86,9 @@ its feedback.
 
 ```
 project/
-├── CLAUDE.md / README.md / CLOUD_README.md (Turkish runbook: §A OpenRouter, §B Vast.ai)
+├── LICENSE                    ← MIT license (Copyright 2026 Mehmet Sergen Ergen)
+├── CITATION.cff               ← Citation metadata (software + conference paper)
+├── CLAUDE.md / README.md / CLOUD_README.md (English public README; Turkish runbook: §A, §B)
 ├── main.py                    ← pipeline entry (MAX_PROBLEMS → SKIP_QIDS → SHARD_* filters)
 ├── config/
 │   ├── pipeline.py            ← settings (all env vars), thresholds.py, models.py (registries)
@@ -102,15 +104,22 @@ project/
 │   ├── sample_baseline.py     ← V0, n samples/problem (main experiment)
 │   ├── openrouter_results.py  ← main-experiment analysis
 │   ├── judge_replay.py        ← offline re-judging of recorded attempts with another judge
+│   ├── official_regrade.py    ← re-grade recorded code with LCB's official lcb_runner, agreement with the local evaluator
 │   ├── paper_results.py       ← ELECO paper numbers/tables/figure (local runs)
 │   ├── evaluator.py           ← ablation runner (V1/V2/V3)
 │   ├── sample50_qids.txt      ← first 50 qids of the local sample
 │   └── legacy/                ← old V0–V3 JSON toolkit (not comparable; kept for reference)
-├── scripts/                   ← run_openrouter.sh, start_model.sh, local_setup.sh, cloud_setup.sh
-├── tests/                     ← 18 test files + conftest.py (pytest -q: 277 passed, 1 skipped)
+├── scripts/
+│   ├── run_openrouter.sh      ← API-based runner (smoke, baseline, pipeline)
+│   ├── start_model.sh         ← Local model server launcher
+│   ├── local_setup.sh         ← Local environment setup
+│   ├── cloud_setup.sh         ← Vast.ai cloud GPU setup
+│   └── export_release_logs.py ← public log archive release/…zip (strips LCB content; docs/memory-logging.md)
+├── tests/                     ← 20 test files + conftest.py (pytest -q: 293 passed, 1 skipped)
 ├── docs/                      ← see index below
 ├── judge_training/            ← future work: fine-tuned judge
-└── outputs/                   ← git-ignored; results/ (local), openrouter/ (main), api_usage.jsonl
+├── release/ (git-ignored)     ← coderefiner-eleco2026-logs.zip (built by export_release_logs.py)
+└── outputs/ (git-ignored)     ← results/ (local), openrouter/ (main), api_usage.jsonl
 ```
 
 ### Docs index
@@ -159,7 +168,7 @@ project/
 |---|---|
 | `memory/logger.py` | `docs/memory-logging.md` |
 | `benchmark/sample_baseline.py`, `benchmark/evaluator.py` | `docs/ablation.md` |
-| `benchmark/openrouter_results.py`, `benchmark/paper_results.py`, `benchmark/judge_replay.py` | `docs/analysis.md` |
+| `benchmark/openrouter_results.py`, `benchmark/paper_results.py`, `benchmark/judge_replay.py`, `benchmark/official_regrade.py` | `docs/analysis.md` |
 | `pipeline/graph.py`, `pipeline/gates.py`, `pipeline/state.py` | `docs/graph.md` |
 | `nodes/codegen.py`, `models/prompts.py`, `models/client.py`, `models/budget.py`, `models/tracing.py` | `docs/codegen-models.md` |
 | `nodes/static_analysis.py`, `metrics/` | `docs/node1.md` |
@@ -168,6 +177,7 @@ project/
 | `config/` (incl. `openrouter.env`) | `docs/config.md` |
 | `dataset/` | `docs/dataset.md` |
 | `scripts/run_openrouter.sh`, `scripts/*setup.sh` | `CLOUD_README.md`, `docs/setup.md` |
+| `scripts/export_release_logs.py` | `docs/memory-logging.md` (Release archive), `README.md` |
 | `tests/` | `docs/testing.md` |
 
 Do not ask for permission — update docs automatically as part of the same change.

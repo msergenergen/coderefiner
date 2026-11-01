@@ -2,7 +2,7 @@
 # local_setup.sh — Mac Mini M4 one-shot setup script
 #
 # Run from anywhere on the Mac:
-#   bash ~/Desktop/llm-code-refinement/scripts/local_setup.sh [--skip-model] [--skip-llamacpp]
+#   bash ~/Desktop/coderefiner/scripts/local_setup.sh [--skip-model] [--skip-llamacpp]
 #
 # Phases:
 #   1. Xcode Command Line Tools
@@ -36,7 +36,7 @@ for arg in "$@"; do
 done
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-PROJECT="$HOME/Desktop/llm-code-refinement"
+PROJECT="$HOME/Desktop/coderefiner"
 LLAMACPP="$HOME/llama.cpp"
 MODEL_DIR="$PROJECT/models/qwen3.5-9b"
 
@@ -136,7 +136,7 @@ if [ -d "$PROJECT/.git" ]; then
     cd "$PROJECT" && git pull --ff-only
 else
     cd "$HOME/Desktop"
-    git clone git@github.com:msergenergen/llm-code-refinement.git
+    git clone git@github.com:msergenergen/coderefiner.git
 fi
 
 cd "$PROJECT"

@@ -81,8 +81,8 @@ cp build/bin/llama-* .
 
 ```bash
 cd ~
-git clone https://github.com/<kullanici>/llm-code-refinement.git
-cd llm-code-refinement
+git clone https://github.com/msergenergen/coderefiner.git
+cd coderefiner
 
 # Python virtual environment
 python3.11 -m venv .venv
