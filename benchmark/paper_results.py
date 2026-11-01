@@ -14,7 +14,7 @@ the pipeline's own PASS decision (score >= threshold, public accuracy > 0).
 
 Usage:
     python -m benchmark.paper_results --run-ids run_A run_B run_C \
-        --out ~/Desktop/eleco2026-bildiri
+        --out ~/Desktop/workspace/eleco2026-bildiri
 """
 import argparse
 import concurrent.futures as cf

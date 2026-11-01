@@ -15,7 +15,7 @@ hidden tests. The judge-as-decider premise is central to the thesis: determinist
 evidence and a hallucination guard, never the decision itself.
 
 Developed for a **master's thesis**; an ELECO 2026 paper (Turkish, 5 pages) reports the
-OpenRouter main experiment and the gpt-oss-120b judge runs. Paper sources: `~/Desktop/eleco2026-bildiri/` (outside this repo).
+OpenRouter main experiment and the gpt-oss-120b judge runs. Paper sources: `~/Desktop/workspace/eleco2026-bildiri/` (outside this repo).
 
 ---
 

@@ -435,7 +435,7 @@ Produces every number, the results table and the budget curve used in the ELECO 
 iteration JSONs of one or more runs.
 
 ```bash
-python -m benchmark.paper_results --run-ids run_20260930_222527 --out ~/Desktop/eleco2026-bildiri
+python -m benchmark.paper_results --run-ids run_20260930_222527 --out ~/Desktop/workspace/eleco2026-bildiri
 ```
 
 **Multiple runs.** `--run-ids` accepts several runs; if a problem appears in more than one, the
@@ -455,7 +455,7 @@ but correct), `\rPubWrong`, mean judge points for hidden-correct vs. hidden-wron
 ```bash
 python -m benchmark.paper_results --run-ids run_20261001_102445 \
     --baseline-run-ids run_20260930_222527 run_20261001_070529 \
-    --qid-file benchmark/sample50_qids.txt --out ~/Desktop/eleco2026-bildiri
+    --qid-file benchmark/sample50_qids.txt --out ~/Desktop/workspace/eleco2026-bildiri
 ```
 
 **Protocol (leakage-free).** The refinement loop only ever sees the public example tests
@@ -584,7 +584,7 @@ scripts/run_openrouter.sh judge-replay openai/gpt-oss-120b deepinfra/bf16 gpt-os
     --run-ids <Y-A and Y-B run ids> --groups A_feedback_only=<ids,…> B_main=<ids,…> \
     --estimate-runs <Y-B run ids> [--workers 8] [--limit N]
 python -m benchmark.judge_replay --run-ids … --groups … --estimate-runs … --report \
-    [--latex ~/Desktop/eleco2026-bildiri]   # veri/yargic_tekrari.tex: \j… macros of group B_main
+    [--latex ~/Desktop/workspace/eleco2026-bildiri]   # veri/yargic_tekrari.tex: \j… macros of group B_main
 ```
 
 Output: `outputs/openrouter/judge_replay/<name>.jsonl` (one row per attempt, resumable) and

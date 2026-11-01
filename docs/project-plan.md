@@ -97,7 +97,7 @@ Tahmini maliyet: taban çizgisi ~1,6 $, tasarım başına ~1,5–2,5 $; sınır 
 
 ## Faz 6 — Yayın `[~]`
 
-- `[x]` ELECO 2026 bildirisi (Türkçe, 5 sayfa, 32 doğrulanmış kaynak): `~/Desktop/eleco2026-bildiri/`;
+- `[x]` ELECO 2026 bildirisi (Türkçe, 5 sayfa, 32 doğrulanmış kaynak): `~/Desktop/workspace/eleco2026-bildiri/`;
   ezber riski ve LCB'nin kesim sonrası önerisi §4.2 ve §6'da
 - `[ ]` Ana düzen sonuçlarının bildiriye/teze eklenip eklenmeyeceği — sonuçlar geldikten sonra karar
 - `[ ]` Tez metni

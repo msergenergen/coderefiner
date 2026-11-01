@@ -25,7 +25,7 @@ değerlendirme yerelde kalır. Deney ayarları `config/openrouter.env` dosyasın
 1. **Kredi ve anahtar.** https://openrouter.ai → Credits ($5) → Keys → yeni anahtar (anahtara
    $5 kredi sınırı koymak önerilir). Anahtarı **sohbete yapıştırmayın**; yalnızca şu dosyaya:
    ```bash
-   cd ~/Desktop/coderefiner
+   cd ~/Desktop/workspace/coderefiner
    open -e .env.openrouter        # OPENROUTER_API_KEY=<anahtar>
    ```
    Bu dosyadan yalnızca anahtar satırı okunur; dosya git tarafından yok sayılır.
@@ -73,7 +73,7 @@ uzatması açıktır; yeni protokol için `TREND_EXTENSION_ENABLED=false` yapın
 1. **Kodu GitHub'a gönderin.** Bulut makinesi kodu GitHub'dan çeker; yereldeki son değişiklikler
    henüz orada değil.
    ```bash
-   cd ~/Desktop/coderefiner
+   cd ~/Desktop/workspace/coderefiner
    git status          # "ahead of origin" yazıyorsa:
    git push origin main
    ```
@@ -328,7 +328,7 @@ Bir parça çökerse yalnızca o parçayı yeniden başlatın; biten problemleri
 Mac'te (bulut makinesinde değil):
 
 ```bash
-cd ~/Desktop/coderefiner
+cd ~/Desktop/workspace/coderefiner
 mkdir -p outputs/results/cloud
 rsync -avz -e "ssh -p <PORT>" \
     root@<HOST>:/workspace/coderefiner/outputs/results/ outputs/results/cloud/

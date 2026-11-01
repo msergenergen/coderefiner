@@ -10,7 +10,8 @@
 
 Ortak adımlar: Python ortamı (A5) her yol için gerekir. OpenRouter için ek kurulum yoktur:
 anahtar + `CLOUD_README.md` §A. Yerel yol: `Sistem araçları → llama.cpp → Proje → Model → Sunucu → Doğrulama`
-(A1–A9; tek komut: `bash scripts/local_setup.sh`).
+(A1–A9; tek komut: `bash scripts/local_setup.sh`). Betik repo içinden çalıştırılırsa bulunduğu
+kopyayı kullanır; repo dışından çalıştırılırsa projeyi `~/Desktop/workspace/coderefiner` altına klonlar.
 
 ---
 

@@ -215,7 +215,7 @@ B=outputs/openrouter/results/baseline_samples/run_20261002_091834.regraded.jsonl
   --y-run-ids run_20261002_100638 run_20261002_100640 run_20261002_100642 run_20261002_100644 \
   --p-run-ids run_20261002_100646 run_20261002_100648 run_20261002_100650 run_20261002_100652 \
   --out outputs/openrouter/analysis_B_main --compare outputs/openrouter/analysis_A_feedback_only/results.json \
-  --latex ~/Desktop/eleco2026-bildiri \
+  --latex ~/Desktop/workspace/eleco2026-bildiri \
   --extra DeepSeek-V3 gpt-oss-120b G outputs/openrouter/analysis_C_gptoss_judge/results.json \
   --extra Llama-3.1-8B gpt-oss-120b L outputs/openrouter/analysis_D_llama8b_gptoss/results.json
 ```

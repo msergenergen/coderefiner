@@ -1,8 +1,9 @@
 #!/bin/bash
 # local_setup.sh — Mac Mini M4 one-shot setup script
 #
-# Run from anywhere on the Mac:
-#   bash ~/Desktop/coderefiner/scripts/local_setup.sh [--skip-model] [--skip-llamacpp]
+# Run from the repo root (uses the checkout the script lives in):
+#   bash scripts/local_setup.sh [--skip-model] [--skip-llamacpp]
+# Run from outside a checkout to clone into ~/Desktop/workspace/coderefiner.
 #
 # Phases:
 #   1. Xcode Command Line Tools
@@ -36,7 +37,12 @@ for arg in "$@"; do
 done
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-PROJECT="$HOME/Desktop/coderefiner"
+SCRIPT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$SCRIPT_ROOT/scripts/local_setup.sh" ]; then
+    PROJECT="$SCRIPT_ROOT"
+else
+    PROJECT="$HOME/Desktop/workspace/coderefiner"
+fi
 LLAMACPP="$HOME/llama.cpp"
 MODEL_DIR="$PROJECT/models/qwen3.5-9b"
 
@@ -135,8 +141,7 @@ if [ -d "$PROJECT/.git" ]; then
     ok "Repo zaten mevcut — git pull"
     cd "$PROJECT" && git pull --ff-only
 else
-    cd "$HOME/Desktop"
-    git clone git@github.com:msergenergen/coderefiner.git
+    git clone git@github.com:msergenergen/coderefiner.git "$PROJECT"
 fi
 
 cd "$PROJECT"
