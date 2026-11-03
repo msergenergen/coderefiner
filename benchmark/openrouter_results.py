@@ -405,10 +405,11 @@ def main_table(rep: dict) -> str:
     baseline (V0); İ_Y^Q / İ_P = iyileştirme, the delivered code under the judge's
     verdict / the score threshold (V3), superscript = judge (Q: Qwen2.5-72B; extras
     use their --extra TAG, e.g. G: gpt-oss-120b); filt@2 is the
-    budget-matched resampling baseline."""
+    budget-matched resampling baseline. The problem count $n$ is a math symbol, so it is
+    italic and not bold (ELECO 2026 template, Ek A)."""
     v0, Y, P = rep["V0"], rep["Y"], rep["P"]
     L = [AUTOGEN, "\\begin{tabular}{|l|c|c|c|c|c|}", "\\hline",
-         "\\textbf{Zorluk} & \\textbf{n} & \\textbf{TÖ} & \\textbf{filt@2} & "
+         "\\textbf{Zorluk} & $n$ & \\textbf{TÖ} & \\textbf{filt@2} & "
          "\\textbf{İ$_Y^{Q}$} & \\textbf{İ$_P$} \\\\ \\hline"]
     for name, k in [("Kolay", "easy"), ("Orta", "medium"), ("Zor", "hard"), ("\\textbf{Toplam}", "all")]:
         vals = [v0[k]["pass@1"], v0[k]["filt@2"], Y[k]["v3"], P[k]["v3"]]
