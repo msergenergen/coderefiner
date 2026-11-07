@@ -634,3 +634,48 @@ R=outputs/openrouter/results/baseline_samples
 
 Clone used for the paper check: commit `28fef95` (2025-07-15). Results: `docs/main-results.md` §14.
 
+
+## 13. Error analysis — `benchmark/error_analysis.py` (2026-11-07)
+
+Why the delivered code fails, which failures the loop repairs, and where the judge's decisions
+go wrong. No model calls and no re-execution: everything is read from files already on disk.
+
+- **Correctness** comes, as everywhere else, from the local evaluator: `hidden_eval_cache.json`
+  for pipeline attempts and the baseline JSONL's `hidden` field for TÖ samples.
+- **Failure category** is lcb_runner's `error_code` for the first failing hidden test. It is taken
+  from `official_regrade/official.jsonl` (§12): -2 wrong answer, -3 time limit exceeded (6 s per
+  test), -4 runtime error. Every program the local evaluator fails also fails there
+  (`official_only = 0`), so each local failure has a code. Two extra categories:
+  - code that `ast.parse` rejects or empty code is counted as `unparseable` (lcb_runner reports a
+    syntax error as -4);
+  - STOP_HIGH attempts, which were never graded, are counted as `stopped`.
+- **Designs are loaded per design** (`--design NAME RUN_ID...`; shards of one design together).
+  `load_problems` keeps one run per problem, so designs must never be loaded together.
+
+Reported in `<out>/error_analysis.json` and `<out>/report.md`:
+
+| Key | Content |
+|---|---|
+| `outcomes` | Delivered code per design × difficulty (and platform) by category. For wrong delivered code: public-test status (`public_pass` / `public_fail` / `stopped`) and how the loop ended. |
+| `baseline` | The same categories over every TÖ sample. |
+| `transitions` | First-attempt category → delivered-code category; `fixed_from`, `broken`, `ever_correct`, `ever_but_not_delivered`. |
+| `accepts` | Loop-ending accepts (status PASS: judge ACCEPT in Y, rubric threshold in P) whose code fails the hidden tests, by category and difficulty. |
+| `rejects` | Judge REJECTs of public-passing code. Includes reason classes from a keyword scan of `verdict_reason`: `input` (concrete input or edge case), `complexity` (complexity, time limit, constraints), `static` (`_STATIC`, as in §10), `input_or_complexity` (the rule in the judge prompt) and `none`. Also the hidden outcome, rejected wrong code that failed by time limit, and problem-level fate (rejected wrong code later fixed; rejected correct code whose problem still ends wrong). For P the judge's verdict is logged but not used. |
+| `feedback` | Share of judge feedback (`improved_prompt` of judged attempts) that names an algorithm or data structure, a formula, or a complexity bound `O(...)`. This replaces the narrower one-off scan of `docs/main-results.md` §11, whose list was not recorded. |
+| `static_auc` | Each problem's first public-passing attempt in `--auc-designs`. AUC (correct > wrong; ties ½) of CC, MI and Halstead volume, overall and within each difficulty. |
+| `coverage` | Problems that no attempt of `--coverage-designs` / `--coverage-baselines` solved; problems solved only by the loop or only by TÖ samples. |
+| `timing` | Wall time per attempt (generation, judge) and per problem, from the iteration logs. |
+
+```bash
+B=outputs/openrouter/results/baseline_samples
+.venv/bin/python -m benchmark.error_analysis \
+  --design B_Y run_20261002_100638 run_20261002_100640 run_20261002_100642 run_20261002_100644 \
+  --design B_P run_20261002_100646 run_20261002_100648 run_20261002_100650 run_20261002_100652 \
+  --design C run_20261003_093242 run_20261003_093244 run_20261003_093246 run_20261003_093248 \
+  --design D run_20261003_100935 run_20261003_100937 run_20261003_100939 run_20261003_100941 \
+  --baseline deepseek $B/run_20261002_091834.regraded.jsonl --baseline llama $B/run_20261003_093410.jsonl \
+  --auc-designs B_Y B_P --coverage-designs B_Y B_P C --coverage-baselines deepseek \
+  --out outputs/openrouter/error_analysis
+```
+
+Results: `docs/main-results.md` §15.

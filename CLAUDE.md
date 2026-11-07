@@ -105,6 +105,7 @@ project/
 │   ├── openrouter_results.py  ← main-experiment analysis
 │   ├── judge_replay.py        ← offline re-judging of recorded attempts with another judge
 │   ├── official_regrade.py    ← re-grade recorded code with LCB's official lcb_runner, agreement with the local evaluator
+│   ├── error_analysis.py      ← failure categories of delivered code, judge accept/reject analysis (no calls, no re-execution)
 │   ├── paper_results.py       ← ELECO paper numbers/tables/figure (local runs)
 │   ├── evaluator.py           ← ablation runner (V1/V2/V3)
 │   ├── sample50_qids.txt      ← first 50 qids of the local sample
@@ -115,7 +116,7 @@ project/
 │   ├── local_setup.sh         ← Local environment setup
 │   ├── cloud_setup.sh         ← Vast.ai cloud GPU setup
 │   └── export_release_logs.py ← public log archive release/…zip (strips LCB content; docs/memory-logging.md)
-├── tests/                     ← 20 test files + conftest.py (pytest -q: 293 passed, 1 skipped)
+├── tests/                     ← 21 test files + conftest.py (pytest -q: 301 passed, 1 skipped)
 ├── docs/                      ← see index below
 ├── judge_training/            ← future work: fine-tuned judge
 ├── release/ (git-ignored)     ← coderefiner-eleco2026-logs.zip (built by export_release_logs.py)
@@ -168,7 +169,7 @@ project/
 |---|---|
 | `memory/logger.py` | `docs/memory-logging.md` |
 | `benchmark/sample_baseline.py`, `benchmark/evaluator.py` | `docs/ablation.md` |
-| `benchmark/openrouter_results.py`, `benchmark/paper_results.py`, `benchmark/judge_replay.py`, `benchmark/official_regrade.py` | `docs/analysis.md` |
+| `benchmark/openrouter_results.py`, `benchmark/paper_results.py`, `benchmark/judge_replay.py`, `benchmark/official_regrade.py`, `benchmark/error_analysis.py` | `docs/analysis.md` |
 | `pipeline/graph.py`, `pipeline/gates.py`, `pipeline/state.py` | `docs/graph.md` |
 | `nodes/codegen.py`, `models/prompts.py`, `models/client.py`, `models/budget.py`, `models/tracing.py` | `docs/codegen-models.md` |
 | `nodes/static_analysis.py`, `metrics/` | `docs/node1.md` |

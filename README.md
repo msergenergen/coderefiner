@@ -102,7 +102,7 @@ spend for the project, trial runs included, was 4.41 USD.
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt          # note: datasets<3.0 is required for the LCB loader
 python -m dataset.verify                 # loads LiveCodeBench and checks the environment
-pytest -q                                # 293 passed, 1 skipped
+pytest -q                                # 301 passed, 1 skipped
 ```
 
 Environments (OpenRouter, local llama.cpp, rented GPU): [docs/setup.md](docs/setup.md) and the
@@ -128,7 +128,7 @@ limit uses `resource.setrlimit` and is skipped on macOS.
    as unknown.
 
 Tool reference: [docs/analysis.md](docs/analysis.md) §10 (`benchmark/openrouter_results.py`) and
-§11 (`benchmark/judge_replay.py`) and §12 (`benchmark/official_regrade.py`).
+§11 (`benchmark/judge_replay.py`), §12 (`benchmark/official_regrade.py`) and §13 (`benchmark/error_analysis.py`).
 
 ### Re-running the experiment (paid API calls)
 
@@ -167,7 +167,7 @@ sandbox/             local LCB-compatible evaluator, runner, import whitelist
 models/              chat client, budget ledger, prompts, optional Langfuse tracing
 dataset/             LCB loader (date window, seed-42 sample), formatting, checks
 memory/              iteration logs and run info
-benchmark/           baseline sampling, analyses (openrouter_results, judge_replay, paper_results), legacy tools
+benchmark/           baseline sampling, analyses (openrouter_results, judge_replay, official_regrade, error_analysis, paper_results), legacy tools
 scripts/             run_openrouter.sh, local/cloud setup, export_release_logs.py
 tests/               pytest suite
 docs/                design and results documentation (index in CLAUDE.md)

@@ -336,3 +336,68 @@ Yük kaynaklı 4 zaman aşımı düzeltildiğinde uyum 3219/3227 (%99,75).
 - Dosyalar: `outputs/openrouter/official_regrade/official.jsonl` (toplu koşunun ham sonuçları; 4 zaman
   aşımı satırı olduğu gibi), `summary.json`, `run.log` (ilk koşu), `run2.log` (düzeltmeden sonra kalan
   1126 program).
+
+## 15. Hata analizi (2026-11-07, mevcut kayıtlarla)
+
+`benchmark/error_analysis.py` (`docs/analysis.md` §13). Ücretli çağrı ve yeniden çalıştırma yok.
+Doğruluk yerel değerlendiriciden, hata türü resmî aracın ilk başarısız gizli testteki koduyla
+(§14) belirlendi: YC yanlış çıktı (-2), ZA zaman aşımı (-3, test başına 6 s), ÇH çalışma hatası
+(-4). Ayrıştırılamayan kod ve önem kapısında durdurulan kod ayrı sayıldı.
+
+**Teslim edilen kod (150 problem).**
+
+| | Doğru | YC | ZA | ÇH | Ayrıştırılamayan | Durdurulan |
+|---|---|---|---|---|---|---|
+| Y, B (Qwen) | 55 | 65 | 20 | 2 | 0 | 8 |
+| P, B (Qwen) | 60 | 62 | 17 | 0 | 0 | 11 |
+| C (DeepSeek-V3 + gpt-oss) | 75 | 52 | 1 | 1 | 1 | 20 |
+| D (Llama-3.1-8B + gpt-oss) | 45 | 71 | 4 | 24 | 1 | 5 |
+| TÖ DeepSeek-V3 (750 örnek) | 256 | 392 | 83 | 12 | 7 | – |
+| TÖ Llama-3.1-8B (750 örnek) | 99 | 484 | 30 | 132 | 5 | – |
+
+- **Yanlış teslim edilen kodun açık test durumu.** Y: 95 yanlışın 40'ı açık testlerin hepsini geçip
+  yargıçça kabul edildi, 47'si açık testleri beşinci üretimde de geçemedi, 8'i durduruldu. C: 15 / 40 /
+  20. D: 3 / 97 / 5.
+- **Yanlış kabuller (döngüyü bitiren kabulün gizli testte yanlış olması).** Y 40/95 (ZA 18, YC 21, ÇH 1).
+  P 37/97 (ZA 17, YC 20). C 10/84 (YC 9, ÇH 1). D 2/46. Qwen yargıcın yanlış kabullerinin yarısına
+  yakını zaman aşımıdır: açık testlerdeki küçük girdilerde geçen yavaş algoritmayı kabul ediyor.
+  gpt-oss yargıçla teslim edilen kodda zaman aşımı 20'den 1'e iniyor.
+- **Açık testleri geçen kodun reddi.**
+  - Y: 15 ret, 11'i gizli testte gerçekten yanlış (YC 7, ZA 4). Gerekçenin 13/15'i somut girdi ya da
+    karmaşıklık adlandırıyor. Haklı retlerin olduğu 9 problemin yalnız 1'i sonunda doğru teslim
+    edildi.
+  - C: 73 ret, 55'i yanlış (ZA 26, YC 29). Karmaşıklık gerekçeli 32 haklı retin 22'si zaman aşımına
+    düşen kodda. Haklı ret 37 problemde, 11'i sonunda doğru. Yanlış ret 12 problemde, 3'ünde son kod
+    yanlış.
+  - D: 27 ret, 22'si yanlış (YC 12, ZA 10). Haklı ret 13 problemde, 3'ü sonunda doğru.
+- **Düzeltilen problemlerin ilk denemesi.** Y ve P: YC 4, ÇH 1. C: YC 20, ZA 7. D: YC 13, ÇH 9, ZA 1.
+  Qwen yargıçla zaman aşımına düşen ilk denemelerin hiçbiri düzelmedi (Y'de 17'nin 15'i yine ZA).
+- **Geri bildirimin içeriği** (anahtar sözcük taraması; §11'deki dar listenin yerine geçer):
+
+  | | n | Algoritma/veri yapısı | Formül | Karmaşıklık sınırı O(…) |
+  |---|---|---|---|---|
+  | Y, B (Qwen) | 373 | %35,9 | %2,7 | %3,2 |
+  | P, B (Qwen) | 343 | %33,5 | %2,0 | %2,3 |
+  | C (gpt-oss) | 398 | %53,8 | %20,9 | %66,8 |
+  | D (gpt-oss) | 600 | %48,7 | %13,7 | %61,8 |
+
+  Qwen'in algoritma adlandırması çoğunlukla genel bir öneridir ("dynamic programming"). gpt-oss ise
+  hedef karmaşıklığı ve formülü yazıyor. Bildirideki %45 / %10, kaydedilmemiş daha dar bir listeyle
+  hesaplanmıştı.
+- **Statik ölçütler.** Her problemin açık testleri geçen ilk denemesi kullanıldı (Y ve P, B; n = 192:
+  114 doğru, 78 yanlış). AUC (doğru > yanlış):
+
+  | Kapsam | CC | MI | Halstead |
+  |---|---|---|---|
+  | Tümü | 0,28 | 0,59 | 0,27 |
+  | Orta (25/24) | 0,42 | 0,49 | 0,38 |
+  | Zor (14/50) | 0,62 | 0,48 | 0,63 |
+
+  Toplamdaki ilişki zorluk karışımından kaynaklanıyor; zorluk düzeyi içinde ölçütler ayırt edici
+  değil. §12'deki tek seferlik değerler (n = 163) yalnızca birinci iterasyonu kullanıyordu; sonuç
+  aynı.
+- **Kapsama.** DeepSeek-V3'ün hiçbir denemesinin çözemediği problem 68/150 (zor 54, orta 14). Bu
+  denemeler 5 TÖ örneği ile Y, P ve C'nin bütün denemeleridir. Yalnız döngünün çözdüğü problem 23,
+  yalnız TÖ örneklerinin çözdüğü problem 0.
+- **Süre** (iterasyon kayıtlarından, problem başına toplam): Y 85 s, P 80 s, C 136 s, D 147 s.
+  Deneme başına yargıç süresi Qwen 21 s, gpt-oss 31 s (C).
